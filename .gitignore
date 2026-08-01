@@ -48,3 +48,6 @@ next-env.d.ts
 # مخرجات مولّدة (غير مطلوبة في المستودع)
 /.e2e/
 
+# مخرجات اختبارات Playwright المؤقتة
+/test-results/
+/playwright-report/
