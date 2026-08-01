@@ -102,22 +102,13 @@ db/                  # Drizzle (غير مستخدمة حالياً — لا حا
 
 ## النشر
 
-مستضاف على **Cloudflare Workers** (قالب vinext + Vite). البناء يضع كل
-الأصول المجزّأة في `dist/` و يولّد `asset-manifest.json` الذي يخزّنه
-الـ service worker مسبقاً للعمل دون اتصال.
+مستضاف على **Cloudflare Workers** (قالب vinext + Vite). النشر يتم مباشرة من
+GitHub — حتى من الهاتف — عبر ملف `deploy.yml` الجاهز. راجع
+**[دليل النشر من الهاتف](DEPLOY.md)** للخطوات الكاملة (حساب Cloudflare +
+API token + زر Run workflow).
 
 ```bash
 npm run build
-npm run start        # تشغيل الخادم الإنتاجي محلياً (منفذ 3000)
+npx wrangler deploy --config wrangler.jsonc
 ```
 
-## الخصوصية والأمان
-
-- لا حسابات، لا تحليلات، لا تتبّع — انظر صفحة `/privacy` داخل التطبيق.
-- النقل معزول عن الشبكة، لكنه ليس محمياً تلقائياً من التقاط الكاميرا؛ استخدم **التشفير** للسرية الكاملة.
-- راجع `NOTICE` للاعتمادات و`LICENSE` للترخيص.
-
-## الترخيص
-
-MIT — انظر ملف [LICENSE](LICENSE). المشروع تطوير مستقل مبني على فكرة
-[deedy/qr-data-transfer](https://github.com/deedy/qr-data-transfer).

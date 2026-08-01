@@ -1,0 +1,34 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  workflow_dispatch:        # تشغيل يدوي من تبويب Actions في الهاتف
+  push:
+    branches: [main]        # أو تلقائياً مع كل تحديث على main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: سحب الكود
+        uses: actions/checkout@v4
+
+      - name: إعداد Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: تثبيت الاعتماديات
+        run: npm ci
+
+      - name: البناء الإنتاجي
+        run: npm run build
+
+      - name: النشر إلى Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --config wrangler.jsonc

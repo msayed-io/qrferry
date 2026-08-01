@@ -1,0 +1,16 @@
+// إعداد Cloudflare Workers — يُنشر بعد تشغيل `npm run build`
+// (vinext يبني التطبيق في dist/ ثم ينشر wrangler من هنا)
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qrferry",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+  "assets": {
+    "directory": "dist/client"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
