@@ -1,0 +1,19 @@
+QRFerry — الإشعارات والاعتمادات
+================================
+
+QRFerry هو تطوير مستقل مبني على الفكرة والبروتوكول الأصليين لمشروع
+"qr-data-transfer" المتاح على https://github.com/deedy/qr-data-transfer
+(المشروع الأصلي غير مرخّص برخصة صريحة، والكود هنا مكتوب/معدَّل بشكل
+مستقل ويُوزَّع تحت رخصة MIT الخاصة بهذا المستودع).
+
+المكتبات الخارجية المستخدمة تُوزَّع بتراخيصها الخاصة:
+- @raptorqr/core و @raptorqr/fast-qr-wasm و @raptorqr/raptorq-wasm — MIT
+- zxing-wasm — Apache-2.0
+- brotli-wasm — MIT
+- fflate — MIT
+- Next.js / React — MIT
+- خط IBM Plex Sans Arabic — SIL Open Font License 1.1
+- خط Geist Mono — SIL Open Font License 1.1
+- Tailwind CSS — MIT
+
+انظر package-lock.json للحصول على القائمة الكاملة والتفاصيل.

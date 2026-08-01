@@ -1,0 +1,60 @@
+{
+  "name": "qrferry",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "انقل ملفاً بين جهازين عبر بثّ أكواد QR متحرك — دون شبكة ودون خوادم.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
+    "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
+    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "test": "npm run test:codec && npm run build && node --test tests/rendered-html.test.mjs",
+    "test:codec": "node --import tsx --test tests/codec.test.ts",
+    "test:e2e": "npm run e2e:fixture && playwright test",
+    "e2e:fixture": "node --import tsx scripts/make-e2e-fixture.ts",
+    "icons": "node scripts/generate-icons.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
+    "@raptorqr/core": "0.1.1",
+    "@raptorqr/fast-qr-wasm": "0.1.1",
+    "@raptorqr/raptorq-wasm": "0.1.1",
+    "brotli-wasm": "3.0.1",
+    "drizzle-orm": "0.45.2",
+    "fflate": "^0.8.3",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "zxing-wasm": "3.1.2"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "^4.20260702.1",
+    "@playwright/test": "^1.53.2",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.6",
+    "pngjs": "^7.0.0",
+    "react-server-dom-webpack": "19.2.6",
+    "sharp": "^0.35.3",
+    "tailwindcss": "4.2.1",
+    "tsx": "^4.23.1",
+    "typescript": "5.9.3",
+    "vinext": "0.0.50",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0"
+  },
+  "type": "module"
+}

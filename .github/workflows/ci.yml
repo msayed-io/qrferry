@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: فحص واختبار شامل
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: سحب الكود
+        uses: actions/checkout@v4
+
+      - name: إعداد Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: تثبيت الاعتماديات
+        run: npm ci
+
+      - name: فحص الأنماط (lint)
+        run: npm run lint
+
+      - name: فحص الأنواع (TypeScript)
+        run: npx tsc --noEmit
+
+      - name: اختبارات الكوديك (Codec + التشفير)
+        run: npm run test:codec
+
+      - name: البناء الإنتاجي
+        run: npm run build
+
+      - name: اختبارات العرض من الخادم (SSR)
+        run: node --test tests/rendered-html.test.mjs
+
+      - name: تثبيت متصفح Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: اختبارات النهاية-إلى-النهاية (E2E)
+        run: npm run test:e2e
