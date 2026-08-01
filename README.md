@@ -102,13 +102,21 @@ db/                  # Drizzle (غير مستخدمة حالياً — لا حا
 
 ## النشر
 
-مستضاف على **Cloudflare Workers** (قالب vinext + Vite). النشر يتم مباشرة من
-GitHub — حتى من الهاتف — عبر ملف `deploy.yml` الجاهز. راجع
-**[دليل النشر من الهاتف](DEPLOY.md)** للخطوات الكاملة (حساب Cloudflare +
-API token + زر Run workflow).
+المشروع يدعم منصتين، وكلاهما مجاني — **اختر الأنسب لك**:
 
-```bash
-npm run build
-npx wrangler deploy --config wrangler.jsonc
-```
+### 🥇 Vercel (الأسهل من الهاتف)
+- المشروع جاهز: ملف `vercel.json` + سكربت `build:vercel` (بناء Next.js قياسي).
+- من `vercel.com` ← **Continue with GitHub** ← **Add New → Project** ← اختر
+  `qrferry` ← **Deploy**.
+- راجع **[دليل النشر الكامل](DEPLOY.md)** — خطوة بخطوة، من الهاتف.
+
+### 🥈 Cloudflare Workers
+- المشروع مبني أصلاً على قالب vinext، والملفات جاهزة:
+  ```bash
+  npm run build
+  npx wrangler deploy --config wrangler.jsonc
+  ```
+- أو من GitHub Actions: زر **"Deploy to Cloudflare Workers"** في تبويب Actions
+  (بعد إضافة سر `CLOUDFLARE_API_TOKEN`).
+
 
