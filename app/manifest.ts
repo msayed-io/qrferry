@@ -40,5 +40,16 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "any",
       },
     ],
+    // المشاركة من أندرويد: اختيار ملف من أي تطبيق → «مشاركة عبر QRFerry»
+    share_target: {
+      action: "/share",
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: {
+        title: "title",
+        text: "text",
+        files: [{ name: "file", accept: ["*/*"] }],
+      },
+    },
   };
 }

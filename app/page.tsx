@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AppHeader } from "./app-header";
 import { SendClient } from "./send-client";
+import { Tour } from "./tour";
 
 export const metadata: Metadata = {
   title: "إرسال ملف · QRFerry",
@@ -13,6 +14,7 @@ export default function Home() {
     <>
       <AppHeader active="send" />
       <SendClient />
+      <Tour />
     </>
   );
 }

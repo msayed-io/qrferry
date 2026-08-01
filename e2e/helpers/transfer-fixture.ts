@@ -13,6 +13,16 @@ import {
   createOpticalTransfer,
 } from "../../lib/optical-transfer";
 import { TRANSFER_PRESETS } from "../../lib/transfer-presets";
+import {
+  buildTransferPackage,
+  type PackageFile,
+} from "../../lib/transfer-package";
+import {
+  exportPublicKeyRaw,
+  generateSigningKeyPair,
+  importPrivateKeyRaw,
+  signHash,
+} from "../../lib/signing";
 
 const require = createRequire(import.meta.url);
 
@@ -109,4 +119,85 @@ export function makeCompressibleBytes(targetBytes: number): Uint8Array {
     offset += Math.min(chunk.length, targetBytes - offset);
   }
   return output;
+}
+
+/**
+ * يولّد بثاً بصرياً لحزمة نقل (عدة ملفات / توقيع / حذف بعد القراءة)
+ * كما يصنعه تطبيق الإرسال فعلياً.
+ */
+export async function buildPackageTransferFixture(options: {
+  fileSpecs: Array<{ name: string; mime: string; bytes: Uint8Array }>;
+  burn?: boolean;
+  signed?: boolean;
+  signerName?: string;
+}): Promise<{ frames: QrFrameData[]; originalFiles: Array<{ name: string; mime: string; bytes: Uint8Array }> }> {
+  prepareRaptorQ();
+  const packageFiles: PackageFile[] = options.fileSpecs.map((spec) => ({
+    name: spec.name,
+    mime: spec.mime,
+    bytes: spec.bytes,
+  }));
+
+  let packageBytes: Uint8Array;
+  if (options.signed) {
+    const keyPair = await generateSigningKeyPair();
+    const publicKeyRaw = await exportPublicKeyRaw(keyPair.publicKey);
+    const privateKey = await importPrivateKeyRaw(
+      await (async () => {
+        const exported = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+        return new Uint8Array(exported);
+      })(),
+    );
+    const unsigned = buildTransferPackage({
+      files: packageFiles,
+      burnAfterReading: options.burn,
+    });
+    const signature = await signHash(privateKey, unsigned);
+    packageBytes = buildTransferPackage({
+      files: packageFiles,
+      burnAfterReading: options.burn,
+      signerName: options.signerName ?? "E2E-Sender",
+      signature,
+      signerPublicKey: publicKeyRaw,
+    });
+  } else {
+    packageBytes = buildTransferPackage({
+      files: packageFiles,
+      burnAfterReading: options.burn,
+    });
+  }
+
+  const compressed = await compressForTransfer(packageBytes);
+  const prepared = buildOpticalContainer(packageBytes, compressed.bytes, {
+    filename: "bundle",
+    mime: "application/x-qrferry-package",
+    compression: compressed.mode,
+  });
+  const preset = TRANSFER_PRESETS.robust;
+  const transfer = await createOpticalTransfer(prepared, {
+    symbolSize: preset.symbolSize,
+    repairPercent: preset.repairPercent,
+  });
+
+  const frames: QrFrameData[] = [];
+  for (const packet of transfer.packets) {
+    const matrix = await encodeQRCodeMatrix(packet, preset.version, preset.ecc);
+    const n = matrix.length;
+    const data = new Uint8Array(n * n);
+    for (let y = 0; y < n; y += 1) {
+      for (let x = 0; x < n; x += 1) {
+        data[y * n + x] = matrix[y][x] ? 1 : 0;
+      }
+    }
+    frames.push({ n, data });
+  }
+
+  return {
+    frames,
+    originalFiles: options.fileSpecs.map((spec) => ({
+      name: spec.name,
+      mime: spec.mime,
+      bytes: spec.bytes,
+    })),
+  };
 }

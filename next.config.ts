@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -11,9 +12,15 @@ const nextConfig: NextConfig = {
   webpack(config) {
     // ملفات WebAssembly تُعامَل كأصول (تُرفع كملفات ثابتة وتُسترجع بعناوينها)
     config.module.rules.push({
-      test: /\.wasm$/,
+      test: /\.wasm(\?.*)?$/,
       type: "asset/resource",
     });
+    // ربط مباشر لملف wasm الخاص بـ zxing (الـ exports map لا يعلنه)
+    if (!config.resolve.alias) config.resolve.alias = {};
+    config.resolve.alias["zxing-wasm/reader/zxing_reader.wasm"] = path.resolve(
+      process.cwd(),
+      "node_modules/zxing-wasm/dist/reader/zxing_reader.wasm",
+    );
     return config;
   },
 };

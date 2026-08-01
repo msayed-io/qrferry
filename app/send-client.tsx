@@ -9,7 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { compressForTransfer, CompressionMode } from "@/lib/compression";
+import { useI18n } from "./lang-provider";
+import { compressForTransferViaWorker } from "@/lib/compression-worker";
 import { encryptPayload } from "@/lib/encryption";
 import {
   buildOpticalContainer,
@@ -24,20 +25,48 @@ import {
   TRANSFER_PRESETS,
   TransferPresetKey,
 } from "@/lib/transfer-presets";
+import {
+  buildTransferPackage,
+  type PackageFile,
+} from "@/lib/transfer-package";
+import {
+  exportPrivateKeyPkcs8,
+  exportPublicKeyRaw,
+  generateSigningKeyPair,
+  importPrivateKeyRaw,
+  signHash,
+  encodePublicKey,
+} from "@/lib/signing";
+import {
+  getStoredIdentity,
+  saveStoredIdentity,
+  type StoredIdentity,
+} from "@/lib/identity-store";
+import { takeSharedFiles } from "@/lib/shared-files-store";
+import {
+  loadCustomPresets,
+  saveCustomPreset,
+  deleteCustomPreset,
+  customPresetToTransferPreset,
+  type CustomPreset,
+} from "@/lib/custom-presets";
+import { renderRawQr } from "@/lib/qr-renderer";
 
-type PreparedFile = {
+type PreparedFileItem = {
   file: File;
   original: Uint8Array;
   compressedBytes: Uint8Array;
-  compressedMode: CompressionMode;
-  optical: PreparedOpticalFile;
+  compressedMode: "none" | "gzip" | "brotli";
 };
 
-/** الأجزاء اللازمة لإعادة بناء الحاوية البصرية (مع أو بدون تشفير). */
-type PreparedFileParts = Pick<
-  PreparedFile,
-  "file" | "original" | "compressedBytes" | "compressedMode"
->;
+type PreparedFiles = {
+  items: PreparedFileItem[];
+};
+
+type BuiltOptical = {
+  optical: PreparedOpticalFile;
+  isPackage: boolean;
+};
 
 function evenlyInterleave(source: number[], repair: number[]) {
   if (source.length === 0) return [...repair];
@@ -63,16 +92,23 @@ function evenlyInterleave(source: number[], repair: number[]) {
 
 function estimateDuration(
   transfer: OpticalTransfer,
-  preset: (typeof TRANSFER_PRESETS)[TransferPresetKey],
+  preset: {
+    fps: number;
+  },
+  t: (key: string, params?: Record<string, string | number>) => string,
 ) {
   const seconds = transfer.sourcePacketCount / (preset.fps * 0.78);
-  if (seconds < 60) return `حوالي ${Math.max(1, Math.ceil(seconds))} ثانية`;
+  if (seconds < 60) {
+    return `${t("send.status.about")} ${Math.max(1, Math.ceil(seconds))} ${t("send.status.sec")}`;
+  }
   const minutes = seconds / 60;
-  return `حوالي ${minutes >= 10 ? Math.ceil(minutes) : minutes.toFixed(1)} دقيقة`;
+  return `${t("send.status.about")} ${minutes >= 10 ? Math.ceil(minutes) : minutes.toFixed(1)} ${t("send.status.min")}`;
 }
 
 export function SendClient() {
+  const { t, lang } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
   const qrStageRef = useRef<HTMLDivElement>(null);
   const transferRef = useRef<OpticalTransfer | undefined>(undefined);
@@ -80,7 +116,9 @@ export function SendClient() {
   const playedFramesRef = useRef(0);
   const broadcastFrameTimesRef = useRef<number[]>([]);
   const encodeJobRef = useRef(0);
-  const [fileData, setFileData] = useState<PreparedFile>();
+  const [tab, setTab] = useState<"file" | "text">("file");
+  const [textValue, setTextValue] = useState("");
+  const [fileData, setFileData] = useState<PreparedFiles>();
   const [transfer, setTransfer] = useState<OpticalTransfer>();
   const [presetKey, setPresetKey] = useState<TransferPresetKey>("robust");
   const [playing, setPlaying] = useState(false);
@@ -92,7 +130,113 @@ export function SendClient() {
   const [copied, setCopied] = useState(false);
   const [encryptEnabled, setEncryptEnabled] = useState(false);
   const [password, setPassword] = useState("");
-  const preset = TRANSFER_PRESETS[presetKey];
+  const [burnEnabled, setBurnEnabled] = useState(false);
+  const [signEnabled, setSignEnabled] = useState(false);
+  const [broadcastEnabled, setBroadcastEnabled] = useState(false);
+  const [identity, setIdentity] = useState<StoredIdentity | null>(null);
+  const [showPasswordQr, setShowPasswordQr] = useState(false);
+  const [showPubKeyQr, setShowPubKeyQr] = useState(false);
+  const [customPresets, setCustomPresets] = useState<CustomPreset[]>([]);
+  const [showPresetForm, setShowPresetForm] = useState(false);
+  const [sharedNotice, setSharedNotice] = useState("");
+
+  /** نوع موحّد لأي بروفايل (افتراضي أو مخصص). */
+  type TransferPresetLike = {
+    label: string;
+    description: string;
+    version: number;
+    fps: number;
+    lanes: 1 | 2;
+    ecc: "L" | "M" | "Q" | "H";
+    repairPercent: number;
+    renderScale: number;
+    qrCapacity: number;
+    symbolSize: number;
+    usefulBytesPerFrame: number;
+  };
+
+  /** يبحث عن البروفايل (الافتراضي أو المخصص) بمفتاحه. */
+  const getPreset = useCallback(
+    (key: TransferPresetKey): TransferPresetLike => {
+      const builtin = TRANSFER_PRESETS[key as keyof typeof TRANSFER_PRESETS];
+      if (builtin) return builtin as unknown as TransferPresetLike;
+      const custom = customPresets.find((cp) => cp.id === key);
+      if (custom) return customPresetToTransferPreset(custom);
+      return TRANSFER_PRESETS.robust as unknown as TransferPresetLike;
+    },
+    [customPresets],
+  );
+  const preset = getPreset(presetKey);
+
+  // الملفات القادمة من «المشاركة» (Web Share Target)
+  useEffect(() => {
+    let cancelled = false;
+    void takeSharedFiles().then(async (entries) => {
+      if (cancelled || !entries || entries.length === 0) return;
+      try {
+        const items: PreparedFileItem[] = [];
+        for (const entry of entries) {
+          const original = new Uint8Array(entry.data);
+          const compressed = await compressForTransferViaWorker(original);
+          items.push({
+            file: new File([original], entry.name, { type: entry.mime }),
+            original,
+            compressedBytes: compressed.bytes,
+            compressedMode: compressed.mode,
+          });
+        }
+        const prepared: PreparedFiles = { items };
+        setFileData(prepared);
+        setTab("file");
+        setSharedNotice(t("send.sharedPickup", { n: items.length }));
+      } catch {
+        // تجاهل: المستخدم يختار الملفات يدوياً
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // البروفايلات المخصصة من localStorage (بعد أول رسم)
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setCustomPresets(loadCustomPresets());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const allPresets = useMemo(() => {
+    const entries = Object.entries(TRANSFER_PRESETS) as Array<
+      [TransferPresetKey, (typeof TRANSFER_PRESETS)[TransferPresetKey]]
+    >;
+    const custom = customPresets.map((cp) => ({
+      key: cp.id as TransferPresetKey,
+      preset: customPresetToTransferPreset(cp),
+    }));
+    return { entries, custom };
+  }, [customPresets]);
+
+  const ensureIdentity = useCallback(async (): Promise<StoredIdentity> => {
+    const existing = await getStoredIdentity();
+    if (existing) return existing;
+    const pair = await generateSigningKeyPair();
+    const publicKeyRaw = await exportPublicKeyRaw(pair.publicKey);
+    const privateKeyPkcs8 = await exportPrivateKeyPkcs8(pair.privateKey);
+    const identity: StoredIdentity = {
+      label: "هويتي",
+      publicKeyRaw,
+      privateKeyPkcs8,
+      createdAt: Date.now(),
+    };
+    await saveStoredIdentity(identity);
+    return identity;
+  }, []);
+
+  useEffect(() => {
+    void ensureIdentity().then((id) => setIdentity(id)).catch(() => undefined);
+  }, [ensureIdentity]);
 
   const installTransfer = useCallback((next: OpticalTransfer) => {
     const order = evenlyInterleave(
@@ -106,18 +250,87 @@ export function SendClient() {
     setTransfer(next);
   }, []);
 
+  const buildOptical = useCallback(
+    async (prepared: PreparedFiles): Promise<BuiltOptical> => {
+      const activePassword = encryptEnabled ? password.trim() : "";
+
+      if (
+        prepared.items.length === 1 &&
+        !signEnabled &&
+        !burnEnabled
+      ) {
+        // المسار الكلاسيكي: ملف واحد بلا توقيع/حذف
+        const item = prepared.items[0];
+        const transmitted = activePassword
+          ? await encryptPayload(item.compressedBytes, activePassword)
+          : item.compressedBytes;
+        const optical = buildOpticalContainer(item.original, transmitted, {
+          filename: item.file.name,
+          mime: item.file.type || "application/octet-stream",
+          compression: item.compressedMode,
+        });
+        return { optical, isPackage: false };
+      }
+
+      // مسار الحزمة: عدة ملفات أو توقيع/حذف
+      const packageFiles: PackageFile[] = prepared.items.map((item) => ({
+        name: item.file.name,
+        mime: item.file.type || "application/octet-stream",
+        bytes: item.original,
+      }));
+
+      let packageBytes: Uint8Array;
+      if (signEnabled) {
+        const id = await ensureIdentity();
+        const privateKey = await importPrivateKeyRaw(id.privateKeyPkcs8);
+        const unsigned = buildTransferPackage({
+          files: packageFiles,
+          burnAfterReading: burnEnabled,
+        });
+        const signature = await signHash(privateKey, unsigned);
+        packageBytes = buildTransferPackage({
+          files: packageFiles,
+          burnAfterReading: burnEnabled,
+          signerName: id.label,
+          signature,
+          signerPublicKey: id.publicKeyRaw,
+        });
+      } else {
+        packageBytes = buildTransferPackage({
+          files: packageFiles,
+          burnAfterReading: burnEnabled,
+        });
+      }
+
+      const compressed = await compressForTransferViaWorker(packageBytes);
+      const transmitted = activePassword
+        ? await encryptPayload(compressed.bytes, activePassword)
+        : compressed.bytes;
+
+      const bundleName =
+        prepared.items.length > 1
+          ? `${prepared.items.length} ${t("send.multiSelected")}`
+          : prepared.items[0].file.name;
+      const optical = buildOpticalContainer(packageBytes, transmitted, {
+        filename: bundleName,
+        mime: "application/x-qrferry-package",
+        compression: compressed.mode,
+      });
+      return { optical, isPackage: true };
+    },
+    [burnEnabled, encryptEnabled, ensureIdentity, password, signEnabled, t],
+  );
+
   const encodePrepared = useCallback(
-    async (
-      prepared: PreparedFile,
-      nextPresetKey: TransferPresetKey,
-    ) => {
+    async (prepared: PreparedFiles, nextPresetKey: TransferPresetKey) => {
       const job = encodeJobRef.current + 1;
       encodeJobRef.current = job;
       setProcessing(true);
       setError("");
       try {
-        const nextPreset = TRANSFER_PRESETS[nextPresetKey];
-        const next = await createOpticalTransfer(prepared.optical, {
+        const nextPreset = getPreset(nextPresetKey);
+        const { optical } = await buildOptical(prepared);
+        const next = await createOpticalTransfer(optical, {
           symbolSize: nextPreset.symbolSize,
           repairPercent: nextPreset.repairPercent,
         });
@@ -127,71 +340,67 @@ export function SendClient() {
           setTransfer(undefined);
           transferRef.current = undefined;
           setError(
-            cause instanceof Error
-              ? cause.message
-              : "تعذّر تجهيز بثّ RaptorQ.",
+            cause instanceof Error ? cause.message : t("send.error.streamPrepare"),
           );
         }
       } finally {
         if (encodeJobRef.current === job) setProcessing(false);
       }
     },
-    [installTransfer],
+    [buildOptical, getPreset, installTransfer, t],
   );
 
-  const buildOptical = useCallback(
-    async (prepared: PreparedFileParts): Promise<PreparedOpticalFile> => {
-      const activePassword = encryptEnabled ? password.trim() : "";
-      const transmitted = activePassword
-        ? await encryptPayload(prepared.compressedBytes, activePassword)
-        : prepared.compressedBytes;
-      return buildOpticalContainer(prepared.original, transmitted, {
-        filename: prepared.file.name,
-        mime: prepared.file.type || "application/octet-stream",
-        compression: prepared.compressedMode,
-      });
-    },
-    [encryptEnabled, password],
-  );
-
-  const prepareFile = useCallback(
-    async (file: File) => {
+  const prepareFiles = useCallback(
+    async (files: File[]) => {
       setError("");
       setPlaying(false);
       setActualFps(0);
-      if (file.size > MAX_FILE_BYTES) {
-        setError("اختر ملفاً أصغر من 512 ميجابايت لهذا الإصدار.");
+      setSharedNotice("");
+      if (files.length === 0) return;
+      const total = files.reduce((sum, file) => sum + file.size, 0);
+      if (total > MAX_FILE_BYTES) {
+        setError(t("send.error.tooLarge"));
         return;
       }
       setProcessing(true);
       try {
-        const original = new Uint8Array(await file.arrayBuffer());
-        const compressed = await compressForTransfer(original);
-        const prepared: PreparedFile = {
-          file,
-          original,
-          compressedBytes: compressed.bytes,
-          compressedMode: compressed.mode,
-          optical: await buildOptical({
+        const items: PreparedFileItem[] = [];
+        for (const file of files) {
+          const original = new Uint8Array(await file.arrayBuffer());
+          const compressed = await compressForTransferViaWorker(original);
+          items.push({
             file,
             original,
             compressedBytes: compressed.bytes,
             compressedMode: compressed.mode,
-          }),
-        };
+          });
+        }
+        const prepared: PreparedFiles = { items };
         setFileData(prepared);
         await encodePrepared(prepared, presetKey);
       } catch (cause) {
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "تعذّر تجهيز الملف.",
-        );
+        setError(cause instanceof Error ? cause.message : t("send.error.prepare"));
         setProcessing(false);
       }
     },
-    [buildOptical, encodePrepared, presetKey],
+    [encodePrepared, presetKey, t],
   );
+
+  const prepareText = useCallback(async () => {
+    const text = textValue.trim();
+    if (!text) {
+      setError(t("send.error.prepare"));
+      return;
+    }
+    const file = new File(
+      [new TextEncoder().encode(text)],
+      lang === "ar" ? "نص.txt" : "text.txt",
+      { type: "text/plain;charset=utf-8" },
+    );
+    setTab("file");
+    setTextValue("");
+    await prepareFiles([file]);
+  }, [lang, prepareFiles, t, textValue]);
 
   const changePreset = (nextKey: TransferPresetKey) => {
     setPresetKey(nextKey);
@@ -203,31 +412,32 @@ export function SendClient() {
   const changeEncryption = (nextEnabled: boolean) => {
     setEncryptEnabled(nextEnabled);
     if (fileData && !nextEnabled) {
-      // إيقاف التشفير: إعادة البناء بدون كلمة مرور.
-      void buildOptical(fileData).then((optical) => {
-        const nextPrepared = { ...fileData, optical };
-        setFileData(nextPrepared);
-        return encodePrepared(nextPrepared, presetKey);
-      });
+      void buildOptical(fileData).then(() => encodePrepared(fileData, presetKey));
     }
   };
 
   const changePassword = (nextPassword: string) => {
     setPassword(nextPassword);
     if (fileData && encryptEnabled) {
-      void buildOptical(fileData).then((optical) => {
-        const nextPrepared = { ...fileData, optical };
-        setFileData(nextPrepared);
-        return encodePrepared(nextPrepared, presetKey);
-      });
+      void encodePrepared(fileData, presetKey);
     }
+  };
+
+  const toggleBurn = (next: boolean) => {
+    setBurnEnabled(next);
+    if (fileData && next !== burnEnabled) void encodePrepared(fileData, presetKey);
+  };
+
+  const toggleSign = (next: boolean) => {
+    setSignEnabled(next);
+    if (fileData && next !== signEnabled) void encodePrepared(fileData, presetKey);
   };
 
   const renderPacket = useCallback(
     async (
       target: OpticalTransfer,
       packetIndex: number,
-      activePreset: (typeof TRANSFER_PRESETS)[TransferPresetKey],
+      activePreset: TransferPresetLike,
       laneIndex = 0,
     ) => {
       const canvas = canvasRefs.current[laneIndex];
@@ -259,8 +469,8 @@ export function SendClient() {
           laneIndex,
         ),
       ),
-    ).catch(() => setError("تعذّر عرض معاينة QR."));
-  }, [preset, renderPacket, transfer]);
+    ).catch(() => setError(t("send.error.render")));
+  }, [preset, renderPacket, t, transfer]);
 
   useEffect(() => {
     if (!playing || !transfer) return;
@@ -283,7 +493,7 @@ export function SendClient() {
       try {
         await renderPacket(activeTransfer, packetIndex, preset, laneIndex);
       } catch {
-        setError("توقّف عرض QR بعد خطأ غير متوقع.");
+        setError(t("send.error.stream"));
         setPlaying(false);
         return;
       }
@@ -292,10 +502,7 @@ export function SendClient() {
       const completedAt = performance.now();
       const frameTimes = broadcastFrameTimesRef.current;
       frameTimes.push(completedAt);
-      while (
-        frameTimes.length > 2 &&
-        completedAt - frameTimes[0] > 2500
-      ) {
+      while (frameTimes.length > 2 && completedAt - frameTimes[0] > 2500) {
         frameTimes.shift();
       }
 
@@ -321,18 +528,25 @@ export function SendClient() {
       cancelled = true;
       window.cancelAnimationFrame(animationFrame);
     };
-  }, [playing, preset, renderPacket, transfer]);
+  }, [playing, preset, renderPacket, t, transfer]);
 
-  const selectFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) void prepareFile(file);
+  const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length > 0) void prepareFiles(files);
+    event.target.value = "";
   };
 
-  const dropFile = (event: DragEvent<HTMLDivElement>) => {
+  const selectFolder = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length > 0) void prepareFiles(files);
+    event.target.value = "";
+  };
+
+  const dropFiles = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragging(false);
-    const file = event.dataTransfer.files?.[0];
-    if (file) void prepareFile(file);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length > 0) void prepareFiles(files);
   };
 
   const scanUrl = useMemo(() => {
@@ -346,7 +560,7 @@ export function SendClient() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      setError("فشل النسخ. افتح الموقع على الهاتف واختر «مسح».");
+      setError(t("send.error.copy"));
     }
   };
 
@@ -362,50 +576,152 @@ export function SendClient() {
       }
     } catch {
       setPlaying(false);
-      setError("ملء الشاشة غير متاح في هذا المتصفح. كبّر النافذة بدلاً من ذلك.");
+      setError(t("send.error.fullscreen"));
     }
+  };
+
+  const renderTextQr = useCallback(async (text: string) => {
+    const bytes = new TextEncoder().encode(text);
+    const image = await renderRawQr(bytes, 5, "M", 8);
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("no 2d");
+    context.putImageData(image, 0, 0);
+    return canvas;
+  }, []);
+
+  const [passwordQrCanvas, setPasswordQrCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [pubKeyQrCanvas, setPubKeyQrCanvas] = useState<HTMLCanvasElement | null>(null);
+  const passwordQrHostRef = useRef<HTMLDivElement>(null);
+  const pubKeyQrHostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPasswordQr) return;
+    let cancelled = false;
+    void renderTextQr(`QFPW:${password}`).then((canvas) => {
+      if (!cancelled) setPasswordQrCanvas(canvas);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [password, renderTextQr, showPasswordQr]);
+
+  useEffect(() => {
+    if (!showPubKeyQr || !identity) return;
+    let cancelled = false;
+    void renderTextQr(encodePublicKey(identity.publicKeyRaw)).then((canvas) => {
+      if (!cancelled) setPubKeyQrCanvas(canvas);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [identity, renderTextQr, showPubKeyQr]);
+
+  useEffect(() => {
+    if (passwordQrCanvas && passwordQrHostRef.current) {
+      passwordQrHostRef.current.replaceChildren(passwordQrCanvas);
+    }
+  }, [passwordQrCanvas]);
+
+  useEffect(() => {
+    if (pubKeyQrCanvas && pubKeyQrHostRef.current) {
+      pubKeyQrHostRef.current.replaceChildren(pubKeyQrCanvas);
+    }
+  }, [pubKeyQrCanvas]);
+
+  // اختصارات لوحة المفاتيح (بعد تعريف كل الدوال)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      if (typing) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        inputRef.current?.click();
+      } else if (event.code === "Space") {
+        if (transfer && !processing) {
+          event.preventDefault();
+          setPlaying((current) => !current);
+        }
+      } else if (event.key.toLowerCase() === "f") {
+        if (qrStageRef.current) {
+          event.preventDefault();
+          void toggleFullscreen();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transfer, processing]);
+
+  const submitPreset = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const label = String(form.get("label") ?? "");
+    const version = Number(form.get("version"));
+    const ecc = String(form.get("ecc")) as CustomPreset["ecc"];
+    const fps = Number(form.get("fps"));
+    const lanes = Number(form.get("lanes")) as 1 | 2;
+    const repairPercent = Number(form.get("repair"));
+    try {
+      saveCustomPreset({
+        label,
+        description: t("send.presetCustom"),
+        version,
+        ecc,
+        fps,
+        lanes,
+        repairPercent,
+        renderScale: 5,
+      });
+      setCustomPresets(loadCustomPresets());
+      setShowPresetForm(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const removePreset = (id: string) => {
+    deleteCustomPreset(id);
+    setCustomPresets(loadCustomPresets());
   };
 
   const orderLength = transfer?.packets.length ?? 0;
   const cycleFrame =
     orderLength > 0
-      ? playedFrames === 0
-        ? 0
-        : ((playedFrames - 1) % orderLength) + 1
+      ? playedFrames === 0 ? 0 : ((playedFrames - 1) % orderLength) + 1
       : 0;
   const cycleNumber =
     orderLength > 0 && playedFrames > 0
       ? Math.floor((playedFrames - 1) / orderLength) + 1
       : 1;
   const cycleProgress = orderLength ? cycleFrame / orderLength : 0;
-  const compressionPercent =
-    transfer && transfer.meta.fileSize > 0
-      ? Math.max(
-          0,
-          Math.round(
-            (1 - transfer.meta.transmittedSize / transfer.meta.fileSize) * 100,
-          ),
-        )
-      : 0;
   const nominalRate = preset.usefulBytesPerFrame * preset.fps;
   const passwordTooShort = encryptEnabled && password.trim().length < 4;
+  const totalOriginalSize = fileData
+    ? fileData.items.reduce((sum, item) => sum + item.original.length, 0)
+    : 0;
 
   return (
-    <main>
+    <main className={broadcastEnabled ? "broadcast-active" : ""}>
       <section className="sender-hero">
         <div>
-          <p className="eyebrow">نقل ملفات معزول عن الشبكة</p>
-          <h1>انقل ملفاً<br />عبر الكاميرا.</h1>
+          <p className="eyebrow">{t("send.eyebrow")}</p>
+          <h1>{t("send.hero")}</h1>
         </div>
         <div className="hero-copy">
-          <p>
-            يبقى ملفك على أجهزتك. يضغطه QRFerry ثم يرسله عبر بثّ RaptorQ
-            ثنائي متسامح مع الفقد — دون أي خادم في المنتصف.
-          </p>
+          <p>{t("send.heroCopy")}</p>
           <div className="trust-row">
-            <span>محلي فقط</span>
-            <span>Brotli-11 + gzip-9</span>
-            <span>RaptorQ FEC</span>
+            <span>{t("send.trust.local")}</span>
+            <span>{t("send.trust.compress")}</span>
+            <span>{t("send.trust.raptorq")}</span>
           </div>
         </div>
       </section>
@@ -415,151 +731,380 @@ export function SendClient() {
           <div className="step-heading">
             <span>01</span>
             <div>
-              <h2>اختر ملفاً</h2>
-              <p>الضغط والترميز يحدثان داخل هذا المتصفح.</p>
+              <h2>{t("send.step1.title")}</h2>
+              <p>{t("send.step1.desc")}</p>
             </div>
           </div>
 
-          <div
-            className={`drop-zone ${dragging ? "dragging" : ""}`}
-            onDragEnter={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragOver={(event) => event.preventDefault()}
-            onDragLeave={() => setDragging(false)}
-            onDrop={dropFile}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              onChange={selectFile}
-              aria-label="اختر ملفاً للنقل"
-            />
+          <div className="send-tabs" role="tablist">
             <button
-              className="file-button"
               type="button"
-              disabled={processing}
-              onClick={() => inputRef.current?.click()}
+              role="tab"
+              aria-selected={tab === "file"}
+              className={tab === "file" ? "selected" : ""}
+              onClick={() => setTab("file")}
             >
-              <span aria-hidden="true">{processing ? "…" : "＋"}</span>
-              {processing ? "جارٍ الضغط وبناء البث…" : "تصفّح الملفات"}
+              {t("send.fileTab")}
             </button>
-            <p>أو أفلته هنا · حتى 512 ميجابايت</p>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "text"}
+              className={tab === "text" ? "selected" : ""}
+              onClick={() => setTab("text")}
+            >
+              {t("send.textTab")}
+            </button>
           </div>
 
+          {tab === "file" ? (
+            <div
+              className={`drop-zone ${dragging ? "dragging" : ""}`}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setDragging(false)}
+              onDrop={dropFiles}
+            >
+              <input
+                ref={inputRef}
+                type="file"
+                multiple
+                onChange={selectFiles}
+                aria-label="اختر ملفاً أو أكثر للنقل"
+              />
+              <input
+                ref={folderInputRef}
+                type="file"
+                multiple
+                style={{ display: "none" }}
+                onChange={selectFolder}
+                aria-label="اختر مجلداً كاملاً للنقل"
+                {...({ webkitdirectory: "" } as Record<string, string>)}
+              />
+              <button
+                className="file-button"
+                type="button"
+                disabled={processing}
+                onClick={() => inputRef.current?.click()}
+              >
+                <span aria-hidden="true">{processing ? "…" : "＋"}</span>
+                {processing ? t("send.processing") : t("send.browse")}
+              </button>
+              <button
+                className="file-button folder-button"
+                type="button"
+                disabled={processing}
+                onClick={() => folderInputRef.current?.click()}
+              >
+                <span aria-hidden="true">📁</span>
+                {lang === "ar" ? "اختيار مجلد" : "Pick a folder"}
+              </button>
+              <p>{t("send.drop")}</p>
+            </div>
+          ) : (
+            <div className="text-entry">
+              <textarea
+                value={textValue}
+                onChange={(event) => setTextValue(event.target.value)}
+                placeholder={t("send.textPlaceholder")}
+                aria-label={t("send.textPlaceholder")}
+              />
+              <button
+                type="button"
+                className="file-button"
+                disabled={processing || textValue.trim().length === 0}
+                onClick={() => void prepareText()}
+              >
+                {t("send.textConvert")}
+              </button>
+            </div>
+          )}
+
+          {sharedNotice ? <p className="resume-note" role="status">{sharedNotice}</p> : null}
+
           {fileData ? (
-            <div className="selected-file">
-              <span className="file-glyph" aria-hidden="true">↗</span>
-              <div>
-                <strong>{fileData.optical.meta.filename}</strong>
-                <span>
-                  {formatBytes(fileData.optical.meta.fileSize)}
-                  {fileData.optical.meta.compression !== "none"
-                    ? ` → ${formatBytes(fileData.optical.meta.transmittedSize)} · ${compressionPercent}% أصغر · ${fileData.optical.meta.compression}`
-                    : " · مضغوط مسبقاً"}
-                  {fileData.optical.meta.encrypted ? (
-                    <span className="encrypted-badge">🔒 مشفَّر</span>
+            <div className="selected-files">
+              {fileData.items.map((item, index) => (
+                <div className="file-row" key={`${item.file.name}-${index}`}>
+                  <span className="file-glyph" aria-hidden="true">↗</span>
+                  <span className="fname">{item.file.name}</span>
+                  <span className="fmeta">
+                    {formatBytes(item.file.size)}
+                    {item.compressedMode !== "none"
+                      ? ` → ${formatBytes(item.compressedBytes.length)} · ${item.compressedMode}`
+                      : ""}
+                  </span>
+                </div>
+              ))}
+              <div className="file-row" key="total">
+                <span className="fname">
+                  {fileData.items.length} {t("send.multiSelected")}
+                </span>
+                <span className="fmeta">
+                  {formatBytes(totalOriginalSize)}
+                  {encryptEnabled && password.trim().length >= 4 ? (
+                    <span className="encrypted-badge">🔒 {t("send.encryptedBadge")}</span>
                   ) : null}
                 </span>
+                <button type="button" onClick={() => inputRef.current?.click()}>
+                  {t("send.change")}
+                </button>
               </div>
-              <button type="button" onClick={() => inputRef.current?.click()}>
-                تغيير
-              </button>
             </div>
           ) : null}
 
-          <div className="encrypt-panel">
-            <button
-              type="button"
-              className={`encrypt-toggle ${encryptEnabled ? "on" : ""}`}
-              aria-pressed={encryptEnabled}
-              onClick={() => changeEncryption(!encryptEnabled)}
-            >
-              <span className="lock-glyph" aria-hidden="true">
-                {encryptEnabled ? "🔓" : "🔒"}
-              </span>
-              <span>
-                {encryptEnabled
-                  ? "الملف سيُنقل مشفَّراً"
-                  : "تشفير الملف بكلمة مرور (اختياري)"}
-              </span>
-            </button>
-            {encryptEnabled ? (
-              <div className="encrypt-field">
-                <label htmlFor="send-password">كلمة المرور</label>
-                <input
-                  id="send-password"
-                  className="password-input"
-                  type="password"
-                  dir="ltr"
-                  autoComplete="off"
-                  value={password}
-                  placeholder="أدخل كلمة مرور (4 أحرف على الأقل)"
-                  onChange={(event) => changePassword(event.target.value)}
-                />
-                <p className="encrypt-hint">
-                  عند التفعيل يُشفَّر المحتوى بـ AES-256، ولن يستطيع أي جهاز
-                  صوّر الشاشة فكّه دون كلمة المرور. شاركها مع المستلم شفهياً
-                  أو عبر قناة أخرى.
-                </p>
-              </div>
-            ) : (
-              <p className="encrypt-hint">
-                تشفير اختياري يجعل التقاط الشاشة عديم الفائدة دون كلمة المرور.
-              </p>
-            )}
+          <div className="advanced-panel">
+            {/* التشفير */}
+            <div className={`adv-option ${encryptEnabled ? "on" : ""}`}>
+              <button
+                type="button"
+                className="adv-toggle"
+                aria-pressed={encryptEnabled}
+                onClick={() => changeEncryption(!encryptEnabled)}
+              >
+                <span className="adv-glyph" aria-hidden="true">
+                  {encryptEnabled ? "🔓" : "🔒"}
+                </span>
+                <span>
+                  {encryptEnabled ? t("send.encryptPanel.on") : t("send.encryptPanel.off")}
+                </span>
+              </button>
+              {encryptEnabled ? (
+                <div className="adv-body">
+                  <div className="encrypt-field">
+                    <label htmlFor="send-password">{t("send.password")}</label>
+                    <input
+                      id="send-password"
+                      className="password-input"
+                      type="password"
+                      dir="ltr"
+                      autoComplete="off"
+                      value={password}
+                      placeholder={t("send.passwordPlaceholder")}
+                      onChange={(event) => changePassword(event.target.value)}
+                    />
+                    <p className="encrypt-hint">{t("send.encryptHint.on")}</p>
+                    <div className="adv-inline">
+                      <button
+                        type="button"
+                        className="mini-btn"
+                        disabled={passwordTooShort}
+                        onClick={() => setShowPasswordQr(true)}
+                      >
+                        {t("send.showPasswordQr")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="adv-hint">{t("send.encryptHint.off")}</p>
+              )}
+            </div>
+
+            {/* الحذف بعد القراءة */}
+            <div className={`adv-option ${burnEnabled ? "on" : ""}`}>
+              <button
+                type="button"
+                className="adv-toggle"
+                aria-pressed={burnEnabled}
+                onClick={() => toggleBurn(!burnEnabled)}
+              >
+                <span className="adv-glyph" aria-hidden="true">🔥</span>
+                <span>{t("send.burnLabel")}</span>
+              </button>
+              <p className="adv-hint">{t("send.burnHint")}</p>
+            </div>
+
+            {/* التوقيع الرقمي */}
+            <div className={`adv-option ${signEnabled ? "on" : ""}`}>
+              <button
+                type="button"
+                className="adv-toggle"
+                aria-pressed={signEnabled}
+                onClick={() => toggleSign(!signEnabled)}
+              >
+                <span className="adv-glyph" aria-hidden="true">✍️</span>
+                <span>{t("send.signLabel")}</span>
+              </button>
+              {signEnabled ? (
+                <div className="adv-body">
+                  <p className="identity-line">
+                    {t("send.signIdentity")}{" "}
+                    <strong>{identity?.label ?? t("send.signNoIdentity")}</strong>
+                  </p>
+                  <div className="adv-inline">
+                    <button
+                      type="button"
+                      className="mini-btn"
+                      disabled={!identity}
+                      onClick={() => setShowPubKeyQr(true)}
+                    >
+                      {t("send.signShowPub")}
+                    </button>
+                  </div>
+                  <p className="adv-hint">{t("send.signHint")}</p>
+                </div>
+              ) : (
+                <p className="adv-hint">{t("send.signHint")}</p>
+              )}
+            </div>
+
+            {/* البث الجماعي */}
+            <div className={`adv-option ${broadcastEnabled ? "on" : ""}`}>
+              <button
+                type="button"
+                className="adv-toggle"
+                aria-pressed={broadcastEnabled}
+                onClick={() => setBroadcastEnabled((current) => !current)}
+              >
+                <span className="adv-glyph" aria-hidden="true">📡</span>
+                <span>{t("send.broadcastLabel")}</span>
+              </button>
+              <p className="adv-hint">{t("send.broadcastHint")}</p>
+            </div>
           </div>
 
           <div className="step-heading compact">
             <span>02</span>
             <div>
-              <h2>اضبط قناة الإرسال</h2>
-              <p>الأنماط المتينة تستخدم هدفاً واحداً؛ والمزدوجة تتبادل مسارين ثابتين.</p>
+              <h2>{t("send.step2.title")}</h2>
+              <p>{t("send.step2.desc")}</p>
             </div>
           </div>
 
           <div className="preset-list" role="radiogroup" aria-label="ملف ضبط الإشارة">
-            {(Object.keys(TRANSFER_PRESETS) as TransferPresetKey[]).map((key) => {
-              const option = TRANSFER_PRESETS[key];
-              return (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={presetKey === key}
-                  className={presetKey === key ? "selected" : ""}
-                  key={key}
-                  onClick={() => changePreset(key)}
-                >
-                  <span className="radio-dot" aria-hidden="true" />
-                  <span>
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
+            {allPresets.entries.map(([key, option]) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={presetKey === key}
+                className={presetKey === key ? "selected" : ""}
+                key={key}
+                onClick={() => changePreset(key)}
+              >
+                <span className="radio-dot" aria-hidden="true" />
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{t(`preset.${key}`)}</small>
+                </span>
+                <b>
+                  {option.lanes === 1
+                    ? `${option.fps} fps`
+                    : `${option.fps} ${lang === "ar" ? "رمز/ث" : "sym/s"} · ${option.fps / option.lanes} fps/${lang === "ar" ? "مسار" : "lane"}`}
+                  {" · "}
+                  {formatRate(option.usefulBytesPerFrame * option.fps)}
+                </b>
+              </button>
+            ))}
+            {allPresets.custom.map(({ key, preset: option }) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={presetKey === key}
+                className={presetKey === key ? "selected" : ""}
+                key={key}
+                onClick={() => changePreset(key)}
+              >
+                <span className="radio-dot" aria-hidden="true" />
+                <span>
+                  <strong>{option.label} ⭐</strong>
+                  <small>{option.description}</small>
+                </span>
+                <b>
+                  {option.lanes === 1
+                    ? `${option.fps} fps`
+                    : `${option.fps} ${lang === "ar" ? "رمز/ث" : "sym/s"} · ${option.fps / option.lanes} fps/${lang === "ar" ? "مسار" : "lane"}`}
+                  {" · "}
+                  {formatRate((option.usefulBytesPerFrame ?? 0) * option.fps)}
+                  {" "}
+                  <span
+                    className="preset-delete"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removePreset(key);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.stopPropagation();
+                        removePreset(key);
+                      }
+                    }}
+                    aria-label="حذف البروفايل"
+                  >
+                    ✕
                   </span>
-                  <b>
-                    {option.lanes === 1
-                      ? `${option.fps} fps`
-                      : `${option.fps} رمز/ث · ${option.fps / option.lanes} fps للمسار`}
-                    {" · "}
-                    {formatRate(option.usefulBytesPerFrame * option.fps)}
-                  </b>
-                </button>
-              );
-            })}
+                </b>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="preset-add"
+              onClick={() => setShowPresetForm((current) => !current)}
+            >
+              {t("send.addPreset")}
+            </button>
           </div>
+
+          {showPresetForm ? (
+            <form className="preset-form" onSubmit={submitPreset}>
+              <label>
+                {t("send.presetName")}
+                <input name="label" required minLength={2} maxLength={24} />
+              </label>
+              <div className="form-row">
+                <label>
+                  {t("send.presetVersion")}
+                  <input name="version" type="number" min={1} max={40} defaultValue={25} />
+                </label>
+                <label>
+                  {t("send.presetEcc")}
+                  <select name="ecc" defaultValue="M">
+                    <option value="L">L</option>
+                    <option value="M">M</option>
+                    <option value="Q">Q</option>
+                    <option value="H">H</option>
+                  </select>
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  {t("send.presetFps")}
+                  <input name="fps" type="number" min={1} max={120} defaultValue={10} />
+                </label>
+                <label>
+                  {t("send.presetLanes")}
+                  <select name="lanes" defaultValue="1">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                {t("send.presetRepair")}
+                <input name="repair" type="number" min={0} max={100} defaultValue={30} />
+              </label>
+              <div className="form-actions">
+                <button type="submit">{t("send.presetSave")}</button>
+                <button type="button" onClick={() => setShowPresetForm(false)}>
+                  {t("send.presetCancel")}
+                </button>
+              </div>
+            </form>
+          ) : null}
 
           {preset.fps >= 30 ? (
             <p className="channel-warning">
-              {preset.lanes === 2
-                ? "الوضع المزدوج: استخدم ملء الشاشة، أدر الهاتف أفقياً، واختر «مسار مزدوج» في الماسح."
-                : "الوضع السريع: راقب معدلي الاستلام والمسح لدى المستقبِل. انزل درجة إذا توقف تزايد القراءات الفريدة."}
+              {preset.lanes === 2 ? t("send.channelWarningDual") : t("send.channelWarningFast")}
             </p>
           ) : null}
 
           {passwordTooShort ? (
-            <p className="error-message" role="alert">
-              كلمة المرور يجب ألا تقل عن 4 أحرف.
-            </p>
+            <p className="error-message" role="alert">{t("send.error.passwordShort")}</p>
           ) : null}
 
           {error ? <p className="error-message" role="alert">{error}</p> : null}
@@ -569,11 +1114,9 @@ export function SendClient() {
           <div className="step-heading inverse">
             <span>03</span>
             <div>
-              <h2>شغّل بثّ QR</h2>
+              <h2>{t("send.step3.title")}</h2>
               <p>
-                {preset.lanes === 2
-                  ? "أبقِ الكودَين الكاملين داخل إطار الهاتف الأفقي."
-                  : "املأ إطار الهاتف بهذا الكود الكامل."}
+                {preset.lanes === 2 ? t("send.step3.descDual") : t("send.step3.descSingle")}
               </p>
             </div>
           </div>
@@ -604,9 +1147,7 @@ export function SendClient() {
                 <div className="finder top-right" />
                 <div className="finder bottom-left" />
                 <span>
-                  {processing
-                    ? "جارٍ ترميز البث…"
-                    : "سيظهر بثّ QR هنا"}
+                  {processing ? t("send.qr.placeholderEncoding") : t("send.qr.placeholderIdle")}
                 </span>
               </div>
             )}
@@ -615,7 +1156,7 @@ export function SendClient() {
               type="button"
               onClick={toggleFullscreen}
               disabled={!transfer}
-              aria-label="عرض الكود بملء الشاشة"
+              aria-label={t("send.qr.fullscreen")}
             >
               ⛶
             </button>
@@ -626,34 +1167,34 @@ export function SendClient() {
               <span className={`pulse-dot ${playing ? "live" : ""}`} aria-hidden="true" />
               <strong>
                 {playing
-                  ? "جارٍ البث"
+                  ? t("send.status.broadcasting")
                   : transfer
-                    ? "جاهز للبث"
+                    ? t("send.status.ready")
                     : processing
-                      ? "جارٍ الترميز"
-                      : "بانتظار ملف"}
+                      ? t("send.status.encoding")
+                      : t("send.status.waiting")}
               </strong>
             </div>
             <span>
               {transfer
-                ? `${estimateDuration(transfer, preset)} · معدل اسمي ${formatRate(nominalRate)}${
+                ? `${estimateDuration(transfer, preset, t)} · ${t("send.status.nominal")} ${formatRate(nominalRate)}${
                     playing && actualFps > 0
-                      ? ` · ${actualFps.toFixed(1)} fps معروض`
+                      ? ` · ${actualFps.toFixed(1)} fps ${t("send.status.renderedFps")}`
                       : ""
                   }`
-                : "الكاميرا لا تحتاج إلى اتصال بالشبكة أبداً"}
+                : t("send.status.cameraNeverNeeds")}
             </span>
           </div>
 
           {transfer ? (
             <div className="broadcast-progress">
               <div>
-                <strong>دورة RaptorQ {cycleNumber}</strong>
+                <strong>{t("send.progress.cycle")} {cycleNumber}</strong>
                 <span>
-                  إطار {cycleFrame.toLocaleString()} /{" "}
+                  {t("send.progress.frame")} {cycleFrame.toLocaleString()} /{" "}
                   {orderLength.toLocaleString()} ·{" "}
-                  {transfer.sourcePacketCount.toLocaleString()} مصدر +{" "}
-                  {transfer.repairPacketIndices.length.toLocaleString()} إصلاح
+                  {transfer.sourcePacketCount.toLocaleString()} {t("send.progress.source")} +{" "}
+                  {transfer.repairPacketIndices.length.toLocaleString()} {t("send.progress.repair")}
                 </span>
               </div>
               <div
@@ -678,37 +1219,75 @@ export function SendClient() {
             }}
           >
             <span aria-hidden="true">{playing ? "Ⅱ" : "▶"}</span>
-            {playing ? "أوقف البث مؤقتاً" : "ابدأ بثّ QR"}
+            {playing ? t("send.pause") : t("send.start")}
           </button>
 
           <button className="link-action" type="button" onClick={copyScanLink}>
             <span aria-hidden="true">⌁</span>
-            {copied ? "تم نسخ الرابط" : "انسخ رابط الماسح للموبايل"}
+            {copied ? t("send.copied") : t("send.copyScanLink")}
           </button>
+
+          <p className="keyboard-hint">{t("send.keyboardHint")}</p>
         </div>
       </section>
 
       <section className="how-it-works">
-        <p className="eyebrow">أقرب إلى الحد البصري</p>
+        <p className="eyebrow">{t("send.how.eyebrow")}</p>
         <div className="how-grid">
-          <h2>بتّات أكثر فائدة.<br />في كل لقطة.</h2>
+          <h2>{t("send.how.title")}</h2>
           <div className="feature">
             <span>01</span>
-            <h3>اضغط أولاً</h3>
-            <p>Brotli بجودة 11 يتسابق مع gzip بمستوى 9؛ لا يعبر الكاميرا إلا الناتج الأصغر حجماً.</p>
+            <h3>{t("send.how1.title")}</h3>
+            <p>{t("send.how1.desc")}</p>
           </div>
           <div className="feature">
             <span>02</span>
-            <h3>QR ثنائي خام</h3>
-            <p>رموز ثنائية بلا توسعة Base45، مع هندسة تتبّع ثابتة يسهل على الكاميرا الإمساك بها.</p>
+            <h3>{t("send.how2.title")}</h3>
+            <p>{t("send.how2.desc")}</p>
           </div>
           <div className="feature">
             <span>03</span>
-            <h3>RaptorQ عبر الزمن</h3>
-            <p>تتداخل رموز المصدر والإصلاح، فتتحول الضبابية والإطارات المفقودة إلى محوٍ غير ضار.</p>
+            <h3>{t("send.how3.title")}</h3>
+            <p>{t("send.how3.desc")}</p>
           </div>
         </div>
       </section>
+
+      {/* نافذة QR كلمة المرور */}
+      {showPasswordQr ? (
+        <div className="modal-backdrop" onClick={() => setShowPasswordQr(false)}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <h3>{t("send.passwordQrTitle")}</h3>
+            <p>{t("send.passwordQrNote")}</p>
+            <div ref={passwordQrHostRef}>
+              {!passwordQrCanvas ? <p>…</p> : null}
+            </div>
+            <button type="button" className="modal-close" onClick={() => setShowPasswordQr(false)}>
+              {t("send.close")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* نافذة المفتاح العام */}
+      {showPubKeyQr ? (
+        <div className="modal-backdrop" onClick={() => setShowPubKeyQr(false)}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <h3>{t("send.signShowPub")}</h3>
+            <p>
+              {identity
+                ? `${identity.label} · ${identity.publicKeyRaw.length * 8} bit`
+                : t("send.signNoIdentity")}
+            </p>
+            <div ref={pubKeyQrHostRef}>
+              {!pubKeyQrCanvas ? <p>…</p> : null}
+            </div>
+            <button type="button" className="modal-close" onClick={() => setShowPubKeyQr(false)}>
+              {t("send.close")}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

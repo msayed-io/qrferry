@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../lang-provider";
 import { decompressTransfer } from "@/lib/compression";
 import { decryptPayload } from "@/lib/encryption";
 import {
   crc32,
   formatBytes,
   formatRate,
-  OpticalFileMeta,
   parseOpticalContainer,
   parseOpticalFrame,
   raptorPacketKey,
@@ -21,6 +21,22 @@ import {
   sessionKey,
   deleteSession,
 } from "@/lib/resume-store";
+import {
+  isTransferPackage,
+  parseTransferPackage,
+  buildTransferPackage,
+} from "@/lib/transfer-package";
+import {
+  decodePublicKey,
+  importPublicKeyRaw,
+  verifySignature,
+  formatPublicKeyFingerprint,
+} from "@/lib/signing";
+import {
+  addTrustedKey,
+  getTrustedKeys,
+} from "@/lib/identity-store";
+import { addHistoryEntry } from "@/lib/history-store";
 
 type ScanState =
   | "idle"
@@ -28,6 +44,7 @@ type ScanState =
   | "scanning"
   | "receiving"
   | "password"
+  | "signature-review"
   | "complete"
   | "error";
 type ScanMode = "single" | "dual";
@@ -44,10 +61,17 @@ type ReceiverSession = {
   seen: Set<string>;
 };
 type IncomingMeta = Omit<ReceiverSession, "decoder" | "seen">;
+type RecoveredFile = { name: string; mime: string; bytes: Uint8Array };
 type PendingDecryption = {
   container: Uint8Array;
   session: ReceiverSession;
   recovered: ReturnType<typeof parseOpticalContainer>;
+};
+type SignatureReview = {
+  signerName: string | null;
+  publicKeyRaw: Uint8Array;
+  fingerprint: string;
+  proceed: (trust: boolean) => void;
 };
 type VideoFrameMetadataLike = {
   presentedFrames?: number;
@@ -73,6 +97,7 @@ type ScanMetrics = {
   decodeP50: number;
   decodeP95: number;
 };
+type ScanPurpose = "qr" | "password" | "pubkey";
 
 function updateRollingRate(samples: RateSample[], bytes: number) {
   const now = performance.now();
@@ -84,10 +109,10 @@ function updateRollingRate(samples: RateSample[], bytes: number) {
 }
 
 function formatEta(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "جارٍ الحساب";
-  if (seconds < 60) return `${Math.ceil(seconds)} ثانية`;
+  if (!Number.isFinite(seconds) || seconds <= 0) return "…";
+  if (seconds < 60) return `${Math.ceil(seconds)} s`;
   const minutes = seconds / 60;
-  return `${minutes >= 10 ? Math.ceil(minutes) : minutes.toFixed(1)} دقيقة`;
+  return `${minutes >= 10 ? Math.ceil(minutes) : minutes.toFixed(1)} min`;
 }
 
 function percentile(values: number[], fraction: number) {
@@ -97,6 +122,7 @@ function percentile(values: number[], fraction: number) {
 }
 
 export function ScannerClient() {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanModeRef = useRef<ScanMode>("single");
@@ -104,7 +130,7 @@ export function ScannerClient() {
   const receiverRef = useRef<ReceiverSession | undefined>(undefined);
   const scanningRef = useRef(false);
   const completingRef = useRef(false);
-  const downloadUrlRef = useRef("");
+  const downloadUrlsRef = useRef<string[]>([]);
   const scanStartedAtRef = useRef(0);
   const lastQrAtRef = useRef(0);
   const qrReadsRef = useRef(0);
@@ -119,6 +145,7 @@ export function ScannerClient() {
   const pendingPayloadsRef = useRef<Uint8Array[]>([]);
   const [state, setState] = useState<ScanState>("idle");
   const [scanMode, setScanMode] = useState<ScanMode>("single");
+  const [scanPurpose, setScanPurpose] = useState<ScanPurpose>("qr");
   const [progress, setProgress] = useState(0);
   const [frames, setFrames] = useState(0);
   const [qrReads, setQrReads] = useState(0);
@@ -126,8 +153,10 @@ export function ScannerClient() {
   const [badFrames, setBadFrames] = useState(0);
   const [opticalRate, setOpticalRate] = useState(0);
   const [incoming, setIncoming] = useState<IncomingMeta>();
-  const [fileMeta, setFileMeta] = useState<OpticalFileMeta>();
-  const [downloadUrl, setDownloadUrl] = useState("");
+  const [recoveredFiles, setRecoveredFiles] = useState<RecoveredFile[]>([]);
+  const [burnAfterReading, setBurnAfterReading] = useState(false);
+  const [signVerified, setSignVerified] = useState(false);
+  const [signerName, setSignerName] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [guidance, setGuidance] = useState(
     "ثبّت الكود الكامل داخل الزوايا الأربع.",
@@ -146,6 +175,9 @@ export function ScannerClient() {
   const [promptPassword, setPromptPassword] = useState("");
   const [promptError, setPromptError] = useState("");
   const [resumeNote, setResumeNote] = useState("");
+  const [signatureReview, setSignatureReview] = useState<SignatureReview | null>(null);
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState("");
 
   const stopCamera = useCallback(() => {
     scanningRef.current = false;
@@ -153,78 +185,83 @@ export function ScannerClient() {
     streamRef.current = undefined;
   }, []);
 
+  const revokeDownloadUrls = useCallback(() => {
+    for (const url of downloadUrlsRef.current) URL.revokeObjectURL(url);
+    downloadUrlsRef.current = [];
+    setRecoveredFiles([]);
+  }, []);
+
   const chooseScanMode = (nextMode: ScanMode) => {
     scanModeRef.current = nextMode;
     setScanMode(nextMode);
     setGuidance(
-      nextMode === "dual"
-        ? "أدر الهاتف أفقياً وضع الكودَين الكاملين داخل الإطار."
-        : "ثبّت الكود الكامل داخل الزوايا الأربع.",
+      nextMode === "dual" ? t("scan.guide.dualInitial") : t("scan.guide.initial"),
     );
   };
 
-  const finalizeRecovered = useCallback(
-    async (
-      recovered: ReturnType<typeof parseOpticalContainer>,
-      session: ReceiverSession,
-      password?: string,
-    ) => {
-      let transmitted = recovered.transmitted;
-      if (recovered.meta.encrypted) {
-        if (!password) {
-          throw new Error("هذا الملف مشفَّر وكلمة المرور مطلوبة لفكّه.");
-        }
-        transmitted = await decryptPayload(transmitted, password);
+  const finalizeAndSave = useCallback(
+    async (recoveredFiles: RecoveredFile[], options: {
+      burnAfterReading: boolean;
+      signed: boolean;
+      signerName: string | null;
+      verified: boolean;
+      encrypted: boolean;
+      fileCount: number;
+      originalSize: number;
+    }) => {
+      const urls: string[] = [];
+      const names: string[] = [];
+      for (const file of recoveredFiles) {
+        const blobPart = new Uint8Array(file.bytes).buffer as BlobPart;
+        const url = URL.createObjectURL(new Blob([blobPart], { type: file.mime }));
+        urls.push(url);
+        names.push(file.name);
       }
-      const bytes = await decompressTransfer(
-        transmitted,
-        recovered.meta.compression,
-      );
-      if (
-        bytes.length !== recovered.meta.fileSize ||
-        crc32(bytes) !== recovered.meta.fileCrc
-      ) {
-        throw new Error("المجموع الاختباري للملف المستعاد غير مطابق.");
-      }
-
-      const fileBytes = Uint8Array.from(bytes);
-      const url = URL.createObjectURL(
-        new Blob([fileBytes.buffer], { type: recovered.meta.mime }),
-      );
-      if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
-      downloadUrlRef.current = url;
-      setFileMeta(recovered.meta);
-      setDownloadUrl(url);
+      revokeDownloadUrls();
+      downloadUrlsRef.current = urls;
+      setRecoveredFiles(recoveredFiles);
+      setBurnAfterReading(options.burnAfterReading);
+      setSignVerified(options.verified);
+      setSignerName(options.signerName);
       setProgress(1);
-      setGuidance("فُك الضغط وتحقّق المجموع الاختباري. الملف آمن للحفظ.");
+      setGuidance(t("scan.guide.safeToSave"));
       setState("complete");
       stopCamera();
       navigator.vibrate?.([80, 40, 120]);
-      await deleteSession(
-        sessionKey(session.session, session.containerLength, session.symbolSize),
-      );
+
+      await addHistoryEntry({
+        name: names[0] ?? "transfer",
+        size: options.originalSize,
+        fileCount: options.fileCount,
+        time: Date.now(),
+        encrypted: options.encrypted,
+        signed: options.signed,
+        verified: options.verified,
+      });
     },
-    [stopCamera],
+    [revokeDownloadUrls, stopCamera, t],
   );
 
   const finishTransfer = useCallback(
-    async (container: Uint8Array, session: ReceiverSession) => {
+    async (container: Uint8Array, session: ReceiverSession, password?: string) => {
       if (completingRef.current) return;
       completingRef.current = true;
       try {
         setGuidance(
           session.compressed
-            ? "اكتمل الاستقبال البصري. جارٍ فك الضغط والتحقق…"
-            : "اكتمل الاستقبال البصري. جارٍ التحقق…",
+            ? t("scan.guide.completeCompressed")
+            : t("scan.guide.complete"),
         );
         if (
           container.length !== session.containerLength ||
           crc32(container) !== session.session
         ) {
-          throw new Error("كائن RaptorQ المستعاد فشل في فحص المجموع.");
+          throw new Error(t("scan.error.raptorq"));
         }
         const recovered = parseOpticalContainer(container);
-        if (recovered.meta.encrypted) {
+        if (recovered.meta.encrypted && !password) {
+          // نُفرج القفل حتى تتمكن المحاولات اللاحقة (بعد إدخال كلمة المرور)
+          completingRef.current = false;
           setPendingDecryption({ container, session, recovered });
           setPromptPassword("");
           setPromptError("");
@@ -232,18 +269,122 @@ export function ScannerClient() {
           stopCamera();
           return;
         }
-        await finalizeRecovered(recovered, session);
+
+        let transmitted = recovered.transmitted;
+        if (recovered.meta.encrypted) {
+          transmitted = await decryptPayload(transmitted, password as string);
+        }
+        const decompressed = await decompressTransfer(
+          transmitted,
+          recovered.meta.compression,
+        );
+
+        let files: RecoveredFile[];
+        let burn = false;
+        let signed = false;
+        let signerName: string | null = null;
+        let verified = false;
+
+        if (isTransferPackage(decompressed)) {
+          const parsed = parseTransferPackage(decompressed);
+          files = parsed.files.map((file) => ({
+            name: file.name,
+            mime: file.mime,
+            bytes: file.bytes,
+          }));
+          burn = parsed.burnAfterReading;
+          signed = parsed.signature !== null;
+          signerName = parsed.signerName;
+
+          if (parsed.signature && parsed.signerPublicKey) {
+            const canonical = buildTransferPackage({
+              files: parsed.files,
+              burnAfterReading: parsed.burnAfterReading,
+            });
+            const trusted = await getTrustedKeys();
+            const fingerprint = Array.from(parsed.signerPublicKey).join(",");
+            const alreadyTrusted = trusted.some(
+              (key) => Array.from(key).join(",") === fingerprint,
+            );
+            if (alreadyTrusted) {
+              const key = await importPublicKeyRaw(parsed.signerPublicKey);
+              verified = await verifySignature(key, canonical, parsed.signature);
+            } else {
+              // شاشة الثقة: نوقف وننتظر قرار المستخدم
+              setSignatureReview({
+                signerName: parsed.signerName,
+                publicKeyRaw: parsed.signerPublicKey,
+                fingerprint: formatPublicKeyFingerprint(parsed.signerPublicKey),
+                proceed: async (trust: boolean) => {
+                  setSignatureReview(null);
+                  let ok = false;
+                  if (trust) {
+                    await addTrustedKey(parsed.signerPublicKey as Uint8Array);
+                    const key = await importPublicKeyRaw(parsed.signerPublicKey as Uint8Array);
+                    ok = await verifySignature(key, canonical, parsed.signature as Uint8Array);
+                  }
+                  completingRef.current = false;
+                  await finalizeAndSave(files, {
+                    burnAfterReading: burn,
+                    signed,
+                    signerName,
+                    verified: trust ? ok : false,
+                    encrypted: recovered.meta.encrypted,
+                    fileCount: files.length,
+                    originalSize: recovered.meta.fileSize,
+                  });
+                  await deleteSession(
+                    sessionKey(session.session, session.containerLength, session.symbolSize),
+                  );
+                },
+              });
+              setState("signature-review");
+              stopCamera();
+              return;
+            }
+          }
+        } else {
+          // المسار الكلاسيكي: ملف واحد
+          files = [
+            {
+              name: recovered.meta.filename,
+              mime: recovered.meta.mime,
+              bytes: decompressed,
+            },
+          ];
+          if (
+            decompressed.length !== recovered.meta.fileSize ||
+            crc32(decompressed) !== recovered.meta.fileCrc
+          ) {
+            throw new Error(t("scan.error.checksum"));
+          }
+        }
+
+        completingRef.current = false;
+        await finalizeAndSave(files, {
+          burnAfterReading: burn,
+          signed,
+          signerName,
+          verified: signed ? verified : true,
+          encrypted: recovered.meta.encrypted,
+          fileCount: files.length,
+          originalSize: recovered.meta.fileSize,
+        });
+        await deleteSession(
+          sessionKey(session.session, session.containerLength, session.symbolSize),
+        );
       } catch (cause) {
+        completingRef.current = false;
         setState("error");
         setError(
-          cause instanceof Error ? cause.message : "فشل التحقق من الملف.",
+          cause instanceof Error ? cause.message : t("scan.error.verify"),
         );
         stopCamera();
-      } finally {
-        completingRef.current = false;
+        // نُعيد الرمي حتى يعرف المتصل (نافذة كلمة المرور) بسبب الفشل
+        throw cause;
       }
     },
-    [finalizeRecovered, stopCamera],
+    [finalizeAndSave, stopCamera, t],
   );
 
   const submitPassword = useCallback(async () => {
@@ -251,22 +392,32 @@ export function ScannerClient() {
     if (!pending) return;
     setPromptError("");
     try {
-      await finalizeRecovered(pending.recovered, pending.session, promptPassword);
+      await finishTransfer(pending.container, pending.session, promptPassword);
       setPendingDecryption(undefined);
     } catch (cause) {
+      // إبقاء النافذة مع عرض سبب الفشل (كلمة مرور خاطئة مثلاً)
+      // ونخفي الخطأ العام حتى لا يتكرر العرض
+      setError("");
       setPromptError(
-        cause instanceof Error ? cause.message : "تعذّر فك التشفير.",
+        cause instanceof Error ? cause.message : t("scan.error.verify"),
       );
+      setState("password");
     }
-  }, [finalizeRecovered, pendingDecryption, promptPassword]);
+  }, [finishTransfer, pendingDecryption, promptPassword, t]);
 
   const cancelPassword = useCallback(() => {
     setPendingDecryption(undefined);
     setPromptPassword("");
     setPromptError("");
     setState("idle");
-    setGuidance("أُلغي فك التشفير. يمكنك إعادة تشغيل الكاميرا والمحاولة لاحقاً.");
-  }, []);
+    setGuidance(t("scan.guide.decryptCancelled"));
+  }, [t]);
+
+  const cancelSignatureReview = useCallback(() => {
+    setSignatureReview(null);
+    setState("idle");
+    setGuidance(t("scan.guide.decryptCancelled"));
+  }, [t]);
 
   const acceptQrBytes = useCallback(
     async (bytes: Uint8Array) => {
@@ -274,17 +425,51 @@ export function ScannerClient() {
       lastQrAtRef.current = performance.now();
       setQrReads(qrReadsRef.current);
 
+      // معالجة نصوص QR (كلمة المرور / المفتاح العام) قبل إطارات QF4
+      let textPayload: string | null = null;
+      try {
+        textPayload = new TextDecoder().decode(bytes);
+      } catch {
+        textPayload = null;
+      }
+
+      if (textPayload?.startsWith("QFPW:")) {
+        const password = textPayload.slice(5);
+        if (scanPurpose === "password" || state === "password") {
+          setPromptPassword(password);
+          setPromptError("");
+          setScanPurpose("qr");
+          setGuidance(t("scan.passwordPlaceholder"));
+          stopCamera();
+          return;
+        }
+      }
+      if (textPayload?.startsWith("QFPUB:")) {
+        const raw = decodePublicKey(textPayload);
+        if (raw && scanPurpose === "pubkey") {
+          await addTrustedKey(raw);
+          setScanPurpose("qr");
+          setGuidance(t("scan.signTrust"));
+          stopCamera();
+          return;
+        }
+      }
+
+      if (scanPurpose !== "qr") {
+        // وضع مسح نصي: أي إطار QF4 يُتجاهل حتى نقرأ النص المطلوب
+        return;
+      }
+
       let frame;
       try {
         frame = parseOpticalFrame(bytes);
       } catch {
-        const textPrefix = new TextDecoder().decode(bytes.subarray(0, 8));
-        if (textPrefix.startsWith("QF2") || textPrefix.startsWith("QF3")) {
-          setGuidance("يظهر مرسل QRFerry قديم. أعد تحميل شاشة الإرسال.");
+        if (textPayload?.startsWith("QF2") || textPayload?.startsWith("QF3")) {
+          setGuidance(t("scan.guide.oldSender"));
           return;
         }
         setBadFrames((current) => current + 1);
-        setGuidance("إطار غير مكتمل. ثبّت يدك — الإطار التالي يعوّضه.");
+        setGuidance(t("scan.guide.badFrame"));
         return;
       }
 
@@ -315,9 +500,7 @@ export function ScannerClient() {
             const decoded = decoder.push(payload);
             if (decoded && !replayedDecoded) replayedDecoded = decoded;
           }
-          setResumeNote(
-            `استُئنف الاستقبال من جلسة سابقة: ${baseline.toLocaleString()} رمزاً محفوظاً على هذا الجهاز.`,
-          );
+          setResumeNote(t("scan.resumeNote", { n: baseline.toLocaleString() }));
         } else {
           setResumeNote("");
         }
@@ -346,9 +529,7 @@ export function ScannerClient() {
           sourcePacketCount: receiver.sourcePacketCount,
         });
         setGuidance(
-          baseline > 0
-            ? "قُفل RaptorQ واستُئنف التقدم. أبقِ الهامش الأبيض الكامل ظاهراً."
-            : "قُفل RaptorQ. أبقِ الهامش الأبيض الكامل ظاهراً.",
+          baseline > 0 ? t("scan.guide.lockedResume") : t("scan.guide.locked"),
         );
         setState("receiving");
         if (replayedDecoded) {
@@ -362,13 +543,13 @@ export function ScannerClient() {
         frame.containerLength !== receiver.containerLength ||
         frame.symbolSize !== receiver.symbolSize
       ) {
-        setGuidance("نقل مختلف عبر كاميرا الرؤية. التزم بمرسل واحد.");
+        setGuidance(t("scan.guide.different"));
         return;
       }
 
       const key = raptorPacketKey(frame);
       if (receiver.seen.has(key)) {
-        setGuidance("قُفلت الإشارة. بانتظار رمز RaptorQ جديد.");
+        setGuidance(t("scan.guide.duplicate"));
         return;
       }
       receiver.seen.add(key);
@@ -385,8 +566,8 @@ export function ScannerClient() {
       setProgress(estimatedProgress);
       setGuidance(
         frame.symbolSize > 2200
-          ? "قُفل البث عالي الكثافة. أبقِ الهاتف قريباً ومستقيماً وثابتاً تماماً."
-          : "قُفلت الإشارة. RaptorQ يمتصّ الإطارات المفقودة.",
+          ? t("scan.guide.highDensity")
+          : t("scan.guide.lockedSymbol"),
       );
       setState("receiving");
       if (pendingPayloadsRef.current.length < MAX_SYMBOLS_STORED) {
@@ -396,7 +577,7 @@ export function ScannerClient() {
       const decoded = receiver.decoder.push(frame.payload);
       if (decoded) await finishTransfer(decoded, receiver);
     },
-    [finishTransfer],
+    [finishTransfer, scanPurpose, state, stopCamera, t],
   );
 
   // حفظ الرموز المستلمة دورياً في IndexedDB لتمكين الاستئناف.
@@ -625,113 +806,132 @@ export function ScannerClient() {
     [acceptQrBytes],
   );
 
-  const startCamera = useCallback(async () => {
-    setError("");
-    setGuidance(
-      scanModeRef.current === "dual"
-        ? "أدر الهاتف أفقياً وضع الكودَين الكاملين داخل الإطار."
-        : "ثبّت الكود الكامل داخل الزوايا الأربع.",
-    );
-    setState("starting");
-    receiverRef.current = undefined;
-    completingRef.current = false;
-    qrReadsRef.current = 0;
-    acceptedFramesRef.current = 0;
-    missedExposuresRef.current = 0;
-    decodeFailuresRef.current = 0;
-    rateSamplesRef.current = [];
-    deliverySamplesRef.current = [];
-    scanPerformanceRef.current = [];
-    lastPresentedFramesRef.current = 0;
-    lastMetricsUpdateRef.current = 0;
-    lastQrAtRef.current = 0;
-    scanStartedAtRef.current = performance.now();
-    pendingPayloadsRef.current = [];
-    setIncoming(undefined);
-    setFileMeta(undefined);
-    setProgress(0);
-    setFrames(0);
-    setQrReads(0);
-    setMissedExposures(0);
-    setBadFrames(0);
-    setOpticalRate(0);
-    setTorchOn(false);
-    setCameraSettings(undefined);
-    setResumeNote("");
-    setPendingDecryption(undefined);
-    setPromptPassword("");
-    setPromptError("");
-    setScanMetrics({
-      deliveredFps: 0,
-      scannerFps: 0,
-      decodeP50: 0,
-      decodeP95: 0,
-    });
-    if (downloadUrlRef.current) {
-      URL.revokeObjectURL(downloadUrlRef.current);
-      downloadUrlRef.current = "";
-      setDownloadUrl("");
-    }
-
+  const listCameras = useCallback(async (): Promise<MediaDeviceInfo[]> => {
     try {
-      const decoderLoad = import("@/lib/qr-scanner").then(({ prepareQrScanner }) =>
-        prepareQrScanner(),
+      if (!navigator.mediaDevices?.enumerateDevices) return [];
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter((device) => device.kind === "videoinput");
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const startCamera = useCallback(
+    async (purpose: ScanPurpose = "qr") => {
+      setError("");
+      setScanPurpose(purpose);
+      setGuidance(
+        purpose === "qr"
+          ? scanModeRef.current === "dual"
+            ? t("scan.guide.dualInitial")
+            : t("scan.guide.initial")
+          : t("scan.guide.signScan"),
       );
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
+      setState("starting");
+      receiverRef.current = undefined;
+      completingRef.current = false;
+      qrReadsRef.current = 0;
+      acceptedFramesRef.current = 0;
+      missedExposuresRef.current = 0;
+      decodeFailuresRef.current = 0;
+      rateSamplesRef.current = [];
+      deliverySamplesRef.current = [];
+      scanPerformanceRef.current = [];
+      lastPresentedFramesRef.current = 0;
+      lastMetricsUpdateRef.current = 0;
+      lastQrAtRef.current = 0;
+      scanStartedAtRef.current = performance.now();
+      pendingPayloadsRef.current = [];
+      setIncoming(undefined);
+      setProgress(0);
+      setFrames(0);
+      setQrReads(0);
+      setMissedExposures(0);
+      setBadFrames(0);
+      setOpticalRate(0);
+      setTorchOn(false);
+      setCameraSettings(undefined);
+      setResumeNote("");
+      setPendingDecryption(undefined);
+      setPromptPassword("");
+      setPromptError("");
+      setScanMetrics({
+        deliveredFps: 0,
+        scannerFps: 0,
+        decodeP50: 0,
+        decodeP95: 0,
+      });
+      if (downloadUrlsRef.current.length > 0) {
+        revokeDownloadUrls();
+      }
+
+      try {
+        const devices = await listCameras();
+        setCameraDevices(devices);
+        const decoderLoad = import("@/lib/qr-scanner").then(({ prepareQrScanner }) =>
+          prepareQrScanner(),
+        );
+        const videoConstraints: MediaTrackConstraints = {
           facingMode: { ideal: "environment" },
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           frameRate: { ideal: 60, min: 24 },
-        },
-      });
-      await decoderLoad;
-      streamRef.current = stream;
-      const track = stream.getVideoTracks()[0];
-      const settings = track.getSettings();
-      setCameraSettings({
-        width: settings.width ?? 0,
-        height: settings.height ?? 0,
-        frameRate: settings.frameRate ?? 0,
-      });
-      const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
-        focusMode?: string[];
-        torch?: boolean;
-      };
-      setTorchAvailable(Boolean(capabilities?.torch));
-      if (capabilities?.focusMode?.includes("continuous")) {
-        await track
-          .applyConstraints({
-            advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
-          })
-          .catch(() => undefined);
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      scanningRef.current = true;
-      setState("scanning");
-      const video = videoRef.current as VideoWithFrameCallback | null;
-      if (video?.requestVideoFrameCallback) {
-        video.requestVideoFrameCallback((_now, metadata) =>
-          scanVideo(metadata),
+        };
+        if (selectedCamera && selectedCamera !== "auto") {
+          videoConstraints.deviceId = { exact: selectedCamera };
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: videoConstraints,
+        });
+        await decoderLoad;
+        streamRef.current = stream;
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        setCameraSettings({
+          width: settings.width ?? 0,
+          height: settings.height ?? 0,
+          frameRate: settings.frameRate ?? 0,
+        });
+        const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
+          focusMode?: string[];
+          torch?: boolean;
+        };
+        setTorchAvailable(Boolean(capabilities?.torch));
+        if (capabilities?.focusMode?.includes("continuous")) {
+          await track
+            .applyConstraints({
+              advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+            })
+            .catch(() => undefined);
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        scanningRef.current = true;
+        setState("scanning");
+        const video = videoRef.current as VideoWithFrameCallback | null;
+        if (video?.requestVideoFrameCallback) {
+          video.requestVideoFrameCallback((_now, metadata) =>
+            scanVideo(metadata),
+          );
+        } else {
+          window.requestAnimationFrame(() => scanVideo());
+        }
+      } catch (cause) {
+        stopCamera();
+        setState("error");
+        const name = cause instanceof DOMException ? cause.name : "";
+        setError(
+          name === "NotAllowedError"
+            ? t("scan.error.cameraBlocked")
+            : t("scan.error.cameraStart"),
         );
-      } else {
-        window.requestAnimationFrame(() => scanVideo());
       }
-    } catch (cause) {
-      stopCamera();
-      setState("error");
-      const name = cause instanceof DOMException ? cause.name : "";
-      setError(
-        name === "NotAllowedError"
-          ? "تم حظر الوصول إلى الكاميرا. اسمح بالوصول في إعدادات المتصفح وحاول مجدداً."
-          : "تعذّر تشغيل الكاميرا الخلفية. المسح بالكاميرا يحتاج HTTPS أو localhost.",
-      );
-    }
-  }, [scanVideo, stopCamera]);
+    },
+    [listCameras, revokeDownloadUrls, scanVideo, selectedCamera, stopCamera, t],
+  );
 
   const toggleTorch = async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -756,26 +956,47 @@ export function ScannerClient() {
       if (elapsed > 8000) {
         setGuidance(
           scanModeRef.current === "dual"
-            ? "لم يُقرأ أي مسار. تأكد من اختيار «مسار مزدوج» على الجهازين، أدر الهاتف أفقياً، واقترب أكثر."
-            : "لم يُقرأ أي إطار. استخدم وضع Robust، واقترب أكثر، وأبقِ الهامش الأبيض ظاهراً.",
+            ? t("scan.guide.noFrame8sDual")
+            : t("scan.guide.noFrame8s"),
         );
       } else if (elapsed > 4000) {
         setGuidance(
           scanModeRef.current === "dual"
-            ? "ما زلنا نبحث. أبقِ الهامشين الأبيضين ظاهرين وثبّت الهاتف أمام الشاشة."
-            : "اقترب أكثر حتى يكاد الكود يملأ الإطار.",
+            ? t("scan.guide.noFrame4sDual")
+            : t("scan.guide.noFrame4s"),
         );
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     return () => {
       stopCamera();
-      if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
+      revokeDownloadUrls();
     };
-  }, [stopCamera]);
+  }, [revokeDownloadUrls, stopCamera]);
+
+  // تنزيل كل الملفات كـ ZIP
+  const downloadAllZip = useCallback(async () => {
+    if (recoveredFiles.length === 0) return;
+    const { zipSync } = await import("fflate");
+    const entries: Record<string, Uint8Array> = {};
+    for (const file of recoveredFiles) {
+      entries[file.name] = new Uint8Array(file.bytes);
+    }
+    const zipData = zipSync(entries, { level: 6 });
+    const url = URL.createObjectURL(
+      new Blob([zipData], { type: "application/zip" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `qrferry-${Date.now()}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }, [recoveredFiles]);
 
   const complete = state === "complete";
   const active =
@@ -808,40 +1029,38 @@ export function ScannerClient() {
   return (
     <main className="scanner-page">
       <section className="scanner-intro">
-        <p className="eyebrow">مستقبل RaptorQ للموبايل</p>
-        <h1>{complete ? "تم استرداد الملف." : "وجّه. ثبّت. استقبل."}</h1>
+        <p className="eyebrow">{t("scan.eyebrow")}</p>
+        <h1>{complete ? t("scan.h1.complete") : t("scan.h1.ready")}</h1>
         <p>
           {complete
-            ? "اجتاز كائن RaptorQ والملف الأصلي فحصي المجموع الاختباري من الطرف إلى الطرف."
+            ? t("scan.intro.complete")
             : scanMode === "dual"
-              ? "المسح المزدوج يقرأ قناتين متناوبتين بسرعة 30 fps؛ أي مسار ثابت يقدّم الملف."
-              : "يقرأ الماسح QR ثنائياً خاماً واحداً لكل لقطة؛ الإطارات المفقودة لا تضر."}
+              ? t("scan.intro.dual")
+              : t("scan.intro.single")}
         </p>
       </section>
 
       <section className="scanner-shell">
         <div className={`camera-view ${scanMode} ${active ? "active" : ""} ${complete ? "complete" : ""}`}>
-          <video ref={videoRef} playsInline muted aria-label="معاينة الكاميرا الخلفية" />
+          <video ref={videoRef} playsInline muted aria-label="معاينة الكاميرا" />
           <canvas ref={canvasRef} hidden />
           <div className="scan-reticle" aria-hidden="true">
             <i /><i /><i /><i />
           </div>
-          {!active && !complete && state !== "password" ? (
+          {!active && !complete && state !== "password" && state !== "signature-review" ? (
             <div className="camera-empty">
               <span className="camera-icon" aria-hidden="true">◎</span>
-              <strong>الكاميرا متوقفة</strong>
+              <strong>{t("scan.cameraOff")}</strong>
               <span>
-                {scanMode === "dual"
-                  ? "مسار مزدوج محدد · أدر الهاتف أفقياً."
-                  : "يبقى الفيديو على هذا الجهاز."}
+                {scanMode === "dual" ? t("scan.dualSelected") : t("scan.videoLocal")}
               </span>
             </div>
           ) : null}
-          {state === "starting" ? <div className="camera-loading">جارٍ تحميل مفكك الرموز…</div> : null}
+          {state === "starting" ? <div className="camera-loading">{t("scan.loading")}</div> : null}
           {complete ? <div className="complete-mark" aria-hidden="true">✓</div> : null}
           {torchAvailable && active ? (
             <button className="torch-button" type="button" onClick={toggleTorch}>
-              {torchOn ? "إطفاء الضوء" : "تشغيل الضوء"}
+              {torchOn ? t("scan.torchOn") : t("scan.torchOff")}
             </button>
           ) : null}
         </div>
@@ -851,14 +1070,16 @@ export function ScannerClient() {
             <span className={`pulse-dot ${active ? "live" : ""}`} aria-hidden="true" />
             <strong>
               {state === "receiving"
-                ? "جارٍ استقبال رموز RaptorQ"
+                ? t("scan.status.receiving")
                 : state === "scanning"
-                  ? "جارٍ البحث عن QRFerry"
+                  ? t("scan.status.searching")
                   : state === "password"
-                    ? "يتطلب فك التشفير"
-                    : complete
-                      ? "تم التحقق من النقل"
-                      : "جاهز للمسح"}
+                    ? t("scan.status.password")
+                    : state === "signature-review"
+                      ? t("scan.signUntrusted")
+                      : complete
+                        ? t("scan.status.verified")
+                        : t("scan.status.ready")}
             </strong>
             <b>{Math.round(progress * 100)}%</b>
           </div>
@@ -877,11 +1098,8 @@ export function ScannerClient() {
 
           {state === "password" && pendingDecryption ? (
             <div className="password-prompt">
-              <strong>🔒 هذا الملف مشفَّر</strong>
-              <p>
-                يلزم إدخال كلمة المرور التي حدّدها المرسل لفك الملف. بدونها لا
-                يمكن استرداد المحتوى حتى لو صُوّرت الشاشة.
-              </p>
+              <strong>{t("scan.passwordTitle")}</strong>
+              <p>{t("scan.passwordBody")}</p>
               <input
                 className="password-input"
                 type="password"
@@ -889,7 +1107,7 @@ export function ScannerClient() {
                 autoComplete="off"
                 autoFocus
                 value={promptPassword}
-                placeholder="كلمة المرور"
+                placeholder={t("scan.passwordPlaceholder")}
                 onChange={(event) => setPromptPassword(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void submitPassword();
@@ -900,13 +1118,58 @@ export function ScannerClient() {
               ) : null}
               <div className="prompt-actions">
                 <button type="button" onClick={() => void submitPassword()}>
-                  فكّ التشفير
+                  {t("scan.passwordDecrypt")}
                 </button>
                 <button type="button" onClick={cancelPassword}>
-                  إلغاء
+                  {t("scan.passwordCancel")}
+                </button>
+              </div>
+              <button
+                type="button"
+                className="mini-btn"
+                onClick={() => void startCamera("password")}
+              >
+                {t("scan.passwordScanQr")}
+              </button>
+            </div>
+          ) : null}
+
+          {state === "signature-review" && signatureReview ? (
+            <div className="sign-trust-panel">
+              <strong>{t("scan.signUntrusted")}</strong>
+              <p>
+                {t("scan.signFrom", { name: signatureReview.signerName ?? "?" })}
+                <br />
+                {signatureReview.fingerprint}
+              </p>
+              <p>{t("scan.signBody")}</p>
+              <div className="trust-actions">
+                <button
+                  type="button"
+                  onClick={() => signatureReview.proceed(true)}
+                >
+                  {t("scan.signTrust")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => signatureReview.proceed(false)}
+                >
+                  {t("scan.signReject")}
+                </button>
+                <button type="button" className="mini-btn" onClick={cancelSignatureReview}>
+                  {t("scan.passwordCancel")}
                 </button>
               </div>
             </div>
+          ) : null}
+
+          {complete && signVerified && signerName ? (
+            <p className="sign-verified-note" role="status">
+              {t("scan.signVerified", { name: signerName })}
+            </p>
+          ) : null}
+          {complete && burnAfterReading ? (
+            <p className="resume-note" role="status">{t("scan.burnNotice")}</p>
           ) : null}
 
           <div
@@ -922,8 +1185,8 @@ export function ScannerClient() {
               disabled={active}
               onClick={() => chooseScanMode("single")}
             >
-              QR مفرد
-              <small>من Robust حتى Turbo 30</small>
+              {t("scan.mode.single")}
+              <small>{t("scan.mode.singleSub")}</small>
             </button>
             <button
               type="button"
@@ -933,28 +1196,46 @@ export function ScannerClient() {
               disabled={active}
               onClick={() => chooseScanMode("dual")}
             >
-              مسار مزدوج
-              <small>Turbo 60 ووضع المختبر 1 Mbps</small>
+              {t("scan.mode.dual")}
+              <small>{t("scan.mode.dualSub")}</small>
             </button>
           </div>
 
+          {cameraDevices.length > 1 && !active ? (
+            <div className="camera-picker">
+              <label htmlFor="camera-select">{t("scan.cameraSelect")}</label>
+              <select
+                id="camera-select"
+                value={selectedCamera}
+                onChange={(event) => setSelectedCamera(event.target.value)}
+              >
+                <option value="auto">{t("scan.cameraAuto")}</option>
+                {cameraDevices.map((device, index) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `${t("scan.cameraSelect")} ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           <div className="rate-panel" aria-live="polite">
             <div>
-              <span>معدل الملف الفعلي</span>
+              <span>{t("scan.rate.effective")}</span>
               <strong>{effectiveRate > 0 ? formatRate(effectiveRate) : "—"}</strong>
               <small>
                 {incoming?.compressed
-                  ? `${formatRate(opticalRate)} بصرياً · مضغوط ${compressionPercent}%`
-                  : `${formatRate(opticalRate)} بيانات بصرية مقبولة`}
+                  ? `${formatRate(opticalRate)} ${t("scan.rate.optical", { p: compressionPercent })}`
+                  : `${formatRate(opticalRate)} ${t("scan.rate.opticalOnly")}`}
               </small>
             </div>
             <div>
-              <span>الوقت المتبقي</span>
-              <strong>{complete ? "مكتمل" : formatEta(etaSeconds)}</strong>
+              <span>{t("scan.rate.remaining")}</span>
+              <strong>{complete ? t("scan.rate.complete") : formatEta(etaSeconds)}</strong>
               <small>
                 {incoming
-                  ? `${formatBytes(recoveredBytes)} من ${formatBytes(incoming.containerLength)} مشفَّر`
-                  : "بانتظار أول رمز RaptorQ"}
+                  ? `${formatBytes(recoveredBytes)} ${t("scan.rate.of")} ${formatBytes(incoming.containerLength)} ${t("scan.rate.encoded")}`
+                  : t("scan.rate.waiting")}
               </small>
             </div>
           </div>
@@ -963,12 +1244,12 @@ export function ScannerClient() {
             <div className="incoming-file">
               <span className="file-glyph" aria-hidden="true">↓</span>
               <div>
-                <strong>{fileMeta?.filename || "الملف القادم"}</strong>
+                <strong>{incoming.compressed ? t("scan.incoming") : t("scan.incoming")}</strong>
                 <span>
                   {formatBytes(incoming.originalSize)}
-                  {incoming.compressed ? ` · مضغوط ${compressionPercent}%` : ""}
+                  {incoming.compressed ? ` · ${t("scan.incomingCompressed", { p: compressionPercent })}` : ""}
                   {" · "}
-                  {frames.toLocaleString()} / ~{incoming.sourcePacketCount.toLocaleString()} رموز
+                  {frames.toLocaleString()} / ~{incoming.sourcePacketCount.toLocaleString()} {t("scan.symbols")}
                 </span>
               </div>
               <b>RQ</b>
@@ -986,7 +1267,7 @@ export function ScannerClient() {
                   : "—"}{" "}
                 fps
               </b>
-              مُتفاوض عليه
+              {t("scan.diag.negotiated")}
             </span>
             <span>
               <b>
@@ -995,7 +1276,7 @@ export function ScannerClient() {
                   : "—"}{" "}
                 fps
               </b>
-              مستلَم
+              {t("scan.diag.delivered")}
             </span>
             <span>
               <b>
@@ -1004,68 +1285,92 @@ export function ScannerClient() {
                   : "—"}{" "}
                 fps
               </b>
-              ممسوح
+              {t("scan.diag.scanned")}
             </span>
             <span>
               <b>
                 {scanMetrics.decodeP50
-                  ? `${scanMetrics.decodeP50.toFixed(0)} / ${scanMetrics.decodeP95.toFixed(0)} ملليثانية`
+                  ? `${scanMetrics.decodeP50.toFixed(0)} / ${scanMetrics.decodeP95.toFixed(0)} ms`
                   : "—"}
               </b>
-              فك p50 / p95
+              {t("scan.diag.decode")}
             </span>
           </div>
           <div className="scan-diagnostics" aria-live="polite">
-            <span><b>{qrReads}</b> قراءات QR</span>
-            <span><b>{frames}</b> فريدة</span>
-            <span><b>{missedExposures}</b> مفقودة</span>
-            <span><b>{badFrames}</b> مرفوضة</span>
+            <span><b>{qrReads}</b> {t("scan.diag.msg")}</span>
+            <span><b>{frames}</b> {t("scan.diag.unique")}</span>
+            <span><b>{missedExposures}</b> {t("scan.diag.missed")}</span>
+            <span><b>{badFrames}</b> {t("scan.diag.rejected")}</span>
           </div>
           <p className="scan-hint">{guidance}</p>
 
           {error ? <p className="error-message" role="alert">{error}</p> : null}
 
-          {complete && downloadUrl && fileMeta ? (
-            <a className="primary-action" href={downloadUrl} download={fileMeta.filename}>
-              <span aria-hidden="true">↓</span>
-              حفظ {fileMeta.filename}
-            </a>
+          {complete && recoveredFiles.length > 0 ? (
+            <>
+              <div className="received-files">
+                {recoveredFiles.map((file, index) => (
+                  <div className="file-row" key={`${file.name}-${index}`}>
+                    <span className="fname">{file.name}</span>
+                    <span className="fmeta">{formatBytes(file.bytes.length)}</span>
+                    <a
+                      href={downloadUrlsRef.current[index] ?? "#"}
+                      download={file.name}
+                      onClick={() => {
+                        if (burnAfterReading) {
+                          setTimeout(() => revokeDownloadUrls(), 60_000);
+                        }
+                      }}
+                    >
+                      ↓ {t("scan.save", { name: file.name })}
+                    </a>
+                  </div>
+                ))}
+              </div>
+              {recoveredFiles.length > 1 ? (
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() => void downloadAllZip()}
+                >
+                  <span aria-hidden="true">⬇</span>
+                  {t("scan.saveAll")}
+                </button>
+              ) : null}
+              <button className="link-action" type="button" onClick={() => void startCamera()}>
+                {t("scan.scanAnother")}
+              </button>
+            </>
           ) : (
             <button
               className="primary-action"
               type="button"
-              disabled={state === "starting" || state === "password"}
+              disabled={state === "starting" || state === "password" || state === "signature-review"}
               onClick={
                 active
                   ? () => {
                       stopCamera();
                       setState("idle");
-                      setGuidance("أوقفت الكاميرا. أعد تشغيلها عند الجاهزية.");
+                      setGuidance(t("scan.guide.cameraStopped"));
                     }
-                  : startCamera
+                  : () => void startCamera("qr")
               }
             >
               <span aria-hidden="true">{active ? "■" : "◎"}</span>
               {state === "starting"
-                ? "جارٍ التحميل…"
+                ? t("scan.loadingBtn")
                 : active
-                  ? "إيقاف الكاميرا"
-                  : "تشغيل الكاميرا"}
+                  ? t("scan.stop")
+                  : t("scan.start")}
             </button>
           )}
-
-          {complete ? (
-            <button className="link-action" type="button" onClick={startCamera}>
-              مسح نقل آخر
-            </button>
-          ) : null}
         </div>
       </section>
 
       <section className="scan-tips">
-        <div><span>1</span><p>يتطلب Turbo 60 اختيار «مسار مزدوج» في القارئ ووضعاً أفقياً يُظهر الكودَين كاملين.</p></div>
-        <div><span>2</span><p>يتغير مسار واحد فقط لكل تحديث، فيبقى الآخر نظيفاً أثناء انتقالات الستارة الدوّارة.</p></div>
-        <div><span>3</span><p>إن لم يُقفل أي مسار، استخدم ملء الشاشة، واقترب أكثر، أو عد إلى Turbo 30 أحادي المسار.</p></div>
+        <div><span>1</span><p>{t("scan.tip1")}</p></div>
+        <div><span>2</span><p>{t("scan.tip2")}</p></div>
+        <div><span>3</span><p>{t("scan.tip3")}</p></div>
       </section>
     </main>
   );
