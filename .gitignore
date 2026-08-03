@@ -51,3 +51,6 @@ next-env.d.ts
 # مخرجات اختبارات Playwright المؤقتة
 /test-results/
 /playwright-report/
+
+# خوادم فرعية: الاعتماديات لا تُتتبع (يُثبّتها المستخدم عند الحاجة)
+/server/node_modules/
