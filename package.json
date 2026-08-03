@@ -1,6 +1,6 @@
 {
   "name": "qrferry",
-  "version": "1.2.0",
+  "version": "1.2.3",
   "private": true,
   "license": "MIT",
   "description": "انقل ملفاً بين جهازين عبر بثّ أكواد QR متحرك — دون شبكة ودون خوادم.",
@@ -20,7 +20,8 @@
     "db:generate": "drizzle-kit generate",
     "deploy": "npm run build && npx wrangler deploy --config wrangler.jsonc",
     "build:vercel": "next build --webpack",
-    "start:vercel": "next start"
+    "start:vercel": "next start",
+    "test:e2e:large": "playwright test e2e/repro-61mb.spec.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",

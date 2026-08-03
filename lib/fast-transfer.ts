@@ -81,8 +81,49 @@ export function decodePairing(payload: string): PairingInfo | null {
   return { peerId, passcode };
 }
 
-/** حجم الشريحة: 256KB — توازن بين السرعة واستهلاك الذاكرة. */
+/**
+ * حجم الشريحة: 256KB — الأداء المثبت تجريبياً (61MB خلال 18 ثانية).
+ * (تجربة 64KB أظهرت تباطؤاً كارثياً — لا نستخدمها؛ حد رسالة DataChannel
+ * في المتصفحات الحديثة يستوعب 256KB. تُعالج الأجهزة القديمة عبر مرونة
+ * المرسل لاحقاً إن دعت الحاجة.)
+ */
 export const CHUNK_SIZE = 256 * 1024;
+
+/** نبضة تقدم من المستقبِل كل هذا المقدار (~2MB) لإثبات أن الاتصال حي. */
+const PROGRESS_PULSE_BYTES = 2 * 1024 * 1024;
+
+/** مهلة الخمول: إذا لم يصل أي نشاط من المستقبِل خلالها، يُعتبر النقل فاشلاً. */
+export const IDLE_TIMEOUT_MS = 45_000;
+
+/**
+ * حارس مهلة الخمول: يُعيد ضبطه بأي نشاط (ping) ولا يُطلق النداء إلا عند
+ * انتهاء الخمول الحقيقي. بديل معياري للمهل الثابتة المرتبطة بالحجم —
+ * النقل الكبير يستمر طالما هناك تقدم فعلي.
+ */
+export function createIdleGuard(
+  onIdle: () => void,
+  idleTimeoutMs: number = IDLE_TIMEOUT_MS,
+  checkIntervalMs = 1000,
+): { ping: () => void; stop: () => void } {
+  let lastActivity = Date.now();
+  let settled = false;
+  const timer = globalThis.setInterval(() => {
+    if (!settled && Date.now() - lastActivity > idleTimeoutMs) {
+      settled = true;
+      globalThis.clearInterval(timer);
+      onIdle();
+    }
+  }, checkIntervalMs);
+  return {
+    ping: () => {
+      lastActivity = Date.now();
+    },
+    stop: () => {
+      settled = true;
+      globalThis.clearInterval(timer);
+    },
+  };
+}
 
 export type IncomingTransferFile = {
   name: string;
@@ -181,6 +222,7 @@ export class FastReceiver {
     let buffer: Uint8Array | null = null;
     let received = 0;
     let total = 0;
+    let lastProgressSent = 0;
     let header: { passcode: string; name: string; mime: string; size: number } | null = null;
 
     connection.on("data", (data) => {
@@ -249,6 +291,15 @@ export class FastReceiver {
       buffer.set(chunk.subarray(0, length), received);
       received += length;
       this.onProgress(received, total);
+      // نبضة تقدم دورية: تثبت للمرسل أن الاستقبال يتقدم والاتصال حي
+      if (received - lastProgressSent >= PROGRESS_PULSE_BYTES) {
+        lastProgressSent = received;
+        try {
+          connection.send(`${PROGRESS_PREFIX}${received}`);
+        } catch {
+          // تجاهل فشل النبضة — لا يوقف الاستقبال
+        }
+      }
     });
   }
 
@@ -349,34 +400,82 @@ export async function sendFileFast(options: FastSenderOptions): Promise<void> {
       connection.on("close", () => reject(new Error("أُغلق الاتصال قبل القبول.")));
     });
 
-    // إرسال الشرائح
+    // إرسال الشرائح مع مراقبة خمول موحّدة عبر حارس خمول:
+    // - أي نشاط (نبضة تقدم/ack/أي رسالة) من المستقبِل يعيد ضبط الحارس (ping).
+    // - لا مهلة ثابتة مرتبطة بحجم الملف — النقل يستمر ما دام هناك تقدم فعلي.
+    // - عند الخمول الحقيقي (انقطاع الشبكة) يُفشل بخطأ دقيق بعد IDLE_TIMEOUT_MS.
     const bytes = options.file.bytes;
     const total = bytes.length;
+    let settled = false;
+    let resolveTransfer: () => void = () => undefined;
+    let rejectTransfer: (error: Error) => void = () => undefined;
+
+    // Promise واحد يغطي كامل مراحل الإرسال والتحقق
+    const completion = new Promise<void>((resolve, reject) => {
+      resolveTransfer = resolve;
+      rejectTransfer = reject;
+    });
+
+    // مرجع لدالة الحسم يُملأ لاحقاً (يستخدمه حارس الخمول عبر closure)
+    // eslint-disable-next-line prefer-const
+    let finishRef: ((message?: string) => void) | undefined;
+
+    // حارس الخمول: يُطلق النداء فقط عند انقطاع فعلي بلا أي نشاط
+    const idleGuard = createIdleGuard(() => {
+      finishRef?.(
+        `انقطع الاتصال بالمستقبِل بعد إرسال ${total.toLocaleString()} بايت (لا توجد استجابة). أعد المحاولة.`,
+      );
+    });
+
+    const finish = (message?: string) => {
+      if (settled) return;
+      settled = true;
+      idleGuard.stop();
+      if (message) rejectTransfer(new Error(message));
+      else resolveTransfer();
+    };
+    finishRef = finish;
+
+    // معالج عام لأي رسالة واردة من المستقبِل (يعمل بالتوازي مع حلقة الإرسال)
+    const onData = (data: unknown) => {
+      if (settled) return;
+      idleGuard.ping();
+      if (data === "ack") {
+        finish();
+      } else if (data === "nack") {
+        finish("فشل التحقق من الملف لدى المستقبِل. أعد المحاولة.");
+      }
+      // نبضات التقدم وغيرها: تُحدّث النشاط فقط
+    };
+    connection.on("data", onData);
+    const onClose = () => {
+      finish(
+        `أُغلق الاتصال بالمستقبِل بعد إرسال ${total.toLocaleString()} بايت. أعد المحاولة.`,
+      );
+    };
+    connection.on("close", onClose);
+
     onStatus("جارٍ الإرسال…");
     for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
+      if (settled) break;
       const chunk = bytes.subarray(offset, Math.min(offset + CHUNK_SIZE, total));
       // PeerJS يطبق ضغطاً خلفياً داخلياً (bufferedAmount) — send يتوقف حتى يتاح المخزن
       await connection.send(chunk as unknown as ArrayBuffer);
+      if (settled) break;
       options.onProgress?.({ sent: Math.min(offset + chunk.length, total), total });
     }
 
-    // إعلان الاكتمال والتحقق
-    connection.send(`${DONE_PREFIX}${crc32(bytes)}`);
-    await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(
-        () => reject(new Error("لم يتأكد المستقبِل من استلام الملف.")),
-        20_000,
-      );
-      connection.on("data", (data) => {
-        if (data === "ack") {
-          window.clearTimeout(timer);
-          resolve();
-        } else if (data === "nack") {
-          window.clearTimeout(timer);
-          reject(new Error("فشل التحقق من الملف لدى المستقبِل. أعد المحاولة."));
-        }
-      });
-    });
+    // إعلان الاكتمال والتحقق (بعد اكتمال الحلقة دون حسم مسبق)
+    if (!settled) {
+      try {
+        connection.send(`${DONE_PREFIX}${crc32(bytes)}`);
+      } catch {
+        finish("فشل إرسال رسالة الاكتمال إلى المستقبِل.");
+      }
+    }
+
+    // ننتظر ack (أو حارس الخمول/close) — لا مهلة ثابتة
+    await completion;
 
     onStatus("اكتمل الإرسال.");
   } finally {

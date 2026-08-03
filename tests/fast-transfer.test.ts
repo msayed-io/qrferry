@@ -64,3 +64,39 @@ test("peer server config respects saved overrides when localStorage exists", () 
     (globalThis as { localStorage?: unknown }).localStorage = original;
   }
 });
+
+test("idle guard: continuous activity prevents firing regardless of duration", async () => {
+  const { createIdleGuard } = await import("../lib/fast-transfer");
+  let fired = false;
+  const guard = createIdleGuard(() => { fired = true; }, 80, 20);
+  try {
+    // نشاط مستمر كل 20ms لمدة ~500ms (أطول بكثير من مهلة 80ms)
+    const started = Date.now();
+    while (Date.now() - started < 500) {
+      guard.ping();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  } finally {
+    guard.stop();
+  }
+  assert.equal(fired, false, "النشاط المستمر يجب أن يمنع إطلاق الحارس مهما طال");
+});
+
+test("idle guard: real inactivity fires after the timeout", async () => {
+  const { createIdleGuard } = await import("../lib/fast-transfer");
+  let fired = false;
+  const guard = createIdleGuard(() => { fired = true; }, 80, 20);
+  // خمول حقيقي: لا ping لمدة 120ms > مهلة 80ms
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(fired, true, "الخمول الحقيقي يجب أن يُطلق الحارس");
+  guard.stop();
+});
+
+test("idle guard: stop prevents firing afterwards", async () => {
+  const { createIdleGuard } = await import("../lib/fast-transfer");
+  let fired = false;
+  const guard = createIdleGuard(() => { fired = true; }, 60, 20);
+  guard.stop();
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(fired, false, "إيقاف الحارس يجب أن يمنع الإطلاق");
+});
