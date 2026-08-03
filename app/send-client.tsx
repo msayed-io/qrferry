@@ -151,6 +151,9 @@ export function SendClient() {
   const [fastState, setFastState] = useState<"idle" | "scanning" | "connecting" | "transferring" | "done" | "error">("idle");
   const [fastStatus, setFastStatus] = useState("");
   const [fastUrlCopied, setFastUrlCopied] = useState(false);
+  const [fastCameraInfo, setFastCameraInfo] = useState("");
+  const fastFacingRef = useRef<"environment" | "user">("environment");
+  const fastFramesSinceRobustRef = useRef(0);
   const [fastProgress, setFastProgress] = useState<TransferProgress | null>(null);
   const fastVideoRef = useRef<HTMLVideoElement>(null);
   const fastCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -648,40 +651,79 @@ export function SendClient() {
     [buildPackageForFast, fileData, signEnabled, burnEnabled, t],
   );
 
-  const startFastScan = useCallback(async () => {
-    setFastState("scanning");
-    setFastStatus(t("send.fastScanning"));
+  /** يطلب الكاميرا بدقة عالية، مع احتياط لدقة أقل عند الفشل. */
+  const requestCamera = useCallback(async (facing: "environment" | "user"): Promise<MediaStream> => {
     try {
-      // ننتظر ربط React للفيديو داخل النافذة قبل طلب الكاميرا
-      // (يتجنب سباقاً حيث يكون المرجع فارغاً فيُوقف التتبع فوراً)
-      await new Promise((resolve) => window.setTimeout(resolve, 60));
-      const stream = await navigator.mediaDevices.getUserMedia({
+      return await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 },
+          frameRate: { ideal: 30 },
+        },
       });
-      fastStreamRef.current = stream;
+    } catch {
+      // احتياط: أي كاميرا متاحة (قد تكون دقة أقل لكنها تعمل)
+      return navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: facing } },
+      });
+    }
+  }, []);
+
+  /** يفعّل التركيز التلقائي المستمر (مهم جداً عند تصوير شاشة — يزيل الضبابية). */
+  const enableContinuousFocus = useCallback(async (stream: MediaStream) => {
+    try {
+      const track = stream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
+        focusMode?: string[];
+      };
+      if (capabilities?.focusMode?.includes("continuous")) {
+        await track
+          .applyConstraints({
+            advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+          })
+          .catch(() => undefined);
+      }
+    } catch {
+      // التركيز اختياري
+    }
+  }, []);
+
+  /** يبدأ حلقة المسح على تدفق كاميرا معطى (تُستخدم للبدء والتبديل معاً). */
+  const beginFastLoop = useCallback(
+    async (stream: MediaStream) => {
       const video = fastVideoRef.current;
       const canvas = fastCanvasRef.current;
       if (!video || !canvas) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
+      fastStreamRef.current = stream;
       video.srcObject = stream;
       await video.play();
       fastScanActiveRef.current = true;
+
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      setFastCameraInfo(
+        settings.width && settings.height
+          ? `${settings.width}×${settings.height}`
+          : "",
+      );
+
       const SCAN_SIZE = 640;
       const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
 
-      /** يعيد التقاط تدفق الكاميرا إذا انتهى تتبعه (مرونة في بيئات حقيقية ومحاكاة). */
+      /** يعيد التقاط التدفق إن انتهى تتبعه (مرونة في كل البيئات). */
       const ensureLiveStream = async (): Promise<boolean> => {
-        const current = video.srcObject as MediaStream | null;
-        const track = current?.getVideoTracks?.()[0];
-        if (track && track.readyState !== "ended") return true;
+        const current = fastStreamRef.current;
+        const currentTrack = current?.getVideoTracks?.()[0];
+        if (currentTrack && currentTrack.readyState !== "ended") return true;
         try {
-          const fresh = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          });
+          const fresh = await requestCamera(fastFacingRef.current);
           fastStreamRef.current = fresh;
           video.srcObject = fresh;
           await video.play();
@@ -693,52 +735,83 @@ export function SendClient() {
 
       const loop = async () => {
         if (!fastScanActiveRef.current) return;
-        if (!video || !canvas || !context) return;
-        if (!(await ensureLiveStream())) {
-          fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
-          return;
-        }
-        if (video.readyState < 2 || video.videoWidth === 0) {
-          fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
-          return;
-        }
-        const side = Math.min(video.videoWidth, video.videoHeight);
-        const offsetX = Math.floor((video.videoWidth - side) / 2);
-        const offsetY = Math.floor((video.videoHeight - side) / 2);
-        canvas.width = SCAN_SIZE;
-        canvas.height = SCAN_SIZE;
-        context.imageSmoothingEnabled = false;
-        context.drawImage(video, offsetX, offsetY, side, side, 0, 0, SCAN_SIZE, SCAN_SIZE);
-        const image = context.getImageData(0, 0, SCAN_SIZE, SCAN_SIZE);
-        const { scanRawQr } = await import("@/lib/qr-scanner");
-        // QR الاقتران ثابت — نستخدم tryHarder لموثوقية أعلى
-        const decoded = await scanRawQr(image, true);
-        if (decoded) {
-          const text = new TextDecoder().decode(decoded);
-          const pairing = decodePairing(text);
-          if (pairing) {
-            stopFastScanning();
-            await beginFastTransfer(pairing);
-            return;
+        try {
+          if (video.readyState < 2 || video.videoWidth === 0) return;
+          if (!(await ensureLiveStream())) return;
+          const side = Math.min(video.videoWidth, video.videoHeight);
+          const offsetX = Math.floor((video.videoWidth - side) / 2);
+          const offsetY = Math.floor((video.videoHeight - side) / 2);
+          canvas.width = SCAN_SIZE;
+          canvas.height = SCAN_SIZE;
+          context.imageSmoothingEnabled = false;
+          context.drawImage(video, offsetX, offsetY, side, side, 0, 0, SCAN_SIZE, SCAN_SIZE);
+          const image = context.getImageData(0, 0, SCAN_SIZE, SCAN_SIZE);
+          const { scanRawQr } = await import("@/lib/qr-scanner");
+          // تكيّف: معظم المحاولات سريعة (بدون tryHarder)؛ وكل 6 محاولات tryHarder
+          fastFramesSinceRobustRef.current += 1;
+          const robust = fastFramesSinceRobustRef.current % 6 === 5;
+          const decoded = await scanRawQr(image, robust);
+          if (decoded) {
+            const text = new TextDecoder().decode(decoded);
+            const pairing = decodePairing(text);
+            if (pairing) {
+              stopFastScanning();
+              await beginFastTransfer(pairing);
+              return;
+            }
+          }
+        } catch {
+          // أي خطأ غير متوقع: نتجاهله ونواصل — الحلقة لا تموت أبداً
+        } finally {
+          if (fastScanActiveRef.current) {
+            fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
           }
         }
-        if (fastScanActiveRef.current) {
-          fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
-        }
       };
 
-      const safeLoop = () => {
-        void loop().catch(() => {
-          // نتجاهل أخطاء المسح غير المتوقعة — الحلقة تظل تعمل
-        });
-      };
+      fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
+    },
+    [beginFastTransfer, requestCamera, stopFastScanning],
+  );
 
-      fastScanLoopRef.current = window.requestAnimationFrame(safeLoop);
+  const startFastScan = useCallback(async () => {
+    setFastState("scanning");
+    setFastStatus(t("send.fastScanning"));
+    try {
+      // ننتظر ربط React للفيديو داخل النافذة قبل طلب الكاميرا
+      await new Promise((resolve) => window.setTimeout(resolve, 60));
+      const stream = await requestCamera(fastFacingRef.current);
+      await enableContinuousFocus(stream);
+      await beginFastLoop(stream);
     } catch {
       setFastState("error");
       setFastStatus(t("send.fastError", { msg: t("scan.error.cameraStart") }));
     }
-  }, [beginFastTransfer, stopFastScanning, t]);
+  }, [beginFastLoop, enableContinuousFocus, requestCamera, t]);
+
+  /** تبديل الكاميرا الأمامية/الخلفية أثناء المسح. */
+  const switchFastCamera = useCallback(() => {
+    const next = fastFacingRef.current === "environment" ? "user" : "environment";
+    fastFacingRef.current = next;
+    setFastStatus(t("send.fastScanning"));
+    void (async () => {
+      fastScanActiveRef.current = false;
+      if (fastScanLoopRef.current) {
+        window.cancelAnimationFrame(fastScanLoopRef.current);
+        fastScanLoopRef.current = 0;
+      }
+      fastStreamRef.current?.getTracks().forEach((track) => track.stop());
+      fastStreamRef.current = null;
+      try {
+        const stream = await requestCamera(next);
+        await enableContinuousFocus(stream);
+        await beginFastLoop(stream);
+      } catch {
+        setFastState("error");
+        setFastStatus(t("send.fastError", { msg: t("scan.error.cameraStart") }));
+      }
+    })();
+  }, [beginFastLoop, enableContinuousFocus, requestCamera, t]);
 
   const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -1556,7 +1629,14 @@ export function SendClient() {
             ) : fastState === "scanning" ? (
               <>
                 <p className="fast-status">{fastStatus}</p>
+                {fastCameraInfo ? (
+                  <p className="fast-camera-info">📷 {t("send.fastRes", { info: fastCameraInfo })}</p>
+                ) : null}
+                <p className="fast-hint">{t("send.fastHintKeepQr")}</p>
                 <div className="fast-actions">
+                  <button type="button" className="fast-switch-cam" onClick={switchFastCamera}>
+                    🔄 {t("send.fastSwitchCamera")}
+                  </button>
                   <button type="button" className="modal-close" onClick={stopFastScanning}>
                     {t("send.fastStop")}
                   </button>

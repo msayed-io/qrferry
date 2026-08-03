@@ -2505,11 +2505,12 @@ input:focus-visible {
 }
 
 .tv-qr-box canvas {
-  width: min(380px, 100%);
+  width: min(500px, 100%);
   aspect-ratio: 1;
   border-radius: 14px;
   background: white;
-  padding: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
 }
 
 .tv-qr-box h2 {
@@ -2787,4 +2788,37 @@ input:focus-visible {
 
 .fast-url-copy:hover {
   background: rgba(47, 109, 255, 0.08);
+}
+
+/* تحسينات كاميرا النقل السريع (v1.2.1) */
+.fast-video {
+  max-height: 320px;
+  object-fit: contain;
+  background: #000;
+}
+
+.fast-camera-info {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  direction: ltr;
+  text-align: center;
+  font-family: var(--font-geist-mono), monospace;
+}
+
+.fast-switch-cam {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink);
+  background: white;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.fast-switch-cam:hover {
+  border-color: var(--ink);
 }
