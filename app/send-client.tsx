@@ -62,8 +62,9 @@ import {
 type PreparedFileItem = {
   file: File;
   original: Uint8Array;
-  compressedBytes: Uint8Array;
-  compressedMode: "none" | "gzip" | "brotli";
+  /** حقلان كسولان: يُملآن عند أول تجهيز للبث البصري (ضغط مكلف). */
+  compressedBytes?: Uint8Array;
+  compressedMode?: "none" | "gzip" | "brotli";
 };
 
 type PreparedFiles = {
@@ -74,6 +75,9 @@ type BuiltOptical = {
   optical: PreparedOpticalFile;
   isPackage: boolean;
 };
+
+/** إذا كان مجموع الملفات أقل من هذا الحد، يُجهَّز البث البصري تلقائياً عند الاختيار. */
+const FAST_PREPARE_THRESHOLD = 1.5 * 1024 * 1024; // 1.5 MB
 
 function evenlyInterleave(source: number[], repair: number[]) {
   if (source.length === 0) return [...repair];
@@ -280,8 +284,13 @@ export function SendClient() {
         !signEnabled &&
         !burnEnabled
       ) {
-        // المسار الكلاسيكي: ملف واحد بلا توقيع/حذف
+        // المسار الكلاسيكي: ملف واحد بلا توقيع/حذف — بضغط كسول (يُضغط عند الطلب فقط)
         const item = prepared.items[0];
+        if (!item.compressedBytes || !item.compressedMode) {
+          const compressed = await compressForTransferViaWorker(item.original);
+          item.compressedBytes = compressed.bytes;
+          item.compressedMode = compressed.mode;
+        }
         const transmitted = activePassword
           ? await encryptPayload(item.compressedBytes, activePassword)
           : item.compressedBytes;
@@ -385,20 +394,22 @@ export function SendClient() {
       }
       setProcessing(true);
       try {
+        // قراءة خام سريعة فقط — لا ضغط ولا ترميز هنا (تُؤجل عند الحاجة)
         const items: PreparedFileItem[] = [];
         for (const file of files) {
           const original = new Uint8Array(await file.arrayBuffer());
-          const compressed = await compressForTransferViaWorker(original);
-          items.push({
-            file,
-            original,
-            compressedBytes: compressed.bytes,
-            compressedMode: compressed.mode,
-          });
+          items.push({ file, original });
         }
         const prepared: PreparedFiles = { items };
         setFileData(prepared);
-        await encodePrepared(prepared, presetKey);
+        setProcessing(false);
+        // للملفات الصغيرة: جهّز البث البصري تلقائياً كالمعتاد (تجربة سلسة).
+        // للملفات الكبيرة: نتوقف — المستخدم يختار «نقل سريع» فوراً أو
+        // يضغط «ابدأ بث QR» فيُجهَّز عند الطلب.
+        const total = items.reduce((sum, item) => sum + item.original.length, 0);
+        if (total <= FAST_PREPARE_THRESHOLD) {
+          await encodePrepared(prepared, presetKey);
+        }
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : t("send.error.prepare"));
         setProcessing(false);
@@ -427,31 +438,32 @@ export function SendClient() {
     setPresetKey(nextKey);
     setPlaying(false);
     setActualFps(0);
-    if (fileData) void encodePrepared(fileData, nextKey);
+    // نُعيد التجهيز فقط إن كان البث البصري جاهزاً (أو الملفات صغيرة)
+    if (transfer && fileData) void encodePrepared(fileData, nextKey);
   };
 
   const changeEncryption = (nextEnabled: boolean) => {
     setEncryptEnabled(nextEnabled);
-    if (fileData && !nextEnabled) {
+    if (transfer && fileData && !nextEnabled) {
       void buildOptical(fileData).then(() => encodePrepared(fileData, presetKey));
     }
   };
 
   const changePassword = (nextPassword: string) => {
     setPassword(nextPassword);
-    if (fileData && encryptEnabled) {
+    if (transfer && fileData && encryptEnabled) {
       void encodePrepared(fileData, presetKey);
     }
   };
 
   const toggleBurn = (next: boolean) => {
     setBurnEnabled(next);
-    if (fileData && next !== burnEnabled) void encodePrepared(fileData, presetKey);
+    if (transfer && fileData && next !== burnEnabled) void encodePrepared(fileData, presetKey);
   };
 
   const toggleSign = (next: boolean) => {
     setSignEnabled(next);
-    if (fileData && next !== signEnabled) void encodePrepared(fileData, presetKey);
+    if (transfer && fileData && next !== signEnabled) void encodePrepared(fileData, presetKey);
   };
 
   const renderPacket = useCallback(
@@ -1116,7 +1128,7 @@ export function SendClient() {
                   <span className="fname">{item.file.name}</span>
                   <span className="fmeta">
                     {formatBytes(item.file.size)}
-                    {item.compressedMode !== "none"
+                    {item.compressedBytes && item.compressedMode !== "none"
                       ? ` → ${formatBytes(item.compressedBytes.length)} · ${item.compressedMode}`
                       : ""}
                   </span>
@@ -1495,20 +1507,40 @@ export function SendClient() {
           <button
             className="primary-action"
             type="button"
-            disabled={!transfer || processing || passwordTooShort}
+            disabled={!fileData || processing || passwordTooShort}
             onClick={() => {
+              if (!transfer) {
+                // الملف كبير ولم يُجهَّز بعد — نجهّز البث البصري عند الطلب
+                if (fileData) void encodePrepared(fileData, presetKey);
+                return;
+              }
               if (!playing) setActualFps(0);
               setPlaying((current) => !current);
             }}
           >
-            <span aria-hidden="true">{playing ? "Ⅱ" : "▶"}</span>
-            {playing ? t("send.pause") : t("send.start")}
+            <span aria-hidden="true">
+              {playing ? "Ⅱ" : transfer ? "▶" : processing ? "…" : "▶"}
+            </span>
+            {playing
+              ? t("send.pause")
+              : transfer
+                ? t("send.start")
+                : processing
+                  ? t("send.preparing")
+                  : t("send.start")}
           </button>
+
+          {/* توصية النقل السريع للملفات الكبيرة (لم يُجهَّز البث تلقائياً) */}
+          {fileData && !transfer && !processing ? (
+            <p className="fast-recommend" role="status">
+              ⚡ {t("send.fastRecommend")}
+            </p>
+          ) : null}
 
           <button
             className="fast-action"
             type="button"
-            disabled={!fileData || processing}
+            disabled={!fileData}
             onClick={() => {
               setFastOpen(true);
               setFastState("idle");

@@ -2822,3 +2822,15 @@ input:focus-visible {
 .fast-switch-cam:hover {
   border-color: var(--ink);
 }
+
+/* توصية النقل السريع للملفات الكبيرة */
+.fast-recommend {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px dashed #2f6dff;
+  border-radius: 6px;
+  color: #1c47a8;
+  background: rgba(47, 109, 255, 0.06);
+  font-size: 11px;
+  line-height: 1.55;
+}
