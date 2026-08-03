@@ -2641,3 +2641,111 @@ input:focus-visible {
     gap: 30px;
   }
 }
+
+/* ===== وضع التلفزيون: إعدادات/توافق (v1.2c) ===== */
+.tv-settings {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding-bottom: 10px;
+}
+
+.tv-compat {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tv-compat summary {
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  color: #c7cdd3;
+}
+
+.tv-compat summary:focus-visible {
+  outline: 3px solid #9db4ff;
+}
+
+.tv-compat-ok {
+  color: #7ee2a0;
+  font-weight: 700;
+  margin: 10px 0 4px;
+}
+
+.tv-compat-bad {
+  color: #ffb4a8;
+  font-weight: 700;
+  margin: 10px 0 4px;
+}
+
+.tv-compat-detail {
+  color: #9aa5af;
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.tv-compat-list {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+  color: #c7cdd3;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.tv-signal-host {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.tv-signal-host label {
+  color: #c7cdd3;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tv-signal-input {
+  min-height: 46px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+  font-size: 15px;
+  direction: ltr;
+  font-family: var(--font-geist-mono), monospace;
+}
+
+.tv-signal-input:focus-visible {
+  outline: 3px solid #9db4ff;
+  outline-offset: 2px;
+}
+
+.tv-signal-apply {
+  min-height: 46px;
+  padding: 0 20px;
+  font-size: 14px;
+}
+
+.tv-signal-applied {
+  grid-column: 1 / -1;
+  color: #7ee2a0;
+  font-size: 13px;
+}
+
+.tv-nav-hint {
+  color: #7c8791;
+  font-size: 12px;
+  margin: 0;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .tv-signal-host {
+    grid-template-columns: 1fr;
+  }
+}

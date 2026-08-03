@@ -108,16 +108,39 @@ export async function buildOfflinePackage(): Promise<{
     }
   }
 
+  // خادم التسيير المدمج (نقل سريع داخل الشبكة المعزولة)
+  try {
+    const serverSrc = await (await fetch("/offline-server.mjs")).text();
+    files["server/offline-server.mjs"] = strToU8(serverSrc);
+    files["server/package.json"] = strToU8(
+      JSON.stringify(
+        {
+          name: "qrferry-offline-server",
+          private: true,
+          type: "module",
+          dependencies: { express: "^4.19.2", peer: "^1.0.2" },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+  } catch {
+    // الخادم غير متاح (بيئة تطوير) — نتجاهل
+  }
+
   // README صغير للاستخدام
   files["READ-ME.txt"] = strToU8(
     "QRFerry — حزمة النشر الأوفلاين\n" +
       "============================\n" +
-      "1) انسخ هذا المجلد إلى الجهاز داخل الشبكة المعزولة.\n" +
-      "2) شغّل أي خادم ويب بسيط من داخل المجلد، مثل:\n" +
-      "   python3 -m http.server 8080\n" +
-      "3) افتح http://localhost:8080 على الجهاز المستضيف.\n" +
-      "4) ملاحظة: الكاميرا تحتاج HTTPS أو localhost لتعمل.\n" +
-      "5) على أجهزة الاستقبال افتح نفس العنوان ثم /scan.\n",
+      "الطريقة 1 (سريعة — نقل محلي WebRTC):\n" +
+      "  cd server && npm install && node offline-server.mjs 9000 ..\n" +
+      "  افتح http://localhost:9000 على التلفزيون/الجهاز المستضيف،\n" +
+      "  وحدد خادم التسيير: ws://<عنوان-هذا-الجهاز>:9000/peerjs\n" +
+      "  على شاشة /tv (قسم «خادم التسيير المخصص»).\n" +
+      "الطريقة 2 (بصرية QR فقط — بدون شبكة محلية):\n" +
+      "  شغّل أي خادم ويب بسيط من داخل المجلد، مثل:\n" +
+      "  python3 -m http.server 8080 ثم افتح http://localhost:8080\n" +
+      "ملاحظة: الكاميرا تحتاج HTTPS أو localhost لتعمل.\n",
   );
 
   const zipData = zipSync(files, { level: 6 });

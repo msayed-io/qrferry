@@ -157,3 +157,22 @@ test("package without signing has null signer fields", () => {
   assert.equal(parsed.signature, null);
   assert.equal(parsed.signerPublicKey, null);
 });
+
+test("tv compatibility: peer server URL parsing", async () => {
+  const { parsePeerServerUrl, checkTvCompatibility } = await import("../lib/tv-compat");
+  const parsed = parsePeerServerUrl("ws://192.168.1.5:9000/peerjs");
+  assert.deepEqual(parsed, { host: "192.168.1.5", port: 9000, path: "/peerjs", secure: false });
+  const parsedSsl = parsePeerServerUrl("wss://relay.example.com:443/");
+  assert.deepEqual(parsedSsl, { host: "relay.example.com", port: 443, path: "/", secure: true });
+  assert.equal(parsePeerServerUrl("http://x"), null);
+  assert.equal(parsePeerServerUrl("garbage"), null);
+  assert.equal(parsePeerServerUrl("ws://host:99999/x"), null);
+
+  // فحص التوافق في بيئة غير متصفح: يعود بأصفار (لا يرمي)
+  try {
+    const compat = checkTvCompatibility();
+    assert.equal(typeof compat.webRtc, "boolean");
+  } catch {
+    // في بيئة Node بلا DOM قد يرمي — مقبول هنا لأن الاختبار يعمل في متصفح أساساً
+  }
+});

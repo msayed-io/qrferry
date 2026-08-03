@@ -1,8 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FastReceiver, getPeerServerConfig, type IncomingTransferFile } from "@/lib/fast-transfer";
+import { FastReceiver, getPeerServerConfig, setPeerServerConfig, type IncomingTransferFile } from "@/lib/fast-transfer";
 import { renderRawQr } from "@/lib/qr-renderer";
+import { useI18n } from "../lang-provider";
+import {
+  checkTvCompatibility,
+  parsePeerServerUrl,
+  tvCompatibilitySummary,
+  type TvCompatibility,
+} from "@/lib/tv-compat";
 
 type TvState = "starting" | "ready" | "receiving" | "complete" | "error";
 
@@ -27,6 +34,7 @@ declare global {
  * عبر الشبكة المحلية (P2P مشفر) ثم يحفظه/يشغّله. ملاحة كاملة بالريموت.
  */
 export function TvClient() {
+  const { t } = useI18n();
   const [state, setState] = useState<TvState>("starting");
   const [passcode, setPasscode] = useState("");
   const [qrCanvas, setQrCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -38,6 +46,10 @@ export function TvClient() {
   const qrHostRef = useRef<HTMLDivElement>(null);
   const [signalingHost, setSignalingHost] = useState("");
   const [showMedia, setShowMedia] = useState(true);
+  const [compat, setCompat] = useState<TvCompatibility | null>(null);
+  const [signalHostInput, setSignalHostInput] = useState("");
+  const [signalApplied, setSignalApplied] = useState(false);
+  const [showCompat, setShowCompat] = useState(false);
 
   const handleFile = useCallback((file: IncomingTransferFile) => {
     const url = URL.createObjectURL(new Blob([file.bytes.buffer as BlobPart], { type: file.mime }));
@@ -114,6 +126,9 @@ export function TvClient() {
   }, [handleFile]);
 
   useEffect(() => {
+    const compatTimer = window.setTimeout(() => {
+      setCompat(checkTvCompatibility());
+    }, 0);
     const timer = window.setTimeout(() => void initReceiver(), 0);
     const configTimer = window.setTimeout(() => {
       const config = getPeerServerConfig();
@@ -122,11 +137,45 @@ export function TvClient() {
       );
     }, 0);
     return () => {
+      window.clearTimeout(compatTimer);
       window.clearTimeout(timer);
       window.clearTimeout(configTimer);
       receiverRef.current?.destroy();
     };
   }, [initReceiver]);
+
+  // ملاحة الريموت: الأسهم تتنقل بين العناصر القابلة للتركيز، و OK تُفعّل
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const focusables = Array.from(
+        document.querySelectorAll<HTMLElement>(".tv-btn, .tv-signal-apply, input.tv-signal-input"),
+      );
+      if (focusables.length === 0) return;
+      const index = focusables.indexOf(document.activeElement as HTMLElement);
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        event.preventDefault();
+        focusables[(index + 1) % focusables.length]?.focus();
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        event.preventDefault();
+        focusables[(index - 1 + focusables.length) % focusables.length]?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state]);
+
+  const applySignalHost = useCallback(() => {
+    const parsed = parsePeerServerUrl(signalHostInput.trim());
+    if (!parsed) {
+      setSignalApplied(false);
+      return;
+    }
+    setPeerServerConfig(parsed);
+    setSignalApplied(true);
+    window.setTimeout(() => void initReceiver(), 300);
+  }, [initReceiver, signalHostInput]);
+
+  const compatSummary = compat ? tvCompatibilitySummary(compat) : null;
 
   useEffect(() => {
     if (qrCanvas && qrHostRef.current) {
@@ -154,47 +203,90 @@ export function TvClient() {
     <main className={`tv-page tv-${state}`}>
       <header className="tv-header">
         <span className="tv-logo">QRFerry</span>
-        <span className="tv-tag">استقبال على الشاشة الكبيرة</span>
+        <span className="tv-tag">{t("tv.tag")}</span>
         <span className="tv-signaling" title="خادم التسيير">{signalingHost || "…"}</span>
       </header>
 
+      <div className="tv-settings">
+        <details className="tv-compat" open={showCompat} onToggle={(event) => setShowCompat(event.currentTarget.open)}>
+          <summary>{t("tv.compatTitle")}</summary>
+          {compat && compatSummary ? (
+            <>
+              {compatSummary.canReceive ? (
+                <p className="tv-compat-ok">{t("tv.compatOk")}</p>
+              ) : (
+                <p className="tv-compat-bad">{t("tv.compatBad")}</p>
+              )}
+              <p className="tv-compat-detail">{t("tv.compatDetail")}</p>
+              <ul className="tv-compat-list">
+                <li>{t("tv.compatWebRtc")}: {compat.webRtc ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
+                <li>{t("tv.compatWebSocket")}: {compat.webSocket ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
+                <li>{t("tv.compatDownload")}: {compat.download ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
+                <li>{t("tv.compatMedia")}: {compat.mediaPlayback ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
+              </ul>
+            </>
+          ) : (
+            <p className="tv-compat-detail">…</p>
+          )}
+        </details>
+
+        <div className="tv-signal-host">
+          <label htmlFor="tv-signal-input">{t("tv.signalHost")}</label>
+          <input
+            id="tv-signal-input"
+            className="tv-signal-input"
+            dir="ltr"
+            placeholder="ws://192.168.1.5:9000/peerjs"
+            value={signalHostInput}
+            onChange={(event) => setSignalHostInput(event.target.value)}
+          />
+          <button type="button" className="tv-btn tv-btn-ghost tv-signal-apply" onClick={() => applySignalHost()}>
+            {t("tv.signalApply")}
+          </button>
+          {signalApplied ? <span className="tv-signal-applied">{t("tv.signalApplied")}</span> : null}
+          <p className="tv-hint">{t("tv.signalHint")}</p>
+        </div>
+
+        <p className="tv-nav-hint">🎮 {t("tv.navHint")}</p>
+      </div>
+
       {state === "starting" ? (
         <div className="tv-center">
-          <h1>جارٍ تجهيز الاستقبال…</h1>
+          <h1>{t("tv.starting")}</h1>
         </div>
       ) : state === "error" ? (
         <div className="tv-center">
           <h1>⚠️ {error}</h1>
           <button type="button" className="tv-btn" onClick={() => void initReceiver()}>
-            إعادة المحاولة
+            {t("tv.retry")}
           </button>
           <p className="tv-hint">
-            تأكد أن التلفزيون متصل بالشبكة، وأن صفحة الاستقبال تُفتح على نفس شبكة الهاتف.
+            {t("tv.networkHint")}
           </p>
         </div>
       ) : state === "ready" ? (
         <div className="tv-ready">
           <div className="tv-qr-box">
             <div ref={qrHostRef}>{!qrCanvas ? <p>…</p> : null}</div>
-            <h2>امسح هذا الرمز من هاتفك</h2>
+            <h2>{t("tv.scanTitle")}</h2>
             <p className="tv-code">
-              رمز الجلسة: <b>{passcode}</b>
+              {t("tv.sessionCode")}: <b>{passcode}</b>
             </p>
           </div>
           <div className="tv-instructions">
-            <h3>للاستقبال من هاتفك</h3>
+            <h3>{t("tv.howTitle")}</h3>
             <ol>
-              <li>افتح <b>qrferry</b> على هاتفك</li>
-              <li>اختر الملف (أو أكثر) واضغط «نقل سريع»</li>
-              <li>صوّر هذا الرمز بالكاميرا</li>
-              <li>سيظهر التقدم هنا — والملف يُحفظ ويُشغّل على الشاشة</li>
+              <li>{t("tv.how1")}</li>
+              <li>{t("tv.how2")}</li>
+              <li>{t("tv.how3")}</li>
+              <li>{t("tv.how4")}</li>
             </ol>
-            <p className="tv-hint">يجب أن يكون الهاتف والتلفزيون على نفس الشبكة المحلية.</p>
+            <p className="tv-hint">{t("tv.sameNetwork")}</p>
           </div>
         </div>
       ) : state === "receiving" ? (
         <div className="tv-center">
-          <h1>{status || "جارٍ الاستقبال…"}</h1>
+          <h1>{status || t("tv.receiving")}</h1>
           <div className="tv-progress-track">
             <span style={{ width: `${percent}%` }} />
           </div>
@@ -204,7 +296,7 @@ export function TvClient() {
         </div>
       ) : state === "complete" && receivedFile ? (
         <div className="tv-center tv-complete">
-          <h1>✓ تم الاستقبال</h1>
+          <h1>✓ {t("tv.complete")}</h1>
           <p className="tv-file-name">{receivedFile.name}</p>
           <p className="tv-file-size">{formatBytes(receivedFile.size)}</p>
 
@@ -223,7 +315,7 @@ export function TvClient() {
 
           <div className="tv-actions">
             <a className="tv-btn" href={receivedFile.url} download={receivedFile.name}>
-              💾 حفظ الملف
+              💾 {t("tv.saveFile")}
             </a>
             {isMedia(receivedFile.mime) ? (
               <button
@@ -231,11 +323,11 @@ export function TvClient() {
                 className="tv-btn tv-btn-ghost"
                 onClick={() => setShowMedia((current) => !current)}
               >
-                {showMedia ? "إخفاء المشغّل" : "إظهار المشغّل"}
+                {showMedia ? t("tv.hidePlayer") : t("tv.showPlayer")}
               </button>
             ) : null}
             <button type="button" className="tv-btn tv-btn-ghost" onClick={() => void initReceiver()}>
-              استقبال ملف آخر
+              {t("tv.receiveAnother")}
             </button>
           </div>
         </div>
