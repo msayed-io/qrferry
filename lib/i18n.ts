@@ -230,6 +230,11 @@ const ar = {
   "scan.signVerified": "توقيع موثوق: {name}",
   "scan.burnNotice": "وضع الحذف بعد القراءة: سيُمسح الملف بعد أول قراءة/حفظ.",
   "scan.guide.signScan": "وجّه الكاميرا نحو رمز كلمة المرور على شاشة المرسل…",
+  "scan.handsfreeTip": "ثبّت الموبايل على حامل أو استند إليه — سأراقب النقل نيابة عنك ولن تنام الشاشة.",
+  "scan.stableBadge": "وضع مستقر ✓ يمكنك ترك الموبايل",
+  "scan.unstableBadge": "ثبّت الموبايل لتحسين الدقة",
+  "scan.notifyComplete": "اكتمل النقل",
+  "scan.notifyBody": "تم استقبال {name} بنجاح.",
 
   // السجل
   "history.title": "سجل النقل المحلي",
@@ -478,6 +483,11 @@ const en: Record<string, string> = {
   "scan.signVerified": "Trusted signature: {name}",
   "scan.burnNotice": "Burn-after-reading: the file is erased after the first read/save.",
   "scan.guide.signScan": "Point the camera at the password QR on the sender's screen…",
+  "scan.handsfreeTip": "Prop the phone on a stand or lean it — I will watch the transfer for you and the screen will stay awake.",
+  "scan.stableBadge": "Stable ✓ you can let go",
+  "scan.unstableBadge": "Steady the phone for better accuracy",
+  "scan.notifyComplete": "Transfer complete",
+  "scan.notifyBody": "Received {name} successfully.",
 
   "history.title": "Local transfer history",
   "history.empty": "No transfers yet.",

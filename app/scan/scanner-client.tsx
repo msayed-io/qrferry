@@ -37,6 +37,9 @@ import {
   getTrustedKeys,
 } from "@/lib/identity-store";
 import { addHistoryEntry } from "@/lib/history-store";
+import { acquireScreenWakeLock } from "@/lib/wakelock";
+import { notifyTransferComplete } from "@/lib/transfer-notify";
+import { StabilityTracker } from "@/lib/stability";
 
 type ScanState =
   | "idle"
@@ -178,11 +181,22 @@ export function ScannerClient() {
   const [signatureReview, setSignatureReview] = useState<SignatureReview | null>(null);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState("");
+  const [handsFreeTip, setHandsFreeTip] = useState(false);
+  const [stability, setStability] = useState<{ stable: boolean; successRate: number; attempts: number }>({
+    stable: false,
+    successRate: 0,
+    attempts: 0,
+  });
+  const stabilityTrackerRef = useRef(new StabilityTracker());
+  const releaseWakeLockRef = useRef<(() => void) | null>(null);
+  const scanFramesSinceStabilityUpdateRef = useRef(0);
 
   const stopCamera = useCallback(() => {
     scanningRef.current = false;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = undefined;
+    releaseWakeLockRef.current?.();
+    releaseWakeLockRef.current = null;
   }, []);
 
   const revokeDownloadUrls = useCallback(() => {
@@ -238,6 +252,11 @@ export function ScannerClient() {
         signed: options.signed,
         verified: options.verified,
       });
+
+      // إشعار إتمام النقل (اهتزاز + صوت + إشعار نظام) — للمستخدم الذي ترك الجهاز
+      notifyTransferComplete(names[0] ?? "file");
+      setStability({ stable: false, successRate: 0, attempts: 0 });
+      stabilityTrackerRef.current.reset();
     },
     [revokeDownloadUrls, stopCamera, t],
   );
@@ -625,6 +644,19 @@ export function ScannerClient() {
     return () => window.clearInterval(timer);
   }, []);
 
+  /** يحدّث حالة شارة الاستقرار كل بضع محاولات (تجنب إعادة رسم متكررة). */
+  const maybeUpdateStability = () => {
+    if (scanFramesSinceStabilityUpdateRef.current % 4 === 0) {
+      const current = stabilityTrackerRef.current.state;
+      setStability({
+        stable: current.stable,
+        successRate: current.successRate,
+        attempts: current.attempts,
+      });
+    }
+    scanFramesSinceStabilityUpdateRef.current += 1;
+  };
+
   const scanVideo = useCallback(
     function scanVideoFrame(metadata?: VideoFrameMetadataLike) {
       if (!scanningRef.current) return;
@@ -732,9 +764,13 @@ export function ScannerClient() {
           if (missedExposuresRef.current % 5 === 0) {
             setMissedExposures(missedExposuresRef.current);
           }
+          stabilityTrackerRef.current.push(false);
+          maybeUpdateStability();
           return;
         }
         decodeFailuresRef.current = 0;
+        stabilityTrackerRef.current.push(true);
+        maybeUpdateStability();
         for (const decoded of decodedFrames) {
           await acceptQrBytes(decoded);
         }
@@ -864,6 +900,18 @@ export function ScannerClient() {
       if (downloadUrlsRef.current.length > 0) {
         revokeDownloadUrls();
       }
+
+      // تلميح «اليد الحرة» مرة واحدة (يُحفظ محلياً)
+      try {
+        if (!localStorage.getItem("qrferry-handsfree-seen")) {
+          localStorage.setItem("qrferry-handsfree-seen", "1");
+          setHandsFreeTip(true);
+        }
+      } catch {
+        // تجاهل
+      }
+      // منع نوم الشاشة أثناء النشاط
+      releaseWakeLockRef.current = await acquireScreenWakeLock();
 
       try {
         const devices = await listCameras();
@@ -1093,6 +1141,23 @@ export function ScannerClient() {
           >
             <span style={{ width: `${progress * 100}%` }} />
           </div>
+
+          {handsFreeTip ? (
+            <p className="resume-note handsfree-tip" role="status">
+              🕊️ {t("scan.handsfreeTip")}
+            </p>
+          ) : null}
+
+          {active ? (
+            <div
+              className={`stability-badge ${stability.stable ? "stable" : "unstable"}`}
+              data-testid="stability-badge"
+              aria-live="polite"
+            >
+              {stability.stable ? "✓" : "✱"}{" "}
+              {stability.stable ? t("scan.stableBadge") : t("scan.unstableBadge")}
+            </div>
+          ) : null}
 
           {resumeNote ? <p className="resume-note" role="status">{resumeNote}</p> : null}
 

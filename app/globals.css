@@ -2274,3 +2274,31 @@ input:focus-visible {
   font-size: 9px;
   text-align: center;
 }
+
+/* ===== وضع اليد الحرة (v1.2a) ===== */
+.stability-badge {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.stability-badge.stable {
+  color: #256b3f;
+  background: rgba(68, 167, 102, 0.14);
+  border: 1px solid rgba(68, 167, 102, 0.4);
+}
+
+.stability-badge.unstable {
+  color: #8a6116;
+  background: rgba(217, 138, 43, 0.12);
+  border: 1px solid rgba(217, 138, 43, 0.35);
+}
+
+.handsfree-tip {
+  border-color: #44a766;
+  color: #256b3f;
+  background: rgba(68, 167, 102, 0.07);
+}

@@ -32,6 +32,7 @@
     "drizzle-orm": "0.45.2",
     "fflate": "^0.8.3",
     "next": "16.2.6",
+    "peerjs": "^1.5.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "zxing-wasm": "3.1.2"
@@ -49,6 +50,7 @@
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "peer": "^1.0.2",
     "pngjs": "^7.0.0",
     "react-server-dom-webpack": "19.2.6",
     "sharp": "^0.35.3",

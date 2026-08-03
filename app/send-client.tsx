@@ -51,6 +51,7 @@ import {
   type CustomPreset,
 } from "@/lib/custom-presets";
 import { renderRawQr } from "@/lib/qr-renderer";
+import { acquireScreenWakeLock } from "@/lib/wakelock";
 
 type PreparedFileItem = {
   file: File;
@@ -476,6 +477,12 @@ export function SendClient() {
     if (!playing || !transfer) return;
     let cancelled = false;
     let animationFrame = 0;
+    // منع نوم الشاشة أثناء البث حتى لا يتوقف العرض على الشاشة الكبيرة
+    let releaseWakeLock: (() => void) | null = null;
+    void acquireScreenWakeLock().then((release) => {
+      if (!cancelled) releaseWakeLock = release;
+      else release();
+    });
     const interval = 1000 / preset.fps;
     let nextFrameAt = performance.now();
     broadcastFrameTimesRef.current = [];
@@ -527,6 +534,7 @@ export function SendClient() {
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(animationFrame);
+      releaseWakeLock?.();
     };
   }, [playing, preset, renderPacket, t, transfer]);
 
