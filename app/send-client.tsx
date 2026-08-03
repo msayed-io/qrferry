@@ -150,6 +150,7 @@ export function SendClient() {
   const [fastOpen, setFastOpen] = useState(false);
   const [fastState, setFastState] = useState<"idle" | "scanning" | "connecting" | "transferring" | "done" | "error">("idle");
   const [fastStatus, setFastStatus] = useState("");
+  const [fastUrlCopied, setFastUrlCopied] = useState(false);
   const [fastProgress, setFastProgress] = useState<TransferProgress | null>(null);
   const fastVideoRef = useRef<HTMLVideoElement>(null);
   const fastCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1518,8 +1519,24 @@ export function SendClient() {
 
             {fastState === "idle" ? (
               <>
+                <p className="fast-step-title">{t("send.fastStep0")}</p>
                 <ol className="fast-steps">
-                  <li>{t("send.fastStep1")}</li>
+                  <li>
+                    {t("send.fastStep1")}{" "}
+                    <button
+                      type="button"
+                      className="fast-url-copy"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(t("send.fastStep1Url")).then(() => {
+                          setFastUrlCopied(true);
+                          window.setTimeout(() => setFastUrlCopied(false), 2000);
+                        });
+                      }}
+                    >
+                      {fastUrlCopied ? t("send.urlCopied") : t("send.copyUrl")}
+                    </button>
+                    <code className="fast-url">{t("send.fastStep1Url")}</code>
+                  </li>
                   <li>{t("send.fastStep2")}</li>
                 </ol>
                 <p className="fast-hint">{t("send.fastSameNetwork")}</p>

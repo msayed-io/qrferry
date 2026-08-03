@@ -74,9 +74,10 @@ export default function RootLayout({
           <footer className="site-footer">
             <span>QRFerry · ملفاتك لا تغادر أجهزتك أبداً</span>
             <nav aria-label="روابط الموقع">
-              <Link href="/privacy">سياسة الخصوصية</Link>
+              <Link href="/tv">استقبال على التلفاز</Link>
               <Link href="/history">السجل</Link>
               <Link href="/offline">أوفلاين</Link>
+              <Link href="/privacy">الخصوصية</Link>
             </nav>
           </footer>
           <NetworkIndicator />
