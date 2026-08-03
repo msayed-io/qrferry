@@ -26,7 +26,7 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: `PORT=${PORT} npm run start`,
+    command: `E2E_PORT=${PORT} node scripts/e2e-servers.mjs`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 90_000,

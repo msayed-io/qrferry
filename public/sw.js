@@ -11,6 +11,9 @@ const CACHE = "qrferry-shell-v5";
 const SHELL = [
   "/",
   "/scan",
+  "/tv",
+  "/history",
+  "/offline",
   "/manifest.webmanifest",
   "/favicon.svg",
   "/icons/icon-192.png",

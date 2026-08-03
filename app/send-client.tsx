@@ -52,6 +52,12 @@ import {
 } from "@/lib/custom-presets";
 import { renderRawQr } from "@/lib/qr-renderer";
 import { acquireScreenWakeLock } from "@/lib/wakelock";
+import {
+  decodePairing,
+  sendFileFast,
+  type PairingInfo,
+  type TransferProgress,
+} from "@/lib/fast-transfer";
 
 type PreparedFileItem = {
   file: File;
@@ -140,6 +146,16 @@ export function SendClient() {
   const [customPresets, setCustomPresets] = useState<CustomPreset[]>([]);
   const [showPresetForm, setShowPresetForm] = useState(false);
   const [sharedNotice, setSharedNotice] = useState("");
+  // النقل السريع (شبكة محلية)
+  const [fastOpen, setFastOpen] = useState(false);
+  const [fastState, setFastState] = useState<"idle" | "scanning" | "connecting" | "transferring" | "done" | "error">("idle");
+  const [fastStatus, setFastStatus] = useState("");
+  const [fastProgress, setFastProgress] = useState<TransferProgress | null>(null);
+  const fastVideoRef = useRef<HTMLVideoElement>(null);
+  const fastCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fastStreamRef = useRef<MediaStream | null>(null);
+  const fastScanLoopRef = useRef(0);
+  const fastScanActiveRef = useRef(false);
 
   /** نوع موحّد لأي بروفايل (افتراضي أو مخصص). */
   type TransferPresetLike = {
@@ -537,6 +553,191 @@ export function SendClient() {
       releaseWakeLock?.();
     };
   }, [playing, preset, renderPacket, t, transfer]);
+
+  // ===== النقل السريع (شبكة محلية) =====
+
+  const stopFastScanning = useCallback(() => {
+    fastScanActiveRef.current = false;
+    if (fastScanLoopRef.current) {
+      window.cancelAnimationFrame(fastScanLoopRef.current);
+      fastScanLoopRef.current = 0;
+    }
+    fastStreamRef.current?.getTracks().forEach((track) => track.stop());
+    fastStreamRef.current = null;
+  }, []);
+
+  const closeFastModal = useCallback(() => {
+    stopFastScanning();
+    setFastOpen(false);
+    setFastState("idle");
+    setFastStatus("");
+    setFastProgress(null);
+  }, [stopFastScanning]);
+
+  const buildPackageForFast = useCallback(async (): Promise<Uint8Array> => {
+    if (!fileData) return new Uint8Array(0);
+    const { buildTransferPackage } = await import("@/lib/transfer-package");
+    const packageFiles = fileData.items.map((item) => ({
+      name: item.file.name,
+      mime: item.file.type || "application/octet-stream",
+      bytes: item.original,
+    }));
+    if (signEnabled) {
+      const id = await ensureIdentity();
+      const privateKey = await importPrivateKeyRaw(id.privateKeyPkcs8);
+      const unsigned = buildTransferPackage({ files: packageFiles, burnAfterReading: burnEnabled });
+      const signature = await signHash(privateKey, unsigned);
+      return buildTransferPackage({
+        files: packageFiles,
+        burnAfterReading: burnEnabled,
+        signerName: id.label,
+        signature,
+        signerPublicKey: id.publicKeyRaw,
+      });
+    }
+    return buildTransferPackage({ files: packageFiles, burnAfterReading: burnEnabled });
+  }, [burnEnabled, ensureIdentity, fileData, signEnabled]);
+
+
+
+
+  const beginFastTransfer = useCallback(
+    async (pairing: PairingInfo) => {
+      if (!fileData) return;
+      setFastState("connecting");
+      setFastStatus(t("send.fastConnecting"));
+      try {
+        const items = fileData.items;
+        let fileName: string;
+        let mime: string;
+        let bytes: Uint8Array;
+
+        if (items.length === 1 && !signEnabled && !burnEnabled) {
+          // مسار بسيط: ملف واحد يُرسل كما هو (القناة DTLS مشفرة من طرف لطرف)
+          fileName = items[0].file.name;
+          mime = items[0].file.type || "application/octet-stream";
+          bytes = items[0].original;
+        } else {
+          // حزمة ملفات متعددة / توقيع / حذف → نبني الحزمة (نفس تنسيق QFPA)
+          fileName = `${items.length} ${t("send.multiSelected")}`;
+          mime = "application/x-qrferry-package";
+          bytes = await buildPackageForFast();
+        }
+
+        await sendFileFast({
+          pairing,
+          file: { name: fileName, mime, bytes },
+          onProgress: (progress) => {
+            setFastProgress(progress);
+            setFastState("transferring");
+          },
+          onStatus: (message) => setFastStatus(message),
+        });
+        setFastState("done");
+        setFastStatus(t("send.fastDone"));
+      } catch (cause) {
+        setFastState("error");
+        setFastStatus(
+          t("send.fastError", {
+            msg: cause instanceof Error ? cause.message : String(cause),
+          }),
+        );
+      }
+    },
+    [buildPackageForFast, fileData, signEnabled, burnEnabled, t],
+  );
+
+  const startFastScan = useCallback(async () => {
+    setFastState("scanning");
+    setFastStatus(t("send.fastScanning"));
+    try {
+      // ننتظر ربط React للفيديو داخل النافذة قبل طلب الكاميرا
+      // (يتجنب سباقاً حيث يكون المرجع فارغاً فيُوقف التتبع فوراً)
+      await new Promise((resolve) => window.setTimeout(resolve, 60));
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      fastStreamRef.current = stream;
+      const video = fastVideoRef.current;
+      const canvas = fastCanvasRef.current;
+      if (!video || !canvas) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      video.srcObject = stream;
+      await video.play();
+      fastScanActiveRef.current = true;
+      const SCAN_SIZE = 640;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+
+      /** يعيد التقاط تدفق الكاميرا إذا انتهى تتبعه (مرونة في بيئات حقيقية ومحاكاة). */
+      const ensureLiveStream = async (): Promise<boolean> => {
+        const current = video.srcObject as MediaStream | null;
+        const track = current?.getVideoTracks?.()[0];
+        if (track && track.readyState !== "ended") return true;
+        try {
+          const fresh = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          });
+          fastStreamRef.current = fresh;
+          video.srcObject = fresh;
+          await video.play();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      const loop = async () => {
+        if (!fastScanActiveRef.current) return;
+        if (!video || !canvas || !context) return;
+        if (!(await ensureLiveStream())) {
+          fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
+          return;
+        }
+        if (video.readyState < 2 || video.videoWidth === 0) {
+          fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
+          return;
+        }
+        const side = Math.min(video.videoWidth, video.videoHeight);
+        const offsetX = Math.floor((video.videoWidth - side) / 2);
+        const offsetY = Math.floor((video.videoHeight - side) / 2);
+        canvas.width = SCAN_SIZE;
+        canvas.height = SCAN_SIZE;
+        context.imageSmoothingEnabled = false;
+        context.drawImage(video, offsetX, offsetY, side, side, 0, 0, SCAN_SIZE, SCAN_SIZE);
+        const image = context.getImageData(0, 0, SCAN_SIZE, SCAN_SIZE);
+        const { scanRawQr } = await import("@/lib/qr-scanner");
+        // QR الاقتران ثابت — نستخدم tryHarder لموثوقية أعلى
+        const decoded = await scanRawQr(image, true);
+        if (decoded) {
+          const text = new TextDecoder().decode(decoded);
+          const pairing = decodePairing(text);
+          if (pairing) {
+            stopFastScanning();
+            await beginFastTransfer(pairing);
+            return;
+          }
+        }
+        if (fastScanActiveRef.current) {
+          fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
+        }
+      };
+
+      const safeLoop = () => {
+        void loop().catch(() => {
+          // نتجاهل أخطاء المسح غير المتوقعة — الحلقة تظل تعمل
+        });
+      };
+
+      fastScanLoopRef.current = window.requestAnimationFrame(safeLoop);
+    } catch {
+      setFastState("error");
+      setFastStatus(t("send.fastError", { msg: t("scan.error.cameraStart") }));
+    }
+  }, [beginFastTransfer, stopFastScanning, t]);
 
   const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -1230,6 +1431,24 @@ export function SendClient() {
             {playing ? t("send.pause") : t("send.start")}
           </button>
 
+          <button
+            className="fast-action"
+            type="button"
+            disabled={!fileData || processing}
+            onClick={() => {
+              setFastOpen(true);
+              setFastState("idle");
+              setFastStatus("");
+              setFastProgress(null);
+            }}
+          >
+            <span aria-hidden="true">⚡</span>
+            <span>
+              <strong>{t("send.fast")}</strong>
+              <small>{t("send.fastDesc")}</small>
+            </span>
+          </button>
+
           <button className="link-action" type="button" onClick={copyScanLink}>
             <span aria-hidden="true">⌁</span>
             {copied ? t("send.copied") : t("send.copyScanLink")}
@@ -1273,6 +1492,105 @@ export function SendClient() {
             <button type="button" className="modal-close" onClick={() => setShowPasswordQr(false)}>
               {t("send.close")}
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* نافذة النقل السريع (شبكة محلية) */}
+      {fastOpen ? (
+        <div className="modal-backdrop" onClick={closeFastModal}>
+          <div
+            className="modal-card fast-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>⚡ {t("send.fastModalTitle")}</h3>
+
+            {/* الفيديو والكانفاس مثبّتان دائماً داخل النافذة (مخفيان عند عدم المسح)
+                حتى يتوفر المرجع فوراً عند بدء المسح — يتجنب سباق تركيب React. */}
+            <video
+              ref={fastVideoRef}
+              playsInline
+              muted
+              className="fast-video"
+              style={{ display: fastState === "scanning" ? "block" : "none" }}
+            />
+            <canvas ref={fastCanvasRef} hidden />
+
+            {fastState === "idle" ? (
+              <>
+                <ol className="fast-steps">
+                  <li>{t("send.fastStep1")}</li>
+                  <li>{t("send.fastStep2")}</li>
+                </ol>
+                <p className="fast-hint">{t("send.fastSameNetwork")}</p>
+                <div className="fast-actions">
+                  <button
+                    type="button"
+                    className="primary-action fast-start"
+                    onClick={() => void startFastScan()}
+                  >
+                    📷 {t("send.fastScan")}
+                  </button>
+                  <button type="button" className="modal-close" onClick={closeFastModal}>
+                    {t("send.fastCancel")}
+                  </button>
+                </div>
+              </>
+            ) : fastState === "scanning" ? (
+              <>
+                <p className="fast-status">{fastStatus}</p>
+                <div className="fast-actions">
+                  <button type="button" className="modal-close" onClick={stopFastScanning}>
+                    {t("send.fastStop")}
+                  </button>
+                </div>
+              </>
+            ) : fastState === "connecting" || fastState === "transferring" ? (
+              <>
+                <p className="fast-status">{fastStatus}</p>
+                <div className="fast-progress-track">
+                  <span
+                    style={{
+                      width: fastProgress
+                        ? `${Math.min(100, (fastProgress.sent / fastProgress.total) * 100)}%`
+                        : "8%",
+                    }}
+                  />
+                </div>
+                {fastProgress ? (
+                  <p className="fast-progress-text">
+                    {formatBytes(fastProgress.sent)} / {formatBytes(fastProgress.total)}
+                  </p>
+                ) : null}
+                <div className="fast-actions">
+                  <button type="button" className="modal-close" onClick={closeFastModal}>
+                    {t("send.fastCancel")}
+                  </button>
+                </div>
+              </>
+            ) : fastState === "done" ? (
+              <>
+                <p className="fast-status fast-ok" role="status">{fastStatus}</p>
+                <div className="fast-actions">
+                  <button type="button" className="primary-action" onClick={closeFastModal}>
+                    {t("send.fastClose")}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="fast-status fast-err" role="alert">{fastStatus}</p>
+                <p className="fast-hint">{t("send.fastFallback")}</p>
+                <div className="fast-actions">
+                  <button type="button" className="primary-action" onClick={() => void startFastScan()}>
+                    📷 {t("send.fastScan")}
+                  </button>
+                  <button type="button" className="modal-close" onClick={closeFastModal}>
+                    {t("send.fastCancel")}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}

@@ -20,6 +20,7 @@ export function installCameraStub() {
   const feed = document.createElement("canvas");
   feed.width = FEED_W;
   feed.height = FEED_H;
+  (window as unknown as { __feedCanvas?: HTMLCanvasElement }).__feedCanvas = feed;
   const ctx = feed.getContext("2d");
   if (!ctx) throw new Error("no 2d context");
 
