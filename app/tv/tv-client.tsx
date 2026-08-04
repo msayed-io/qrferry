@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Download,
+  FolderOpen,
   Monitor,
   Play,
   Pause,
   RotateCcw,
   Smartphone,
+  Trash2,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -15,6 +17,13 @@ import { FastReceiver, getPeerServerConfig, setPeerServerConfig, type IncomingTr
 import { renderRawQr } from "@/lib/qr-renderer";
 import { useI18n } from "../lang-provider";
 import { parsePeerServerUrl } from "@/lib/tv-compat";
+import {
+  storeReceivedFile,
+  listReceivedFiles,
+  loadReceivedFileBytes,
+  deleteReceivedFile,
+  type ReceivedStoredFile,
+} from "@/lib/received-files-store";
 
 type TvState = "starting" | "ready" | "receiving" | "complete" | "error" | "phone-blocked";
 
@@ -62,6 +71,9 @@ export function TvClient() {
   const [isPhone, setIsPhone] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [receivedFiles, setReceivedFiles] = useState<Array<Omit<ReceivedStoredFile, "data">>>([]);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const receivedBytesRef = useRef<Uint8Array | null>(null);
 
@@ -75,7 +87,7 @@ export function TvClient() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const handleFile = useCallback((file: IncomingTransferFile) => {
+  const handleFile = useCallback(async (file: IncomingTransferFile) => {
     const url = URL.createObjectURL(
       new Blob([file.bytes.buffer as BlobPart], { type: file.mime }),
     );
@@ -86,6 +98,26 @@ export function TvClient() {
     setIsPlaying(false);
     setIsMuted(false);
     navigator.vibrate?.([80, 40, 120]);
+
+    // الحفظ التلقائي الفوري: نخزّن الملف محلياً (IndexedDB) لحظة وصوله،
+    // فلا يضيع أبداً حتى لو أُعيد تحميل الصفحة أو أُغلق المتصفح.
+    try {
+      await storeReceivedFile({
+        name: file.name,
+        mime: file.mime,
+        bytes: file.bytes,
+      });
+      setLibraryError("");
+      const list = await listReceivedFiles(50);
+      setReceivedFiles(list);
+    } catch {
+      setLibraryError(
+        lang === "ar"
+          ? "تعذّر الحفظ التلقائي في هذا المتصفح — استخدم زر الحفظ فوراً قبل إغلاق الصفحة."
+          : "Automatic save failed in this browser — use Save now before closing.",
+      );
+    }
+
     // هوك اختبار (يقرأ من ref — لا نسخ ضخم في الـ UI)
     window.__qrferryTvReceived = {
       name: file.name,
@@ -93,7 +125,7 @@ export function TvClient() {
       size: file.size,
       bytes: Array.from(file.bytes),
     };
-  }, []);
+  }, [lang]);
 
   const initReceiver = useCallback(async () => {
     setState("starting");
@@ -164,9 +196,13 @@ export function TvClient() {
         config.secure ? `wss://${config.host}:${config.port}${config.path}` : `ws://${config.host}:${config.port}${config.path}`,
       );
     }, 0);
+    const libraryTimer = window.setTimeout(() => {
+      void listReceivedFiles(50).then((list) => setReceivedFiles(list));
+    }, 0);
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(configTimer);
+      window.clearTimeout(libraryTimer);
       receiverRef.current?.destroy();
     };
   }, [initReceiver]);
@@ -223,6 +259,16 @@ export function TvClient() {
   };
 
   const isMedia = (mime: string) => mime.startsWith("video/") || mime.startsWith("audio/") || mime.startsWith("image/");
+
+  /** هل هذا المتصفح يدعم تشغيل هذه الصيغة؟ (يُستخدم لرسالة واضحة بدل زر صامت). */
+  const canPlayMime = useCallback((mime: string): boolean => {
+    try {
+      const media = document.createElement("video");
+      return media.canPlayType(mime) !== "";
+    } catch {
+      return true;
+    }
+  }, []);
 
   /**
    * حفظ حقيقي للملف:
@@ -282,6 +328,31 @@ export function TvClient() {
     setIsMuted(media.muted);
   }, []);
 
+  /** يفتح ملفاً من المكتبة المحلية: يجلب البايتات ويعرضها (تشغيل/حفظ). */
+  const openFromLibrary = useCallback(async (id: string) => {
+    const data = await loadReceivedFileBytes(id);
+    if (!data) {
+      setLibraryError(lang === "ar" ? "الملف غير موجود." : "File not found.");
+      return;
+    }
+    const entry = receivedFiles.find((file) => file.id === id);
+    if (!entry) return;
+    const bytes = new Uint8Array(data);
+    const url = URL.createObjectURL(new Blob([data], { type: entry.mime }));
+    receivedBytesRef.current = bytes;
+    setReceivedFile({ name: entry.name, mime: entry.mime, size: entry.size, url });
+    setState("complete");
+    setIsPlaying(false);
+    setIsMuted(false);
+    setLibraryError("");
+  }, [lang, receivedFiles]);
+
+  const removeFromLibrary = useCallback(async (id: string) => {
+    await deleteReceivedFile(id);
+    const list = await listReceivedFiles(50);
+    setReceivedFiles(list);
+  }, []);
+
   // شاشة الهاتف: رسالة واضحة بدل التشغيل
   if (isPhone) {
     return (
@@ -322,7 +393,48 @@ export function TvClient() {
         </button>
         {signalApplied ? <span className="tv-signal-applied">{t("tv.signalApplied")}</span> : null}
         <p className="tv-hint">{t("tv.signalHint")}</p>
+        <button
+          type="button"
+          className="tv-btn tv-btn-ghost tv-library-btn"
+          onClick={() => setShowLibrary((current) => !current)}
+        >
+          <FolderOpen size={20} aria-hidden="true" />
+          {lang === "ar" ? "الملفات المستلمة" : "Received files"}
+          {receivedFiles.length > 0 ? ` (${receivedFiles.length})` : ""}
+        </button>
       </div>
+
+      {showLibrary ? (
+        <div className="tv-library">
+          {libraryError ? <p className="tv-compat-bad">{libraryError}</p> : null}
+          {receivedFiles.length === 0 ? (
+            <p className="tv-hint">
+              {lang === "ar"
+                ? "لا توجد ملفات مستلمة بعد. أرسل ملفاً وسيُحفظ هنا تلقائياً."
+                : "No received files yet. Send a file and it will be saved here automatically."}
+            </p>
+          ) : (
+            <ul className="tv-library-list">
+              {receivedFiles.map((file) => (
+                <li key={file.id}>
+                  <button type="button" className="tv-library-item" onClick={() => void openFromLibrary(file.id)}>
+                    <span className="tv-library-name">{file.name}</span>
+                    <span className="tv-library-meta">{formatBytes(file.size)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tv-btn tv-btn-ghost tv-library-delete"
+                    aria-label={lang === "ar" ? "حذف" : "Delete"}
+                    onClick={() => void removeFromLibrary(file.id)}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       {state === "starting" ? (
         <div className="tv-center">
@@ -378,7 +490,14 @@ export function TvClient() {
 
           {isMedia(receivedFile.mime) ? (
             <div className="tv-media">
-              {receivedFile.mime.startsWith("video/") ? (
+              {(receivedFile.mime.startsWith("video/") || receivedFile.mime.startsWith("audio/")) &&
+              !canPlayMime(receivedFile.mime) ? (
+                <div className="tv-codec-warning">
+                  {lang === "ar"
+                    ? "هذا الجهاز لا يدعم تشغيل هذه الصيغة مباشرة — لكن الملف محفوظ ويمكن نقله إلى جهاز آخر."
+                    : "This device cannot play this format directly — but the file is saved and can be moved to another device."}
+                </div>
+              ) : receivedFile.mime.startsWith("video/") ? (
                 <video
                   ref={(node) => {
                     mediaRef.current = node;

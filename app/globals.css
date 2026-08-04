@@ -2853,3 +2853,91 @@ input:focus-visible {
   color: var(--signal);
   margin-bottom: 8px;
 }
+
+/* ===== مكتبة الملفات المستلمة (v1.2.5) ===== */
+.tv-library-btn {
+  justify-self: end;
+}
+
+.tv-library {
+  max-width: 860px;
+  margin: 6px auto 0;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  gap: 10px;
+}
+
+.tv-library-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.tv-library-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tv-library-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  text-align: start;
+}
+
+.tv-library-item:hover,
+.tv-library-item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.tv-library-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+}
+
+.tv-library-meta {
+  color: #9aa5af;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tv-library-delete {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.tv-codec-warning {
+  max-width: 720px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: rgba(217, 138, 43, 0.14);
+  border: 1px solid rgba(217, 138, 43, 0.4);
+  color: #ffd79a;
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: center;
+}
