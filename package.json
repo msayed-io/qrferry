@@ -32,6 +32,7 @@
     "brotli-wasm": "3.0.1",
     "drizzle-orm": "0.45.2",
     "fflate": "^0.8.3",
+    "lucide-react": "^0.454.0",
     "next": "16.2.6",
     "peerjs": "^1.5.5",
     "react": "19.2.6",

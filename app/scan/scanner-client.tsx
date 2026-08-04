@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../lang-provider";
+import { Bird, Check, Download } from "lucide-react";
 import { decompressTransfer } from "@/lib/compression";
 import { decryptPayload } from "@/lib/encryption";
 import {
@@ -1105,7 +1106,7 @@ export function ScannerClient() {
             </div>
           ) : null}
           {state === "starting" ? <div className="camera-loading">{t("scan.loading")}</div> : null}
-          {complete ? <div className="complete-mark" aria-hidden="true">✓</div> : null}
+          {complete ? <div className="complete-mark" aria-hidden="true"><Check size={44} strokeWidth={3} /></div> : null}
           {torchAvailable && active ? (
             <button className="torch-button" type="button" onClick={toggleTorch}>
               {torchOn ? t("scan.torchOn") : t("scan.torchOff")}
@@ -1144,7 +1145,7 @@ export function ScannerClient() {
 
           {handsFreeTip ? (
             <p className="resume-note handsfree-tip" role="status">
-              🕊️ {t("scan.handsfreeTip")}
+              <Bird size={14} aria-hidden="true" /> {t("scan.handsfreeTip")}
             </p>
           ) : null}
 
@@ -1154,7 +1155,7 @@ export function ScannerClient() {
               data-testid="stability-badge"
               aria-live="polite"
             >
-              {stability.stable ? "✓" : "✱"}{" "}
+              {stability.stable ? <Check size={13} aria-hidden="true" /> : <span aria-hidden="true">✱</span>}{" "}
               {stability.stable ? t("scan.stableBadge") : t("scan.unstableBadge")}
             </div>
           ) : null}
@@ -1398,7 +1399,7 @@ export function ScannerClient() {
                   className="primary-action"
                   onClick={() => void downloadAllZip()}
                 >
-                  <span aria-hidden="true">⬇</span>
+                  <Download size={18} aria-hidden="true" />
                   {t("scan.saveAll")}
                 </button>
               ) : null}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useI18n } from "../lang-provider";
+import { Check, Download } from "lucide-react";
 import { buildOfflinePackage } from "@/lib/offline-package";
 
 export function OfflineClient() {
@@ -43,13 +44,13 @@ export function OfflineClient() {
         disabled={state === "building"}
         onClick={() => void build()}
       >
-        <span aria-hidden="true">⬇</span>
+        <Download size={18} aria-hidden="true" />
         {state === "building" ? t("offline.preparing") : t("offline.download")}
       </button>
 
       {state === "done" ? (
         <p className="resume-note" role="status">
-          ✓ {fileName} — {fileCount} ملفاً في الحزمة
+          <Check size={14} aria-hidden="true" /> {fileName} — {fileCount} ملفاً في الحزمة
         </p>
       ) : null}
 

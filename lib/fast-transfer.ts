@@ -92,6 +92,9 @@ export const CHUNK_SIZE = 256 * 1024;
 /** نبضة تقدم من المستقبِل كل هذا المقدار (~2MB) لإثبات أن الاتصال حي. */
 const PROGRESS_PULSE_BYTES = 2 * 1024 * 1024;
 
+/** تحديث التقدم على الأجهزة مُخفَّف لتجنب إعادة رسم متكررة (الأجهزة البطيئة). */
+const PROGRESS_THROTTLE_MS = 120;
+
 /** مهلة الخمول: إذا لم يصل أي نشاط من المستقبِل خلالها، يُعتبر النقل فاشلاً. */
 export const IDLE_TIMEOUT_MS = 45_000;
 
@@ -223,6 +226,7 @@ export class FastReceiver {
     let received = 0;
     let total = 0;
     let lastProgressSent = 0;
+    let lastProgressAt = 0;
     let header: { passcode: string; name: string; mime: string; size: number } | null = null;
 
     connection.on("data", (data) => {
@@ -290,7 +294,16 @@ export class FastReceiver {
       const length = Math.min(chunk.length, remaining);
       buffer.set(chunk.subarray(0, length), received);
       received += length;
-      this.onProgress(received, total);
+      // تحديث التقدم مُخفَّف: لا نعيد رسم الواجهة لكل شريحة (يصل إلى 244
+      // شريحة لملف 61MB). نحدّث كل PROGRESS_THROTTLE_MS ونضمن آخر تحديث.
+      const now = Date.now();
+      if (
+        now - lastProgressAt >= PROGRESS_THROTTLE_MS ||
+        received >= total
+      ) {
+        lastProgressAt = now;
+        this.onProgress(received, total);
+      }
       // نبضة تقدم دورية: تثبت للمرسل أن الاستقبال يتقدم والاتصال حي
       if (received - lastProgressSent >= PROGRESS_PULSE_BYTES) {
         lastProgressSent = received;
@@ -456,13 +469,20 @@ export async function sendFileFast(options: FastSenderOptions): Promise<void> {
     connection.on("close", onClose);
 
     onStatus("جارٍ الإرسال…");
+    let lastProgressAt = 0;
     for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
       if (settled) break;
       const chunk = bytes.subarray(offset, Math.min(offset + CHUNK_SIZE, total));
       // PeerJS يطبق ضغطاً خلفياً داخلياً (bufferedAmount) — send يتوقف حتى يتاح المخزن
       await connection.send(chunk as unknown as ArrayBuffer);
       if (settled) break;
-      options.onProgress?.({ sent: Math.min(offset + chunk.length, total), total });
+      // تحديث التقدم مُخفَّف (لا لكل شريحة) مع ضمان آخر تحديث
+      const now = Date.now();
+      const sent = Math.min(offset + chunk.length, total);
+      if (now - lastProgressAt >= 100 || sent >= total) {
+        lastProgressAt = now;
+        options.onProgress?.({ sent, total });
+      }
     }
 
     // إعلان الاكتمال والتحقق (بعد اكتمال الحلقة دون حسم مسبق)

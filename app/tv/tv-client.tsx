@@ -1,23 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Download,
+  Monitor,
+  Play,
+  Pause,
+  RotateCcw,
+  Smartphone,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { FastReceiver, getPeerServerConfig, setPeerServerConfig, type IncomingTransferFile } from "@/lib/fast-transfer";
 import { renderRawQr } from "@/lib/qr-renderer";
 import { useI18n } from "../lang-provider";
-import {
-  checkTvCompatibility,
-  parsePeerServerUrl,
-  tvCompatibilitySummary,
-  type TvCompatibility,
-} from "@/lib/tv-compat";
+import { parsePeerServerUrl } from "@/lib/tv-compat";
 
-type TvState = "starting" | "ready" | "receiving" | "complete" | "error";
+type TvState = "starting" | "ready" | "receiving" | "complete" | "error" | "phone-blocked";
 
 type ReceivedFile = {
   name: string;
   mime: string;
   size: number;
-  bytes: Uint8Array;
   url: string;
 };
 
@@ -30,11 +34,19 @@ declare global {
 }
 
 /**
- * وضع التلفزيون: يعرض رمز اقتران QR على الشاشة الكبيرة، ويستقبل الملف
- * عبر الشبكة المحلية (P2P مشفر) ثم يحفظه/يشغّله. ملاحة كاملة بالريموت.
+ * وضع الشاشة الكبيرة (تلفاز/تابلت/لابتوب): يعرض رمز اقتران QR على يمين
+ * الشاشة (في RTL) وتعليمات أفقية على اليسار، ويستقبل الملف عبر الشبكة
+ * المحلية (P2P مشفر) ثم يحفظه أو يشغّله. ملاحة كاملة بالريموت.
+ *
+ * ملاحظات معمارية:
+ * - البايتات تُحفظ في ref (لا في React state) حتى لا تُحمَّل 61MB مع كل
+ *   إعادة رسم — يُعرض الملف عبر Blob URL فقط.
+ * - زر الحفظ يستخدم File System Access API عند توفره (حفظ حقيقي)، مع
+ *   سقوط آمن إلى تنزيل `<a download>`.
+ * - الصفحة مخصصة للأجهزة الكبيرة؛ تُحجب على الهواتف برسالة واضحة.
  */
 export function TvClient() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [state, setState] = useState<TvState>("starting");
   const [passcode, setPasscode] = useState("");
   const [qrCanvas, setQrCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -45,18 +57,36 @@ export function TvClient() {
   const receiverRef = useRef<FastReceiver | null>(null);
   const qrHostRef = useRef<HTMLDivElement>(null);
   const [signalingHost, setSignalingHost] = useState("");
-  const [showMedia, setShowMedia] = useState(true);
-  const [compat, setCompat] = useState<TvCompatibility | null>(null);
   const [signalHostInput, setSignalHostInput] = useState("");
   const [signalApplied, setSignalApplied] = useState(false);
-  const [showCompat, setShowCompat] = useState(false);
+  const [isPhone, setIsPhone] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+  const receivedBytesRef = useRef<Uint8Array | null>(null);
+
+  // كشف الهاتف: شاشة صغيرة + مؤشر لمس خشن (coarse) = هاتف
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+      const small = window.innerWidth < 720;
+      setIsPhone(coarse && small);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleFile = useCallback((file: IncomingTransferFile) => {
-    const url = URL.createObjectURL(new Blob([file.bytes.buffer as BlobPart], { type: file.mime }));
-    setReceivedFile({ name: file.name, mime: file.mime, size: file.size, bytes: file.bytes, url });
+    const url = URL.createObjectURL(
+      new Blob([file.bytes.buffer as BlobPart], { type: file.mime }),
+    );
+    // البايتات في ref فقط (لا تُحمل مع إعادة رسم React)
+    receivedBytesRef.current = file.bytes;
+    setReceivedFile({ name: file.name, mime: file.mime, size: file.size, url });
     setState("complete");
+    setIsPlaying(false);
+    setIsMuted(false);
     navigator.vibrate?.([80, 40, 120]);
-    // هوك اختبار
+    // هوك اختبار (يقرأ من ref — لا نسخ ضخم في الـ UI)
     window.__qrferryTvReceived = {
       name: file.name,
       mime: file.mime,
@@ -69,6 +99,7 @@ export function TvClient() {
     setState("starting");
     setError("");
     setReceivedFile(null);
+    receivedBytesRef.current = null;
     setProgress({ received: 0, total: 0 });
     receiverRef.current?.destroy();
     try {
@@ -120,15 +151,12 @@ export function TvClient() {
       setError(
         cause instanceof Error
           ? cause.message
-          : "تعذّر تشغيل وضع الاستقبال. تأكد من اتصال التلفزيون بالشبكة.",
+          : "تعذّر تشغيل وضع الاستقبال. تأكد من اتصال الجهاز بالشبكة.",
       );
     }
   }, [handleFile]);
 
   useEffect(() => {
-    const compatTimer = window.setTimeout(() => {
-      setCompat(checkTvCompatibility());
-    }, 0);
     const timer = window.setTimeout(() => void initReceiver(), 0);
     const configTimer = window.setTimeout(() => {
       const config = getPeerServerConfig();
@@ -137,7 +165,6 @@ export function TvClient() {
       );
     }, 0);
     return () => {
-      window.clearTimeout(compatTimer);
       window.clearTimeout(timer);
       window.clearTimeout(configTimer);
       receiverRef.current?.destroy();
@@ -175,8 +202,6 @@ export function TvClient() {
     window.setTimeout(() => void initReceiver(), 300);
   }, [initReceiver, signalHostInput]);
 
-  const compatSummary = compat ? tvCompatibilitySummary(compat) : null;
-
   useEffect(() => {
     if (qrCanvas && qrHostRef.current) {
       qrHostRef.current.replaceChildren(qrCanvas);
@@ -199,6 +224,81 @@ export function TvClient() {
 
   const isMedia = (mime: string) => mime.startsWith("video/") || mime.startsWith("audio/") || mime.startsWith("image/");
 
+  /**
+   * حفظ حقيقي للملف:
+   * 1) File System Access API (حفظ في نظام ملفات الجهاز) عند توفره.
+   * 2) سقوط آمن: تنزيل `<a download>` مع إضافة العنصر للـ DOM (أكثر موثوقية).
+   */
+  const saveFile = useCallback(async () => {
+    const file = receivedFile;
+    const bytes = receivedBytesRef.current;
+    if (!file || !bytes) return;
+    try {
+      const picker = (
+        window as unknown as {
+          showSaveFilePicker?: (options: {
+            suggestedName: string;
+            types?: Array<{ description: string; accept: Record<string, string[]> }>;
+          }) => Promise<{ createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }>;
+        }
+      ).showSaveFilePicker;
+      if (picker) {
+        const handle = await picker({
+          suggestedName: file.name,
+          types: file.mime ? [{ description: file.name, accept: { [file.mime]: [".bin"] } }] : undefined,
+        });
+        const writable = await handle.createWritable();
+        await writable.write(new Blob([bytes.buffer as BlobPart], { type: file.mime }));
+        await writable.close();
+        return;
+      }
+    } catch {
+      // المستخدم ألغى أو API غير متاح → ننتقل للسقوط الآمن
+    }
+    // سقوط آمن: `<a download>` مدمج في DOM
+    const anchor = document.createElement("a");
+    anchor.href = file.url;
+    anchor.download = file.name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }, [receivedFile]);
+
+  const togglePlay = useCallback(() => {
+    const media = mediaRef.current;
+    if (!media) return;
+    if (media.paused) {
+      void media.play().then(() => setIsPlaying(true)).catch(() => undefined);
+    } else {
+      media.pause();
+      setIsPlaying(false);
+    }
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const media = mediaRef.current;
+    if (!media) return;
+    media.muted = !media.muted;
+    setIsMuted(media.muted);
+  }, []);
+
+  // شاشة الهاتف: رسالة واضحة بدل التشغيل
+  if (isPhone) {
+    return (
+      <main className="tv-page tv-phone-blocked">
+        <div className="tv-center tv-phone-msg">
+          <Smartphone size={72} strokeWidth={1.5} aria-hidden="true" />
+          <h1>{lang === "ar" ? "هذه الصفحة مخصصة للشاشات الكبيرة" : "This page is for large screens"}</h1>
+          <p className="tv-hint">
+            {lang === "ar"
+              ? "افتحها على التلفاز أو التابلت أو اللابتوب لاستقبال الملفات. على هاتفك استخدم صفحة «إرسال» لبدء النقل."
+              : "Open it on a TV, tablet, or laptop to receive files. On your phone use the “Send” page to start a transfer."}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className={`tv-page tv-${state}`}>
       <header className="tv-header">
@@ -207,47 +307,21 @@ export function TvClient() {
         <span className="tv-signaling" title="خادم التسيير">{signalingHost || "…"}</span>
       </header>
 
-      <div className="tv-settings">
-        <details className="tv-compat" open={showCompat} onToggle={(event) => setShowCompat(event.currentTarget.open)}>
-          <summary>{t("tv.compatTitle")}</summary>
-          {compat && compatSummary ? (
-            <>
-              {compatSummary.canReceive ? (
-                <p className="tv-compat-ok">{t("tv.compatOk")}</p>
-              ) : (
-                <p className="tv-compat-bad">{t("tv.compatBad")}</p>
-              )}
-              <p className="tv-compat-detail">{t("tv.compatDetail")}</p>
-              <ul className="tv-compat-list">
-                <li>{t("tv.compatWebRtc")}: {compat.webRtc ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
-                <li>{t("tv.compatWebSocket")}: {compat.webSocket ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
-                <li>{t("tv.compatDownload")}: {compat.download ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
-                <li>{t("tv.compatMedia")}: {compat.mediaPlayback ? `✓ ${t("tv.compatYes")}` : `✗ ${t("tv.compatNo")}`}</li>
-              </ul>
-            </>
-          ) : (
-            <p className="tv-compat-detail">…</p>
-          )}
-        </details>
-
-        <div className="tv-signal-host">
-          <label htmlFor="tv-signal-input">{t("tv.signalHost")}</label>
-          <input
-            id="tv-signal-input"
-            className="tv-signal-input"
-            dir="ltr"
-            placeholder="ws://192.168.1.5:9000/peerjs"
-            value={signalHostInput}
-            onChange={(event) => setSignalHostInput(event.target.value)}
-          />
-          <button type="button" className="tv-btn tv-btn-ghost tv-signal-apply" onClick={() => applySignalHost()}>
-            {t("tv.signalApply")}
-          </button>
-          {signalApplied ? <span className="tv-signal-applied">{t("tv.signalApplied")}</span> : null}
-          <p className="tv-hint">{t("tv.signalHint")}</p>
-        </div>
-
-        <p className="tv-nav-hint">🎮 {t("tv.navHint")}</p>
+      <div className="tv-signal-host">
+        <label htmlFor="tv-signal-input">{t("tv.signalHost")}</label>
+        <input
+          id="tv-signal-input"
+          className="tv-signal-input"
+          dir="ltr"
+          placeholder="ws://192.168.1.5:9000/peerjs"
+          value={signalHostInput}
+          onChange={(event) => setSignalHostInput(event.target.value)}
+        />
+        <button type="button" className="tv-btn tv-btn-ghost tv-signal-apply" onClick={() => applySignalHost()}>
+          {t("tv.signalApply")}
+        </button>
+        {signalApplied ? <span className="tv-signal-applied">{t("tv.signalApplied")}</span> : null}
+        <p className="tv-hint">{t("tv.signalHint")}</p>
       </div>
 
       {state === "starting" ? (
@@ -256,16 +330,16 @@ export function TvClient() {
         </div>
       ) : state === "error" ? (
         <div className="tv-center">
-          <h1>⚠️ {error}</h1>
+          <h1>{error}</h1>
           <button type="button" className="tv-btn" onClick={() => void initReceiver()}>
+            <RotateCcw size={20} aria-hidden="true" />
             {t("tv.retry")}
           </button>
-          <p className="tv-hint">
-            {t("tv.networkHint")}
-          </p>
+          <p className="tv-hint">{t("tv.networkHint")}</p>
         </div>
       ) : state === "ready" ? (
         <div className="tv-ready">
+          {/* RTL: QR أولاً = يمين؛ LTR: QR أولاً = يسار (يُعكس تلقائياً) */}
           <div className="tv-qr-box">
             <div ref={qrHostRef}>{!qrCanvas ? <p>…</p> : null}</div>
             <h2>{t("tv.scanTitle")}</h2>
@@ -274,12 +348,14 @@ export function TvClient() {
             </p>
           </div>
           <div className="tv-instructions">
-            <h3>{t("tv.howTitle")}</h3>
-            <ol>
-              <li>{t("tv.how1")}</li>
-              <li>{t("tv.how2")}</li>
-              <li>{t("tv.how3")}</li>
-              <li>{t("tv.how4")}</li>
+            <h3>
+              <Monitor size={26} aria-hidden="true" />
+              {t("tv.howTitle")}
+            </h3>
+            <ol className="tv-steps">
+              <li data-n="1">{t("tv.how1")}</li>
+              <li data-n="2">{t("tv.how2")}</li>
+              <li data-n="3">{t("tv.how3")}</li>
             </ol>
             <p className="tv-hint">{t("tv.sameNetwork")}</p>
           </div>
@@ -296,16 +372,34 @@ export function TvClient() {
         </div>
       ) : state === "complete" && receivedFile ? (
         <div className="tv-center tv-complete">
-          <h1>✓ {t("tv.complete")}</h1>
+          <h1>{t("tv.complete")}</h1>
           <p className="tv-file-name">{receivedFile.name}</p>
           <p className="tv-file-size">{formatBytes(receivedFile.size)}</p>
 
-          {showMedia && isMedia(receivedFile.mime) ? (
+          {isMedia(receivedFile.mime) ? (
             <div className="tv-media">
               {receivedFile.mime.startsWith("video/") ? (
-                <video src={receivedFile.url} controls autoPlay />
+                <video
+                  ref={(node) => {
+                    mediaRef.current = node;
+                  }}
+                  src={receivedFile.url}
+                  controls={false}
+                  autoPlay={false}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                />
               ) : receivedFile.mime.startsWith("audio/") ? (
-                <audio src={receivedFile.url} controls autoPlay />
+                <audio
+                  ref={(node) => {
+                    mediaRef.current = node;
+                  }}
+                  src={receivedFile.url}
+                  controls={false}
+                  autoPlay={false}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={receivedFile.url} alt={receivedFile.name} />
@@ -314,19 +408,28 @@ export function TvClient() {
           ) : null}
 
           <div className="tv-actions">
-            <a className="tv-btn" href={receivedFile.url} download={receivedFile.name}>
-              💾 {t("tv.saveFile")}
-            </a>
-            {isMedia(receivedFile.mime) ? (
-              <button
-                type="button"
-                className="tv-btn tv-btn-ghost"
-                onClick={() => setShowMedia((current) => !current)}
-              >
-                {showMedia ? t("tv.hidePlayer") : t("tv.showPlayer")}
+            <button type="button" className="tv-btn" onClick={() => void saveFile()}>
+              <Download size={20} aria-hidden="true" />
+              {t("tv.saveFile")}
+            </button>
+            {isMedia(receivedFile.mime) && !receivedFile.mime.startsWith("image/") ? (
+              <button type="button" className="tv-btn tv-btn-ghost" onClick={togglePlay}>
+                {isPlaying ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
+                {isPlaying
+                  ? lang === "ar" ? "إيقاف مؤقت" : "Pause"
+                  : lang === "ar" ? "تشغيل" : "Play"}
+              </button>
+            ) : null}
+            {receivedFile.mime.startsWith("audio/") || receivedFile.mime.startsWith("video/") ? (
+              <button type="button" className="tv-btn tv-btn-ghost" onClick={toggleMute}>
+                {isMuted ? <VolumeX size={20} aria-hidden="true" /> : <Volume2 size={20} aria-hidden="true" />}
+                {isMuted
+                  ? lang === "ar" ? "إلغاء الكتم" : "Unmute"
+                  : lang === "ar" ? "كتم" : "Mute"}
               </button>
             ) : null}
             <button type="button" className="tv-btn tv-btn-ghost" onClick={() => void initReceiver()}>
+              <RotateCcw size={20} aria-hidden="true" />
               {t("tv.receiveAnother")}
             </button>
           </div>

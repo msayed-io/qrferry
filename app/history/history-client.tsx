@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "../lang-provider";
+import { Check, Lock, PenLine } from "lucide-react";
 import {
   clearHistory,
   getHistoryEntries,
@@ -67,9 +68,9 @@ export function HistoryClient() {
                     <td title={entry.name}>{entry.name}</td>
                     <td>{formatBytes(entry.size)}</td>
                     <td>{entry.fileCount}</td>
-                    <td>{entry.encrypted ? "🔒" : "—"}</td>
-                    <td>{entry.signed ? "✍️" : "—"}</td>
-                    <td>{entry.verified ? "✓" : "—"}</td>
+                    <td>{entry.encrypted ? <Lock size={13} aria-hidden="true" /> : "—"}</td>
+                    <td>{entry.signed ? <PenLine size={13} aria-hidden="true" /> : "—"}</td>
+                    <td>{entry.verified ? <Check size={13} aria-hidden="true" /> : "—"}</td>
                     <td>{formatTime(entry.time)}</td>
                   </tr>
                 ))}

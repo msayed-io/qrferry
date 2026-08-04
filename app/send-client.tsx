@@ -10,6 +10,18 @@ import {
   useState,
 } from "react";
 import { useI18n } from "./lang-provider";
+import {
+  Camera,
+  Flame,
+  Folder,
+  Lock,
+  LockOpen,
+  Maximize,
+  PenLine,
+  Radio,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
 import { compressForTransferViaWorker } from "@/lib/compression-worker";
 import { encryptPayload } from "@/lib/encryption";
 import {
@@ -1094,7 +1106,7 @@ export function SendClient() {
                 disabled={processing}
                 onClick={() => folderInputRef.current?.click()}
               >
-                <span aria-hidden="true">📁</span>
+                <Folder size={16} aria-hidden="true" />
                 {lang === "ar" ? "اختيار مجلد" : "Pick a folder"}
               </button>
               <p>{t("send.drop")}</p>
@@ -1141,7 +1153,7 @@ export function SendClient() {
                 <span className="fmeta">
                   {formatBytes(totalOriginalSize)}
                   {encryptEnabled && password.trim().length >= 4 ? (
-                    <span className="encrypted-badge">🔒 {t("send.encryptedBadge")}</span>
+                    <span className="encrypted-badge"><Lock size={11} aria-hidden="true" /> {t("send.encryptedBadge")}</span>
                   ) : null}
                 </span>
                 <button type="button" onClick={() => inputRef.current?.click()}>
@@ -1161,7 +1173,7 @@ export function SendClient() {
                 onClick={() => changeEncryption(!encryptEnabled)}
               >
                 <span className="adv-glyph" aria-hidden="true">
-                  {encryptEnabled ? "🔓" : "🔒"}
+                  {encryptEnabled ? <LockOpen size={14} aria-hidden="true" /> : <Lock size={14} aria-hidden="true" />}
                 </span>
                 <span>
                   {encryptEnabled ? t("send.encryptPanel.on") : t("send.encryptPanel.off")}
@@ -1207,7 +1219,7 @@ export function SendClient() {
                 aria-pressed={burnEnabled}
                 onClick={() => toggleBurn(!burnEnabled)}
               >
-                <span className="adv-glyph" aria-hidden="true">🔥</span>
+                <span className="adv-glyph" aria-hidden="true"><Flame size={15} /></span>
                 <span>{t("send.burnLabel")}</span>
               </button>
               <p className="adv-hint">{t("send.burnHint")}</p>
@@ -1221,7 +1233,7 @@ export function SendClient() {
                 aria-pressed={signEnabled}
                 onClick={() => toggleSign(!signEnabled)}
               >
-                <span className="adv-glyph" aria-hidden="true">✍️</span>
+                <span className="adv-glyph" aria-hidden="true"><PenLine size={15} /></span>
                 <span>{t("send.signLabel")}</span>
               </button>
               {signEnabled ? (
@@ -1255,7 +1267,7 @@ export function SendClient() {
                 aria-pressed={broadcastEnabled}
                 onClick={() => setBroadcastEnabled((current) => !current)}
               >
-                <span className="adv-glyph" aria-hidden="true">📡</span>
+                <span className="adv-glyph" aria-hidden="true"><Radio size={15} /></span>
                 <span>{t("send.broadcastLabel")}</span>
               </button>
               <p className="adv-hint">{t("send.broadcastHint")}</p>
@@ -1453,7 +1465,7 @@ export function SendClient() {
               disabled={!transfer}
               aria-label={t("send.qr.fullscreen")}
             >
-              ⛶
+              <Maximize size={18} aria-hidden="true" />
             </button>
           </div>
 
@@ -1533,7 +1545,7 @@ export function SendClient() {
           {/* توصية النقل السريع للملفات الكبيرة (لم يُجهَّز البث تلقائياً) */}
           {fileData && !transfer && !processing ? (
             <p className="fast-recommend" role="status">
-              ⚡ {t("send.fastRecommend")}
+              <Zap size={14} aria-hidden="true" /> {t("send.fastRecommend")}
             </p>
           ) : null}
 
@@ -1548,7 +1560,7 @@ export function SendClient() {
               setFastProgress(null);
             }}
           >
-            <span aria-hidden="true">⚡</span>
+            <Zap size={20} aria-hidden="true" />
             <span>
               <strong>{t("send.fast")}</strong>
               <small>{t("send.fastDesc")}</small>
@@ -1609,7 +1621,7 @@ export function SendClient() {
             className="modal-card fast-modal"
             onClick={(event) => event.stopPropagation()}
           >
-            <h3>⚡ {t("send.fastModalTitle")}</h3>
+            <h3><Zap size={22} aria-hidden="true" /> {t("send.fastModalTitle")}</h3>
 
             {/* الفيديو والكانفاس مثبّتان دائماً داخل النافذة (مخفيان عند عدم المسح)
                 حتى يتوفر المرجع فوراً عند بدء المسح — يتجنب سباق تركيب React. */}
@@ -1651,7 +1663,7 @@ export function SendClient() {
                     className="primary-action fast-start"
                     onClick={() => void startFastScan()}
                   >
-                    📷 {t("send.fastScan")}
+                    <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
                   </button>
                   <button type="button" className="modal-close" onClick={closeFastModal}>
                     {t("send.fastCancel")}
@@ -1662,12 +1674,12 @@ export function SendClient() {
               <>
                 <p className="fast-status">{fastStatus}</p>
                 {fastCameraInfo ? (
-                  <p className="fast-camera-info">📷 {t("send.fastRes", { info: fastCameraInfo })}</p>
+                  <p className="fast-camera-info"><Camera size={12} aria-hidden="true" /> {t("send.fastRes", { info: fastCameraInfo })}</p>
                 ) : null}
                 <p className="fast-hint">{t("send.fastHintKeepQr")}</p>
                 <div className="fast-actions">
                   <button type="button" className="fast-switch-cam" onClick={switchFastCamera}>
-                    🔄 {t("send.fastSwitchCamera")}
+                    <RefreshCw size={16} aria-hidden="true" /> {t("send.fastSwitchCamera")}
                   </button>
                   <button type="button" className="modal-close" onClick={stopFastScanning}>
                     {t("send.fastStop")}
@@ -1712,7 +1724,7 @@ export function SendClient() {
                 <p className="fast-hint">{t("send.fastFallback")}</p>
                 <div className="fast-actions">
                   <button type="button" className="primary-action" onClick={() => void startFastScan()}>
-                    📷 {t("send.fastScan")}
+                    <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
                   </button>
                   <button type="button" className="modal-close" onClick={closeFastModal}>
                     {t("send.fastCancel")}
