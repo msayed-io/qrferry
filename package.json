@@ -11,7 +11,7 @@
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run test:codec && node --import tsx --test tests/features.test.ts && npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run test:unit && npm run build && node --test tests/rendered-html.test.mjs",
     "test:codec": "node --import tsx --test tests/codec.test.ts",
     "test:e2e": "npm run e2e:fixture && playwright test",
     "e2e:fixture": "node --import tsx scripts/make-e2e-fixture.ts",
@@ -21,7 +21,8 @@
     "deploy": "npm run build && npx wrangler deploy --config wrangler.jsonc",
     "build:vercel": "next build --webpack",
     "start:vercel": "next start",
-    "test:e2e:large": "playwright test e2e/repro-61mb.spec.ts"
+    "test:e2e:large": "playwright test e2e/repro-61mb.spec.ts",
+    "test:unit": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",

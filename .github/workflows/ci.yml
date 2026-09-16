@@ -30,8 +30,8 @@ jobs:
       - name: فحص الأنواع (TypeScript)
         run: npx tsc --noEmit
 
-      - name: اختبارات الكوديك (Codec + التشفير)
-        run: npm run test:codec
+      - name: اختبارات الوحدات (النقل + التشفير + استقبال الصوت)
+        run: npm run test:unit
 
       - name: البناء الإنتاجي
         run: npm run build

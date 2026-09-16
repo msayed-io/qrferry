@@ -1,433 +1,533 @@
 "use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Download,
   FolderOpen,
   Monitor,
-  Play,
-  Pause,
   RotateCcw,
   Smartphone,
   Trash2,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
-import { FastReceiver, getPeerServerConfig, setPeerServerConfig, type IncomingTransferFile } from "@/lib/fast-transfer";
+import {
+  FastReceiver,
+  DEFAULT_PEER_SERVER,
+  getPeerServerConfig,
+  setPeerServerConfig,
+  type IncomingTransferFile,
+} from "@/lib/fast-transfer";
 import { renderRawQr } from "@/lib/qr-renderer";
 import { useI18n } from "../lang-provider";
-import { parsePeerServerUrl } from "@/lib/tv-compat";
+import {
+  checkTvCompatibility,
+  parsePeerServerUrl,
+  type TvCompatibility,
+} from "@/lib/tv-compat";
 import {
   storeReceivedFile,
   listReceivedFiles,
   loadReceivedFileBytes,
   deleteReceivedFile,
-  type ReceivedStoredFile,
+  type ReceivedFileMetadata,
 } from "@/lib/received-files-store";
-
-type TvState = "starting" | "ready" | "receiving" | "complete" | "error" | "phone-blocked";
-
-type ReceivedFile = {
-  name: string;
-  mime: string;
-  size: number;
-  url: string;
-};
+import {
+  unpackReceivedDelivery,
+  receivedBlob,
+  type ReceivedMediaFile,
+  type ReceivedDelivery,
+} from "@/lib/received-media";
+import { getTrustedKeys } from "@/lib/identity-store";
+import { saveReceivedFile } from "@/lib/save-received-file";
+import { ReceivedPlayer, type DisplayFile } from "./received-player";
 
 declare global {
   interface Window {
+    __qrferryTestMode?: boolean;
     __qrferryTvInfo?: { peerId: string; passcode: string; payload: string };
-    __qrferryTvReceived?: { name: string; mime: string; size: number; bytes: number[] };
+    __qrferryTvReceived?: {
+      name: string;
+      mime: string;
+      size: number;
+      bytes: number[];
+    };
     __qrferryTvModules?: { n: number; data: number[] };
   }
 }
+type TvState =
+  | "starting"
+  | "ready"
+  | "receiving"
+  | "verifying"
+  | "complete"
+  | "error";
+type LibraryState = "idle" | "saving" | "saved" | "failed" | "loaded";
+const VERSION = "TV-RECEIVE-2";
 
-/**
- * وضع الشاشة الكبيرة (تلفاز/تابلت/لابتوب): يعرض رمز اقتران QR على يمين
- * الشاشة (في RTL) وتعليمات أفقية على اليسار، ويستقبل الملف عبر الشبكة
- * المحلية (P2P مشفر) ثم يحفظه أو يشغّله. ملاحة كاملة بالريموت.
- *
- * ملاحظات معمارية:
- * - البايتات تُحفظ في ref (لا في React state) حتى لا تُحمَّل 61MB مع كل
- *   إعادة رسم — يُعرض الملف عبر Blob URL فقط.
- * - زر الحفظ يستخدم File System Access API عند توفره (حفظ حقيقي)، مع
- *   سقوط آمن إلى تنزيل `<a download>`.
- * - الصفحة مخصصة للأجهزة الكبيرة؛ تُحجب على الهواتف برسالة واضحة.
- */
 export function TvClient() {
   const { t, lang } = useI18n();
+  const ar = lang === "ar";
   const [state, setState] = useState<TvState>("starting");
+  const [isPhone, setIsPhone] = useState(false);
   const [passcode, setPasscode] = useState("");
   const [qrCanvas, setQrCanvas] = useState<HTMLCanvasElement | null>(null);
+  const qrHost = useRef<HTMLDivElement>(null);
+  const receiver = useRef<FastReceiver | null>(null);
+  const generation = useRef(0);
+  const deliveryJob = useRef(0);
   const [progress, setProgress] = useState({ received: 0, total: 0 });
   const [status, setStatus] = useState("");
-  const [receivedFile, setReceivedFile] = useState<ReceivedFile | null>(null);
   const [error, setError] = useState("");
-  const receiverRef = useRef<FastReceiver | null>(null);
-  const qrHostRef = useRef<HTMLDivElement>(null);
+  const [libraryError, setLibraryError] = useState("");
+  const [libraryState, setLibraryState] = useState<LibraryState>("idle");
+  const [library, setLibrary] = useState<ReceivedFileMetadata[]>([]);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [files, setFiles] = useState<
+    Array<{ name: string; mime: string; size: number }>
+  >([]);
+  const bytes = useRef<ReceivedMediaFile[]>([]);
+  const activeIndex = useRef(0);
+  const activeUrl = useRef<string | null>(null);
+  const [file, setFile] = useState<DisplayFile | null>(null);
+  const [signature, setSignature] =
+    useState<ReceivedDelivery["signature"]>("unsigned");
+  const [checksum, setChecksum] = useState<number | null>(null);
   const [signalingHost, setSignalingHost] = useState("");
   const [signalHostInput, setSignalHostInput] = useState("");
   const [signalApplied, setSignalApplied] = useState(false);
-  const [isPhone, setIsPhone] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [receivedFiles, setReceivedFiles] = useState<Array<Omit<ReceivedStoredFile, "data">>>([]);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [libraryError, setLibraryError] = useState("");
-  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
-  const receivedBytesRef = useRef<Uint8Array | null>(null);
+  const [compat, setCompat] = useState<TvCompatibility | null>(null);
+  const [userAgent, setUserAgent] = useState("");
+  const [secure, setSecure] = useState(false);
 
-  // كشف الهاتف: شاشة صغيرة + مؤشر لمس خشن (coarse) = هاتف
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-      const small = window.innerWidth < 720;
-      setIsPhone(coarse && small);
-    }, 0);
-    return () => window.clearTimeout(timer);
+  const invalidatePendingWork = useCallback(() => {
+    generation.current++;
+    deliveryJob.current++;
   }, []);
 
-  const handleFile = useCallback(async (file: IncomingTransferFile) => {
-    const url = URL.createObjectURL(
-      new Blob([file.bytes.buffer as BlobPart], { type: file.mime }),
-    );
-    // البايتات في ref فقط (لا تُحمل مع إعادة رسم React)
-    receivedBytesRef.current = file.bytes;
-    setReceivedFile({ name: file.name, mime: file.mime, size: file.size, url });
-    setState("complete");
-    setIsPlaying(false);
-    setIsMuted(false);
-    navigator.vibrate?.([80, 40, 120]);
-
-    // الحفظ التلقائي الفوري: نخزّن الملف محلياً (IndexedDB) لحظة وصوله،
-    // فلا يضيع أبداً حتى لو أُعيد تحميل الصفحة أو أُغلق المتصفح.
-    try {
-      await storeReceivedFile({
-        name: file.name,
-        mime: file.mime,
-        bytes: file.bytes,
-      });
-      setLibraryError("");
-      const list = await listReceivedFiles(50);
-      setReceivedFiles(list);
-    } catch {
-      setLibraryError(
-        lang === "ar"
-          ? "تعذّر الحفظ التلقائي في هذا المتصفح — استخدم زر الحفظ فوراً قبل إغلاق الصفحة."
-          : "Automatic save failed in this browser — use Save now before closing.",
-      );
+  const releaseUrl = useCallback(() => {
+    if (activeUrl.current) {
+      URL.revokeObjectURL(activeUrl.current);
+      activeUrl.current = null;
     }
+  }, []);
+  const selectFile = useCallback(
+    (index: number) => {
+      const f = bytes.current[index];
+      if (!f) return;
+      const url = URL.createObjectURL(receivedBlob(f.bytes, f.mime));
+      releaseUrl();
+      activeUrl.current = url;
+      activeIndex.current = index;
+      setFile({ name: f.name, mime: f.mime, size: f.bytes.byteLength, url });
+    },
+    [releaseUrl],
+  );
+  const displayDelivery = useCallback(
+    (delivery: ReceivedDelivery) => {
+      bytes.current = delivery.files;
+      setFiles(
+        delivery.files.map((f) => ({
+          name: f.name,
+          mime: f.mime,
+          size: f.bytes.byteLength,
+        })),
+      );
+      setSignature(delivery.signature);
+      selectFile(0);
+      setState("complete");
+    },
+    [selectFile],
+  );
 
-    // هوك اختبار (يقرأ من ref — لا نسخ ضخم في الـ UI)
-    window.__qrferryTvReceived = {
-      name: file.name,
-      mime: file.mime,
-      size: file.size,
-      bytes: Array.from(file.bytes),
-    };
-  }, [lang]);
+  const handleFile = useCallback(
+    async (incoming: IncomingTransferFile) => {
+      const gen = generation.current,
+        job = ++deliveryJob.current;
+      const current = () =>
+        gen === generation.current && job === deliveryJob.current;
+      setState("verifying");
+      setError("");
+      setLibraryError("");
+      setLibraryState("idle");
+      try {
+        const delivery = await unpackReceivedDelivery(
+          incoming,
+          await getTrustedKeys(),
+        );
+        if (!current()) return;
+        setChecksum(incoming.checksum ?? null);
+        displayDelivery(delivery);
+        // Only explicit, injected test contexts get byte-array hooks; never expand large files in production.
+        if (window.__qrferryTestMode)
+          window.__qrferryTvReceived = {
+            name: incoming.name,
+            mime: incoming.mime,
+            size: incoming.size,
+            bytes: Array.from(incoming.bytes),
+          };
+        setLibraryState("saving");
+        try {
+          // Save actual extracted files, not an opaque QFPA container. Playback is independent of IndexedDB.
+          for (const f of delivery.files) {
+            if (!current()) return;
+            await storeReceivedFile(f);
+          }
+          if (!current()) return;
+          setLibraryState("saved");
+          setLibrary(await listReceivedFiles(50));
+        } catch (cause) {
+          if (!current()) return;
+          setLibraryState("failed");
+          setLibraryError(
+            (ar
+              ? "وصلت البيانات، لكن الحفظ داخل مكتبة المتصفح فشل. الملف متاح الآن ما دامت الصفحة مفتوحة. السبب: "
+              : "Received, but saving in the browser library failed. The file is still available while this page remains open. Reason: ") +
+              (cause instanceof Error ? cause.message : String(cause)),
+          );
+        }
+      } catch (cause) {
+        if (current()) {
+          setState("error");
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
+      }
+    },
+    [ar, displayDelivery],
+  );
 
   const initReceiver = useCallback(async () => {
+    const gen = ++generation.current;
+    deliveryJob.current++;
+    receiver.current?.destroy();
+    receiver.current = null;
+    releaseUrl();
+    bytes.current = [];
+    setFile(null);
+    setFiles([]);
+    setQrCanvas(null);
+    if (window.__qrferryTestMode) {
+      delete window.__qrferryTvInfo;
+      delete window.__qrferryTvModules;
+      delete window.__qrferryTvReceived;
+    }
     setState("starting");
     setError("");
-    setReceivedFile(null);
-    receivedBytesRef.current = null;
+    setStatus("");
     setProgress({ received: 0, total: 0 });
-    receiverRef.current?.destroy();
-    try {
-      const receiver = await FastReceiver.create(
-        handleFile,
-        (received, total) => setProgress({ received, total }),
-        (message) => setStatus(message),
+    setChecksum(null);
+    setLibraryState("idle");
+    const phone =
+      (window.matchMedia?.("(pointer: coarse)").matches ?? false) &&
+      window.innerWidth < 720;
+    setIsPhone(phone);
+    if (phone) return;
+    const capabilities = checkTvCompatibility();
+    setCompat(capabilities);
+    setUserAgent(navigator.userAgent);
+    setSecure(window.isSecureContext);
+    const config = getPeerServerConfig();
+    setSignalingHost(
+      `${config.secure ? "wss" : "ws"}://${config.host}:${config.port}${config.path}`,
+    );
+    if (!capabilities.webRtc || !capabilities.webSocket) {
+      setState("error");
+      setError(
+        ar
+          ? "هذا المتصفح لا يدعم WebRTC/WebSocket اللازمة للاستقبال. استخدم متصفحًا/جهازًا متوافقًا."
+          : "This browser lacks WebRTC/WebSocket support.",
       );
-      receiverRef.current = receiver;
-      setPasscode(receiver.passcode);
-      window.__qrferryTvInfo = {
-        peerId: receiver.peerId,
-        passcode: receiver.passcode,
-        payload: receiver.payload,
-      };
+      return;
+    }
+    try {
+      const next = await FastReceiver.create(
+        (incoming) => {
+          if (generation.current === gen) void handleFile(incoming);
+        },
+        (received, total) => {
+          if (generation.current !== gen) return;
+          setProgress({ received, total });
+          setState("receiving");
+        },
+        (message) => {
+          if (generation.current === gen) setStatus(message);
+        },
+        (message) => {
+          if (generation.current === gen) {
+            setError(message);
+            setState("error");
+          }
+        },
+      );
+      if (gen !== generation.current) {
+        next.destroy();
+        return;
+      }
+      receiver.current = next;
+      setPasscode(next.passcode);
+      if (window.__qrferryTestMode)
+        window.__qrferryTvInfo = {
+          peerId: next.peerId,
+          passcode: next.passcode,
+          payload: next.payload,
+        };
       const image = await renderRawQr(
-        new TextEncoder().encode(receiver.payload),
+        new TextEncoder().encode(next.payload),
         7,
         "M",
         8,
       );
+      if (gen !== generation.current) return;
       const canvas = document.createElement("canvas");
       canvas.width = image.width;
       canvas.height = image.height;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("no 2d");
-      context.putImageData(image, 0, 0);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("QR canvas unavailable");
+      ctx.putImageData(image, 0, 0);
       setQrCanvas(canvas);
-
-      // هوك اختبار: مصفوفة وحدات QR لاختبارات E2E (كاميرا محاكاة)
-      try {
-        const scale = 8;
-        const n = Math.round(image.width / scale);
-        const modules = new Uint8Array(n * n);
-        for (let y = 0; y < n; y += 1) {
-          for (let x = 0; x < n; x += 1) {
-            const pixel = (y * scale) * image.width + x * scale;
-            modules[y * n + x] = image.data[pixel * 4] < 128 ? 1 : 0;
-          }
-        }
-        window.__qrferryTvModules = { n, data: Array.from(modules) };
-      } catch {
-        // الهوك اختياري
+      if (window.__qrferryTestMode) {
+        const scale = 8,
+          n = Math.round(image.width / scale),
+          data = [];
+        for (let y = 0; y < n; y++)
+          for (let x = 0; x < n; x++)
+            data.push(
+              image.data[(y * scale * image.width + x * scale) * 4] < 128
+                ? 1
+                : 0,
+            );
+        window.__qrferryTvModules = { n, data };
       }
-
       setState("ready");
     } catch (cause) {
+      if (gen !== generation.current) return;
+      receiver.current?.destroy();
+      receiver.current = null;
       setState("error");
       setError(
-        cause instanceof Error
+        cause instanceof Error && cause.message
           ? cause.message
-          : "تعذّر تشغيل وضع الاستقبال. تأكد من اتصال الجهاز بالشبكة.",
+          : ar
+            ? "تعذّر إنشاء جلسة الاستقبال. افحص الشبكة وخادم الاقتران."
+            : "Could not create the receiver. Check signaling and connectivity.",
       );
     }
-  }, [handleFile]);
+  }, [ar, handleFile, releaseUrl]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void initReceiver(), 0);
-    const configTimer = window.setTimeout(() => {
-      const config = getPeerServerConfig();
-      setSignalingHost(
-        config.secure ? `wss://${config.host}:${config.port}${config.path}` : `ws://${config.host}:${config.port}${config.path}`,
-      );
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void initReceiver();
+      void listReceivedFiles(50)
+        .then((rows) => {
+          if (!cancelled) setLibrary(rows);
+        })
+        .catch((cause) => {
+          if (!cancelled)
+            setLibraryError(
+              (ar ? "المكتبة غير متاحة: " : "Library unavailable: ") +
+                (cause instanceof Error ? cause.message : String(cause)),
+            );
+        });
     }, 0);
-    const libraryTimer = window.setTimeout(() => {
-      void listReceivedFiles(50).then((list) => setReceivedFiles(list));
-    }, 0);
+    // These are generation counters, not DOM refs: invalidate pending async work on unmount.
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
-      window.clearTimeout(configTimer);
-      window.clearTimeout(libraryTimer);
-      receiverRef.current?.destroy();
+      invalidatePendingWork();
+      receiver.current?.destroy();
+      releaseUrl();
+      bytes.current = [];
     };
-  }, [initReceiver]);
-
-  // ملاحة الريموت: الأسهم تتنقل بين العناصر القابلة للتركيز، و OK تُفعّل
+  }, [ar, initReceiver, releaseUrl, invalidatePendingWork]);
+  useEffect(() => {
+    if (qrCanvas && qrHost.current) qrHost.current.replaceChildren(qrCanvas);
+  }, [qrCanvas]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const focusables = Array.from(
-        document.querySelectorAll<HTMLElement>(".tv-btn, .tv-signal-apply, input.tv-signal-input"),
-      );
-      if (focusables.length === 0) return;
-      const index = focusables.indexOf(document.activeElement as HTMLElement);
-      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-        event.preventDefault();
-        focusables[(index + 1) % focusables.length]?.focus();
-      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-        event.preventDefault();
-        focusables[(index - 1 + focusables.length) % focusables.length]?.focus();
-      }
+      // Leave cursor movement in inputs/native controls to the browser.
+      if ((document.activeElement as HTMLElement)?.matches("input,audio,video"))
+        return;
+      if (
+        !["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)
+      )
+        return;
+      const elements = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          ".tv-btn:not(:disabled), .tv-library-item, .tv-file-select, input.tv-signal-input, .tv-diagnostics summary",
+        ),
+      ).filter((el) => el.getClientRects().length > 0);
+      if (!elements.length) return;
+      event.preventDefault();
+      const i = elements.indexOf(document.activeElement as HTMLElement),
+        step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+      elements[(i + step + elements.length) % elements.length]?.focus();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state]);
-
-  const applySignalHost = useCallback(() => {
-    const parsed = parsePeerServerUrl(signalHostInput.trim());
+  }, []);
+  const applySignal = () => {
+    const value = signalHostInput.trim(),
+      parsed = value ? parsePeerServerUrl(value) : DEFAULT_PEER_SERVER;
     if (!parsed) {
-      setSignalApplied(false);
+      setError(ar ? "عنوان خادم غير صالح." : "Invalid signaling URL.");
+      return;
+    }
+    if (
+      window.location.protocol === "https:" &&
+      !parsed.secure &&
+      !["localhost", "127.0.0.1"].includes(parsed.host)
+    ) {
+      setError(
+        ar
+          ? "استخدم wss:// مع صفحة HTTPS لتجنب حظر الاتصال غير الآمن."
+          : "Use wss:// with an HTTPS page to avoid mixed-content blocking.",
+      );
       return;
     }
     setPeerServerConfig(parsed);
     setSignalApplied(true);
-    window.setTimeout(() => void initReceiver(), 300);
-  }, [initReceiver, signalHostInput]);
-
-  useEffect(() => {
-    if (qrCanvas && qrHostRef.current) {
-      qrHostRef.current.replaceChildren(qrCanvas);
-    }
-  }, [qrCanvas]);
-
-  const percent =
-    progress.total > 0 ? Math.min(100, Math.round((progress.received / progress.total) * 100)) : 0;
-  const formatBytes = (value: number) => {
-    if (value < 1024) return `${value} B`;
-    const units = ["KB", "MB", "GB"];
-    let v = value;
-    let unit = units[0];
-    for (let index = 1; index < units.length && v >= 1024; index += 1) {
-      v /= 1024;
-      unit = units[index];
-    }
-    return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)} ${unit}`;
+    void initReceiver();
   };
-
-  const isMedia = (mime: string) => mime.startsWith("video/") || mime.startsWith("audio/") || mime.startsWith("image/");
-
-  /** هل هذا المتصفح يدعم تشغيل هذه الصيغة؟ (يُستخدم لرسالة واضحة بدل زر صامت). */
-  const canPlayMime = useCallback((mime: string): boolean => {
+  const openFromLibrary = async (entry: ReceivedFileMetadata) => {
+    const gen = generation.current,
+      job = ++deliveryJob.current;
     try {
-      const media = document.createElement("video");
-      return media.canPlayType(mime) !== "";
-    } catch {
-      return true;
+      const data = await loadReceivedFileBytes(entry.id);
+      if (!data)
+        throw new Error(
+          ar ? "الملف لم يعد موجودًا." : "File no longer available.",
+        );
+      const delivery = await unpackReceivedDelivery(
+        { ...entry, bytes: new Uint8Array(data) },
+        await getTrustedKeys(),
+      );
+      if (gen !== generation.current || job !== deliveryJob.current) return;
+      displayDelivery(delivery);
+      setChecksum(null);
+      setLibraryState("loaded");
+      setError("");
+    } catch (cause) {
+      setLibraryError(cause instanceof Error ? cause.message : String(cause));
     }
-  }, []);
-
-  /**
-   * حفظ حقيقي للملف:
-   * 1) File System Access API (حفظ في نظام ملفات الجهاز) عند توفره.
-   * 2) سقوط آمن: تنزيل `<a download>` مع إضافة العنصر للـ DOM (أكثر موثوقية).
-   */
-  const saveFile = useCallback(async () => {
-    const file = receivedFile;
-    const bytes = receivedBytesRef.current;
-    if (!file || !bytes) return;
+  };
+  const removeFromLibrary = async (id: string) => {
     try {
-      const picker = (
-        window as unknown as {
-          showSaveFilePicker?: (options: {
-            suggestedName: string;
-            types?: Array<{ description: string; accept: Record<string, string[]> }>;
-          }) => Promise<{ createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }>;
-        }
-      ).showSaveFilePicker;
-      if (picker) {
-        const handle = await picker({
-          suggestedName: file.name,
-          types: file.mime ? [{ description: file.name, accept: { [file.mime]: [".bin"] } }] : undefined,
-        });
-        const writable = await handle.createWritable();
-        await writable.write(new Blob([bytes.buffer as BlobPart], { type: file.mime }));
-        await writable.close();
-        return;
-      }
-    } catch {
-      // المستخدم ألغى أو API غير متاح → ننتقل للسقوط الآمن
+      await deleteReceivedFile(id);
+      setLibrary(await listReceivedFiles(50));
+    } catch (cause) {
+      setLibraryError(cause instanceof Error ? cause.message : String(cause));
     }
-    // سقوط آمن: `<a download>` مدمج في DOM
-    const anchor = document.createElement("a");
-    anchor.href = file.url;
-    anchor.download = file.name;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  }, [receivedFile]);
-
-  const togglePlay = useCallback(() => {
-    const media = mediaRef.current;
-    if (!media) return;
-    if (media.paused) {
-      void media.play().then(() => setIsPlaying(true)).catch(() => undefined);
-    } else {
-      media.pause();
-      setIsPlaying(false);
-    }
-  }, []);
-
-  const toggleMute = useCallback(() => {
-    const media = mediaRef.current;
-    if (!media) return;
-    media.muted = !media.muted;
-    setIsMuted(media.muted);
-  }, []);
-
-  /** يفتح ملفاً من المكتبة المحلية: يجلب البايتات ويعرضها (تشغيل/حفظ). */
-  const openFromLibrary = useCallback(async (id: string) => {
-    const data = await loadReceivedFileBytes(id);
-    if (!data) {
-      setLibraryError(lang === "ar" ? "الملف غير موجود." : "File not found.");
-      return;
-    }
-    const entry = receivedFiles.find((file) => file.id === id);
-    if (!entry) return;
-    const bytes = new Uint8Array(data);
-    const url = URL.createObjectURL(new Blob([data], { type: entry.mime }));
-    receivedBytesRef.current = bytes;
-    setReceivedFile({ name: entry.name, mime: entry.mime, size: entry.size, url });
-    setState("complete");
-    setIsPlaying(false);
-    setIsMuted(false);
-    setLibraryError("");
-  }, [lang, receivedFiles]);
-
-  const removeFromLibrary = useCallback(async (id: string) => {
-    await deleteReceivedFile(id);
-    const list = await listReceivedFiles(50);
-    setReceivedFiles(list);
-  }, []);
-
-  // شاشة الهاتف: رسالة واضحة بدل التشغيل
-  if (isPhone) {
+  };
+  const percent = progress.total
+    ? Math.min(100, Math.round((progress.received / progress.total) * 100))
+    : 0;
+  const libraryLabels = {
+    idle: ar ? "لم يبدأ" : "Not started",
+    saving: ar ? "جارٍ الحفظ داخل المتصفح…" : "Saving in browser…",
+    saved: ar
+      ? "حُفظ داخل مكتبة المتصفح، وليس في مجلد تنزيلات الجهاز."
+      : "Saved in browser library, not the device Downloads folder.",
+    failed: ar
+      ? "فشل الحفظ المحلي؛ لا تغلق الصفحة."
+      : "Local save failed; keep this page open.",
+    loaded: ar ? "فُتح من مكتبة المتصفح." : "Opened from browser library.",
+  };
+  if (isPhone)
     return (
       <main className="tv-page tv-phone-blocked">
         <div className="tv-center tv-phone-msg">
-          <Smartphone size={72} strokeWidth={1.5} aria-hidden="true" />
-          <h1>{lang === "ar" ? "هذه الصفحة مخصصة للشاشات الكبيرة" : "This page is for large screens"}</h1>
-          <p className="tv-hint">
-            {lang === "ar"
-              ? "افتحها على التلفاز أو التابلت أو اللابتوب لاستقبال الملفات. على هاتفك استخدم صفحة «إرسال» لبدء النقل."
-              : "Open it on a TV, tablet, or laptop to receive files. On your phone use the “Send” page to start a transfer."}
+          <Smartphone size={72} />
+          <h1>
+            {ar
+              ? "هذه الصفحة مخصصة للشاشات الكبيرة"
+              : "This page is for large screens"}
+          </h1>
+          <p>
+            {ar
+              ? "افتحها على التلفاز أو التابلت أو اللابتوب."
+              : "Open it on a TV, tablet or laptop."}
           </p>
         </div>
       </main>
     );
-  }
-
   return (
     <main className={`tv-page tv-${state}`}>
       <header className="tv-header">
         <span className="tv-logo">QRFerry</span>
         <span className="tv-tag">{t("tv.tag")}</span>
-        <span className="tv-signaling" title="خادم التسيير">{signalingHost || "…"}</span>
+        <span className="tv-signaling">{signalingHost || "…"}</span>
       </header>
-
       <div className="tv-signal-host">
         <label htmlFor="tv-signal-input">{t("tv.signalHost")}</label>
         <input
           id="tv-signal-input"
           className="tv-signal-input"
           dir="ltr"
-          placeholder="ws://192.168.1.5:9000/peerjs"
+          placeholder="wss://your-server/peerjs"
           value={signalHostInput}
-          onChange={(event) => setSignalHostInput(event.target.value)}
+          onChange={(e) => setSignalHostInput(e.target.value)}
         />
-        <button type="button" className="tv-btn tv-btn-ghost tv-signal-apply" onClick={() => applySignalHost()}>
+        <button
+          type="button"
+          className="tv-btn tv-btn-ghost tv-signal-apply"
+          onClick={applySignal}
+        >
           {t("tv.signalApply")}
         </button>
-        {signalApplied ? <span className="tv-signal-applied">{t("tv.signalApplied")}</span> : null}
+        {signalApplied ? (
+          <span className="tv-signal-applied">{t("tv.signalApplied")}</span>
+        ) : null}
         <p className="tv-hint">{t("tv.signalHint")}</p>
         <button
           type="button"
           className="tv-btn tv-btn-ghost tv-library-btn"
-          onClick={() => setShowLibrary((current) => !current)}
+          onClick={() => {
+            setShowLibrary((v) => !v);
+            void listReceivedFiles(50)
+              .then(setLibrary)
+              .catch((cause) =>
+                setLibraryError(
+                  cause instanceof Error ? cause.message : String(cause),
+                ),
+              );
+          }}
         >
-          <FolderOpen size={20} aria-hidden="true" />
-          {lang === "ar" ? "الملفات المستلمة" : "Received files"}
-          {receivedFiles.length > 0 ? ` (${receivedFiles.length})` : ""}
+          <FolderOpen size={20} />
+          {ar ? "الملفات المستلمة" : "Received files"}
+          {library.length ? ` (${library.length})` : ""}
         </button>
       </div>
-
+      {libraryError ? (
+        <p className="tv-storage-error" role="alert">
+          {libraryError}
+        </p>
+      ) : null}
       {showLibrary ? (
         <div className="tv-library">
-          {libraryError ? <p className="tv-compat-bad">{libraryError}</p> : null}
-          {receivedFiles.length === 0 ? (
-            <p className="tv-hint">
-              {lang === "ar"
-                ? "لا توجد ملفات مستلمة بعد. أرسل ملفاً وسيُحفظ هنا تلقائياً."
-                : "No received files yet. Send a file and it will be saved here automatically."}
+          {!library.length ? (
+            <p>
+              {ar
+                ? "لا توجد ملفات محفوظة في مكتبة المتصفح بعد."
+                : "No files saved in browser library yet."}
             </p>
           ) : (
             <ul className="tv-library-list">
-              {receivedFiles.map((file) => (
-                <li key={file.id}>
-                  <button type="button" className="tv-library-item" onClick={() => void openFromLibrary(file.id)}>
-                    <span className="tv-library-name">{file.name}</span>
-                    <span className="tv-library-meta">{formatBytes(file.size)}</span>
+              {library.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    className="tv-library-item"
+                    onClick={() => void openFromLibrary(f)}
+                  >
+                    <span className="tv-library-name">{f.name}</span>
+                    <span className="tv-library-meta">
+                      {f.size.toLocaleString()} B
+                    </span>
                   </button>
                   <button
                     type="button"
                     className="tv-btn tv-btn-ghost tv-library-delete"
-                    aria-label={lang === "ar" ? "حذف" : "Delete"}
-                    onClick={() => void removeFromLibrary(file.id)}
+                    aria-label={ar ? "حذف" : "Delete"}
+                    onClick={() => void removeFromLibrary(f.id)}
                   >
-                    <Trash2 size={16} aria-hidden="true" />
+                    <Trash2 size={16} />
                   </button>
                 </li>
               ))}
@@ -435,25 +535,26 @@ export function TvClient() {
           )}
         </div>
       ) : null}
-
       {state === "starting" ? (
         <div className="tv-center">
           <h1>{t("tv.starting")}</h1>
         </div>
       ) : state === "error" ? (
         <div className="tv-center">
-          <h1>{error}</h1>
-          <button type="button" className="tv-btn" onClick={() => void initReceiver()}>
-            <RotateCcw size={20} aria-hidden="true" />
+          <h1 role="alert">{error}</h1>
+          <button
+            type="button"
+            className="tv-btn"
+            onClick={() => void initReceiver()}
+          >
+            <RotateCcw size={20} />
             {t("tv.retry")}
           </button>
-          <p className="tv-hint">{t("tv.networkHint")}</p>
         </div>
       ) : state === "ready" ? (
         <div className="tv-ready">
-          {/* RTL: QR أولاً = يمين؛ LTR: QR أولاً = يسار (يُعكس تلقائياً) */}
           <div className="tv-qr-box">
-            <div ref={qrHostRef}>{!qrCanvas ? <p>…</p> : null}</div>
+            <div ref={qrHost}>{!qrCanvas ? <p>…</p> : null}</div>
             <h2>{t("tv.scanTitle")}</h2>
             <p className="tv-code">
               {t("tv.sessionCode")}: <b>{passcode}</b>
@@ -461,7 +562,7 @@ export function TvClient() {
           </div>
           <div className="tv-instructions">
             <h3>
-              <Monitor size={26} aria-hidden="true" />
+              <Monitor size={26} />
               {t("tv.howTitle")}
             </h3>
             <ol className="tv-steps">
@@ -472,88 +573,111 @@ export function TvClient() {
             <p className="tv-hint">{t("tv.sameNetwork")}</p>
           </div>
         </div>
-      ) : state === "receiving" ? (
+      ) : state === "receiving" || state === "verifying" ? (
         <div className="tv-center">
-          <h1>{status || t("tv.receiving")}</h1>
+          <h1>
+            {state === "verifying"
+              ? ar
+                ? "فحص محتوى الملف وتجهيزه…"
+                : "Validating file content…"
+              : status || t("tv.receiving")}
+          </h1>
           <div className="tv-progress-track">
             <span style={{ width: `${percent}%` }} />
           </div>
           <p className="tv-progress-text">
-            {formatBytes(progress.received)} / {formatBytes(progress.total)} · {percent}%
+            {progress.received.toLocaleString()} /{" "}
+            {progress.total.toLocaleString()} B · {percent}%
           </p>
         </div>
-      ) : state === "complete" && receivedFile ? (
+      ) : state === "complete" && file ? (
         <div className="tv-center tv-complete">
           <h1>{t("tv.complete")}</h1>
-          <p className="tv-file-name">{receivedFile.name}</p>
-          <p className="tv-file-size">{formatBytes(receivedFile.size)}</p>
-
-          {isMedia(receivedFile.mime) ? (
-            <div className="tv-media">
-              {(receivedFile.mime.startsWith("video/") || receivedFile.mime.startsWith("audio/")) &&
-              !canPlayMime(receivedFile.mime) ? (
-                <div className="tv-codec-warning">
-                  {lang === "ar"
-                    ? "هذا الجهاز لا يدعم تشغيل هذه الصيغة مباشرة — لكن الملف محفوظ ويمكن نقله إلى جهاز آخر."
-                    : "This device cannot play this format directly — but the file is saved and can be moved to another device."}
-                </div>
-              ) : receivedFile.mime.startsWith("video/") ? (
-                <video
-                  ref={(node) => {
-                    mediaRef.current = node;
-                  }}
-                  src={receivedFile.url}
-                  controls={false}
-                  autoPlay={false}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-              ) : receivedFile.mime.startsWith("audio/") ? (
-                <audio
-                  ref={(node) => {
-                    mediaRef.current = node;
-                  }}
-                  src={receivedFile.url}
-                  controls={false}
-                  autoPlay={false}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={receivedFile.url} alt={receivedFile.name} />
-              )}
+          <p className="tv-integrity">
+            {checksum !== null
+              ? ar
+                ? "وصلت البايتات كاملة وتطابق CRC-32."
+                : "All bytes received and CRC-32 matched."
+              : ar
+                ? "تم تحميل بيانات الملف وفحص حجمها."
+                : "File bytes loaded and size checked."}
+          </p>
+          <p className="tv-library-status" role="status">
+            {libraryLabels[libraryState]}
+          </p>
+          {signature !== "unsigned" ? (
+            <p className="tv-signature-status">
+              {signature === "valid-trusted"
+                ? ar
+                  ? "توقيع صحيح بمفتاح موثوق."
+                  : "Valid signature, trusted key."
+                : ar
+                  ? "التوقيع صحيح رياضيًا، لكن هوية هذا المفتاح غير موثوقة على جهازك."
+                  : "Valid signature, but this key identity is not trusted on your device."}
+            </p>
+          ) : null}
+          {files.length > 1 ? (
+            <div className="tv-file-list">
+              {files.map((f, i) => (
+                <button
+                  type="button"
+                  className="tv-btn tv-file-select"
+                  key={i}
+                  onClick={() => selectFile(i)}
+                >
+                  {f.name}
+                </button>
+              ))}
             </div>
           ) : null}
-
-          <div className="tv-actions">
-            <button type="button" className="tv-btn" onClick={() => void saveFile()}>
-              <Download size={20} aria-hidden="true" />
-              {t("tv.saveFile")}
-            </button>
-            {isMedia(receivedFile.mime) && !receivedFile.mime.startsWith("image/") ? (
-              <button type="button" className="tv-btn tv-btn-ghost" onClick={togglePlay}>
-                {isPlaying ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
-                {isPlaying
-                  ? lang === "ar" ? "إيقاف مؤقت" : "Pause"
-                  : lang === "ar" ? "تشغيل" : "Play"}
-              </button>
-            ) : null}
-            {receivedFile.mime.startsWith("audio/") || receivedFile.mime.startsWith("video/") ? (
-              <button type="button" className="tv-btn tv-btn-ghost" onClick={toggleMute}>
-                {isMuted ? <VolumeX size={20} aria-hidden="true" /> : <Volume2 size={20} aria-hidden="true" />}
-                {isMuted
-                  ? lang === "ar" ? "إلغاء الكتم" : "Unmute"
-                  : lang === "ar" ? "كتم" : "Mute"}
-              </button>
-            ) : null}
-            <button type="button" className="tv-btn tv-btn-ghost" onClick={() => void initReceiver()}>
-              <RotateCcw size={20} aria-hidden="true" />
-              {t("tv.receiveAnother")}
-            </button>
-          </div>
+          <ReceivedPlayer
+            key={file.url}
+            file={file}
+            onSave={() =>
+              saveReceivedFile(file, bytes.current[activeIndex.current].bytes)
+            }
+          />
+          <button
+            type="button"
+            className="tv-btn tv-btn-ghost"
+            onClick={() => void initReceiver()}
+          >
+            <RotateCcw size={20} />
+            {t("tv.receiveAnother")}
+          </button>
         </div>
       ) : null}
+      {state !== "error" && error ? <p role="alert">{error}</p> : null}
+      <details className="tv-diagnostics">
+        <summary>
+          {ar ? "تشخيص الاستقبال والتشغيل" : "Receive / playback diagnostics"} ·{" "}
+          {VERSION}
+        </summary>
+        <p>
+          {ar ? "الحالة" : "State"}: {state} · {progress.received}/
+          {progress.total} B · CRC:{" "}
+          {checksum === null ? "—" : checksum.toString(16).padStart(8, "0")}
+        </p>
+        <p>
+          {ar ? "المكتبة" : "Library"}: {libraryLabels[libraryState]}
+        </p>
+        <p>
+          Secure context: {String(secure)} · WebRTC: {String(compat?.webRtc)} ·
+          IndexedDB: {String(compat?.indexedDb)} · download attribute:{" "}
+          {String(compat?.download)}
+        </p>
+        <p>
+          {ar
+            ? "ظهور خاصية download لا يضمن أن نظام التلفزيون يسمح بالتنزيل. مكتبة المتصفح قد تُحذف عند مسح بيانات الموقع أو نقص المساحة."
+            : "A download attribute does not guarantee TV filesystem access. Browser storage can be cleared or evicted."}
+        </p>
+        <p>
+          {ar
+            ? "نوع MIME لا يغيّر ترميز الصوت. لو البيانات وصلت والتشغيل فشل، أرسل صورة هذه المعلومات وحالة المشغّل."
+            : "MIME does not transcode audio. If receipt succeeds but playback fails, share these diagnostics and the player status."}
+        </p>
+        <p dir="ltr">{userAgent}</p>
+      </details>
     </main>
   );
 }

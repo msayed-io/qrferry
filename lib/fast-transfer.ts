@@ -10,6 +10,7 @@
  */
 
 import { crc32 } from "./optical-transfer";
+import { FastReceiveBuffer, parseFastHeader } from "./fast-receive-buffer";
 
 export type PeerServerConfig = {
   host: string;
@@ -133,6 +134,8 @@ export type IncomingTransferFile = {
   mime: string;
   size: number;
   bytes: Uint8Array;
+  /** Transport CRC verified after receiving exactly size bytes (not proof of disk save). */
+  checksum?: number;
 };
 
 export type TransferProgress = {
@@ -154,6 +157,7 @@ export class FastReceiver {
   private readonly onProgress: (received: number, total: number) => void;
   private readonly onStatus: (message: string) => void;
   private disposed = false;
+  private readonly onFailure: (message: string) => void;
 
   private constructor(
     peer: { destroy(): void },
@@ -162,6 +166,7 @@ export class FastReceiver {
     onFile: (file: IncomingTransferFile) => void,
     onProgress: (received: number, total: number) => void,
     onStatus: (message: string) => void,
+    onFailure: (message: string) => void,
   ) {
     this.peer = peer;
     this.peerId = peerId;
@@ -170,12 +175,14 @@ export class FastReceiver {
     this.onFile = onFile;
     this.onProgress = onProgress;
     this.onStatus = onStatus;
+    this.onFailure = onFailure;
   }
 
   static async create(
     onFile: (file: IncomingTransferFile) => void,
     onProgress?: (received: number, total: number) => void,
     onStatus?: (message: string) => void,
+    onFailure?: (message: string) => void,
   ): Promise<FastReceiver> {
     const { default: Peer } = await import("peerjs");
     const config = getPeerServerConfig();
@@ -206,6 +213,7 @@ export class FastReceiver {
       onFile,
       onProgress ?? (() => undefined),
       onStatus ?? (() => undefined),
+      onFailure ?? (() => undefined),
     );
     peer.on("connection", (conn) => receiver.handleConnection(conn));
     return receiver;
@@ -215,103 +223,122 @@ export class FastReceiver {
     const connection = conn as {
       peer: string;
       metadata?: { passcode?: string };
-      on(event: "data" | "close" | "error", handler: (data?: unknown) => void): void;
+      on(
+        event: "data" | "close" | "error",
+        handler: (data?: unknown) => void,
+      ): void;
       send(data: string): void;
       close(): void;
     };
-    connection.on("error", () => undefined);
-    connection.on("close", () => undefined);
-
-    let buffer: Uint8Array | null = null;
-    let received = 0;
-    let total = 0;
+    let session: FastReceiveBuffer | null = null;
+    let ended = false;
+    let guard: ReturnType<typeof createIdleGuard> | undefined;
     let lastProgressSent = 0;
     let lastProgressAt = 0;
-    let header: { passcode: string; name: string; mime: string; size: number } | null = null;
-
+    const cleanup = () => {
+      guard?.stop();
+      session?.clear();
+      session = null;
+    };
+    const fail = (message: string, reply = "nack") => {
+      if (ended) return;
+      ended = true;
+      cleanup();
+      this.onStatus(message);
+      this.onFailure(message);
+      try {
+        connection.send(reply);
+      } catch {
+        /* connection may already be closed */
+      }
+      // Sender closes its peer after reading nack/reject; preserve delivery of that message.
+    };
+    connection.on("error", () => fail("فشل الاتصال أثناء استقبال الملف."));
+    connection.on("close", () => {
+      if (!ended && session) fail("انقطع الاتصال قبل اكتمال الملف.");
+      cleanup();
+      ended = true;
+    });
     connection.on("data", (data) => {
-      if (typeof data === "string") {
-        if (data.startsWith(HEADER_PREFIX)) {
-          try {
-            const parsed = JSON.parse(data.slice(HEADER_PREFIX.length)) as {
-              passcode: string;
-              name: string;
-              mime: string;
-              size: number;
-            };
-            if (
-              !connection.metadata ||
-              connection.metadata.passcode !== parsed.passcode ||
-              parsed.passcode !== this.passcode
-            ) {
-              connection.send("reject");
-              connection.close();
+      if (ended || this.disposed) return;
+      try {
+        if (typeof data === "string") {
+          if (data.startsWith(HEADER_PREFIX)) {
+            if (session) throw new Error("ترويسة مكررة أثناء نقل الملف.");
+            try {
+              const header = parseFastHeader(
+                data.slice(HEADER_PREFIX.length),
+                this.passcode,
+                connection.metadata?.passcode,
+              );
+              session = new FastReceiveBuffer(header);
+            } catch (cause) {
+              fail(
+                cause instanceof Error ? cause.message : "ترويسة غير صالحة.",
+                "reject",
+              );
               return;
             }
-            header = parsed;
-            total = parsed.size;
-            buffer = new Uint8Array(total);
-            received = 0;
+            guard = createIdleGuard(() => {
+              fail("توقف استقبال البيانات قبل اكتمال الملف.");
+              connection.close();
+            });
             connection.send("ok");
             this.onStatus("استقبال الملف…");
-          } catch {
-            connection.send("reject");
-          }
-        } else if (data.startsWith(DONE_PREFIX) && buffer && header) {
-          const expectedCrc = Number(data.slice(DONE_PREFIX.length));
-          const actualCrc = crc32(buffer);
-          if (actualCrc === expectedCrc) {
-            connection.send("ack");
+            this.onProgress(0, session.header.size);
+          } else if (data.startsWith(DONE_PREFIX)) {
+            if (!session) throw new Error("لم تبدأ جلسة استقبال الملف.");
+            const checksumText = data.slice(DONE_PREFIX.length);
+            if (!/^\d{1,10}$/.test(checksumText))
+              throw new Error("مجموع اختباري غير صالح.");
+            const checksum = Number(checksumText);
+            const bytes = session.finish(checksum);
             const file: IncomingTransferFile = {
-              name: header.name,
-              mime: header.mime,
-              size: header.size,
-              bytes: buffer,
+              ...session.header,
+              bytes,
+              checksum,
             };
-            this.onStatus("اكتمل الاستقبال.");
-            this.onFile(file);
-          } else {
-            connection.send("nack");
-            this.onStatus("فشل المجموع الاختباري.");
+            // Do not propagate the pairing secret into downstream UI/storage.
+            const delivered: IncomingTransferFile = {
+              name: file.name,
+              mime: file.mime,
+              size: file.size,
+              bytes,
+              checksum,
+            };
+            ended = true;
+            cleanup();
+            this.onProgress(bytes.length, bytes.length);
+            connection.send("ack"); // Verified receipt only; playback/save have their own UI states.
+            this.onStatus("اكتمل استقبال البيانات والتحقق منها.");
+            this.onFile(delivered);
           }
-          buffer = null;
-        } else if (data.startsWith(PROGRESS_PREFIX)) {
-          // رسائل تقدم اختيارية من المرسل (تُتجاهل هنا)
+          return;
         }
-        return;
-      }
-
-      // شريحة بيانات ثنائية
-      if (!buffer || !header) return;
-      const chunk =
-        data instanceof Uint8Array
-          ? data
-          : data instanceof ArrayBuffer
-            ? new Uint8Array(data)
-            : null;
-      if (!chunk) return;
-      const remaining = total - received;
-      const length = Math.min(chunk.length, remaining);
-      buffer.set(chunk.subarray(0, length), received);
-      received += length;
-      // تحديث التقدم مُخفَّف: لا نعيد رسم الواجهة لكل شريحة (يصل إلى 244
-      // شريحة لملف 61MB). نحدّث كل PROGRESS_THROTTLE_MS ونضمن آخر تحديث.
-      const now = Date.now();
-      if (
-        now - lastProgressAt >= PROGRESS_THROTTLE_MS ||
-        received >= total
-      ) {
-        lastProgressAt = now;
-        this.onProgress(received, total);
-      }
-      // نبضة تقدم دورية: تثبت للمرسل أن الاستقبال يتقدم والاتصال حي
-      if (received - lastProgressSent >= PROGRESS_PULSE_BYTES) {
-        lastProgressSent = received;
-        try {
-          connection.send(`${PROGRESS_PREFIX}${received}`);
-        } catch {
-          // تجاهل فشل النبضة — لا يوقف الاستقبال
+        if (!session) throw new Error("وصلت بيانات قبل ترويسة الملف.");
+        const chunk =
+          data instanceof Uint8Array
+            ? data
+            : data instanceof ArrayBuffer
+              ? new Uint8Array(data)
+              : null;
+        if (!chunk) throw new Error("صيغة شريحة البيانات غير مدعومة.");
+        session.push(chunk);
+        guard?.ping();
+        const now = Date.now();
+        if (
+          now - lastProgressAt >= PROGRESS_THROTTLE_MS ||
+          session.received === session.header.size
+        ) {
+          lastProgressAt = now;
+          this.onProgress(session.received, session.header.size);
         }
+        if (session.received - lastProgressSent >= PROGRESS_PULSE_BYTES) {
+          lastProgressSent = session.received;
+          connection.send(`${PROGRESS_PREFIX}${session.received}`);
+        }
+      } catch (cause) {
+        fail(cause instanceof Error ? cause.message : "فشل استقبال الملف.");
       }
     });
   }
@@ -373,7 +400,12 @@ export async function sendFileFast(options: FastSenderOptions): Promise<void> {
 
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(
-        () => reject(new Error("تعذّر الاتصال بالمستقبِل. تأكد أن الجهازين على نفس الشبكة.")),
+        () =>
+          reject(
+            new Error(
+              "تعذّر الاتصال بالمستقبِل. تأكد أن الجهازين على نفس الشبكة.",
+            ),
+          ),
         20_000,
       );
       connection.on("open", () => {
@@ -398,7 +430,8 @@ export async function sendFileFast(options: FastSenderOptions): Promise<void> {
 
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(
-        () => reject(new Error("المستقبِل لم يقبل الاتصال (رمز اقتران غير صالح).")),
+        () =>
+          reject(new Error("المستقبِل لم يقبل الاتصال (رمز اقتران غير صالح).")),
         15_000,
       );
       connection.on("data", (data) => {
@@ -410,7 +443,9 @@ export async function sendFileFast(options: FastSenderOptions): Promise<void> {
           reject(new Error("رفض المستقبِل الاتصال. أعد فتح صفحة الاستقبال."));
         }
       });
-      connection.on("close", () => reject(new Error("أُغلق الاتصال قبل القبول.")));
+      connection.on("close", () =>
+        reject(new Error("أُغلق الاتصال قبل القبول.")),
+      );
     });
 
     // إرسال الشرائح مع مراقبة خمول موحّدة عبر حارس خمول:
@@ -472,7 +507,10 @@ export async function sendFileFast(options: FastSenderOptions): Promise<void> {
     let lastProgressAt = 0;
     for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
       if (settled) break;
-      const chunk = bytes.subarray(offset, Math.min(offset + CHUNK_SIZE, total));
+      const chunk = bytes.subarray(
+        offset,
+        Math.min(offset + CHUNK_SIZE, total),
+      );
       // PeerJS يطبق ضغطاً خلفياً داخلياً (bufferedAmount) — send يتوقف حتى يتاح المخزن
       await connection.send(chunk as unknown as ArrayBuffer);
       if (settled) break;

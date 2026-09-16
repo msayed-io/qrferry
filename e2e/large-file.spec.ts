@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 // تعطيل الجولة التعليمية (تظهر مرة واحدة كـ overlay وتعترض النقرات)
 async function disableTour(page: import("@playwright/test").Page) {

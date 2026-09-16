@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { installCameraStub } from "./helpers/camera-stub";
 
 type Fixture = { frames: Array<{ n: number; dataB64: string }> };

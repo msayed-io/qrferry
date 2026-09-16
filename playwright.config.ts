@@ -6,6 +6,12 @@ import { defineConfig } from "@playwright/test";
  */
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 
+const browserEnv = Object.fromEntries(
+  Object.entries(process.env).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined,
+  ),
+);
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 150_000,
@@ -18,6 +24,12 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     headless: true,
     launchOptions: {
+      // Chromium on Linux POSIX locale replaces Unicode download names with "download".
+      // Exercise real Arabic filenames under a deterministic UTF-8 filesystem locale.
+      env:
+        process.platform === "linux"
+          ? { ...browserEnv, LANG: "C.UTF-8", LC_ALL: "C.UTF-8" }
+          : browserEnv,
       args: [
         "--autoplay-policy=no-user-gesture-required",
         "--use-fake-ui-for-media-stream",

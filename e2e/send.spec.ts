@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("sender turns a selected file into a live QR stream", async ({ page }) => {
   await page.goto("/");

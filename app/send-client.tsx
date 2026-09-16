@@ -861,6 +861,12 @@ export function SendClient() {
     return `${window.location.origin}/scan`;
   }, []);
 
+  // Pair with this installation, not a hard-coded deployment with potentially older receiver code.
+  const tvUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/tv";
+    return `${window.location.origin}/tv`;
+  }, []);
+
   const copyScanLink = async () => {
     try {
       await navigator.clipboard.writeText(scanUrl);
@@ -1644,7 +1650,7 @@ export function SendClient() {
                       type="button"
                       className="fast-url-copy"
                       onClick={() => {
-                        void navigator.clipboard.writeText(t("send.fastStep1Url")).then(() => {
+                        void navigator.clipboard.writeText(tvUrl).then(() => {
                           setFastUrlCopied(true);
                           window.setTimeout(() => setFastUrlCopied(false), 2000);
                         });
@@ -1652,7 +1658,7 @@ export function SendClient() {
                     >
                       {fastUrlCopied ? t("send.urlCopied") : t("send.copyUrl")}
                     </button>
-                    <code className="fast-url">{t("send.fastStep1Url")}</code>
+                    <code className="fast-url">{tvUrl}</code>
                   </li>
                   <li>{t("send.fastStep2")}</li>
                 </ol>

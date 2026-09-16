@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("TV page shows the pairing QR with horizontally aligned steps", async ({
   page,

@@ -2941,3 +2941,16 @@ input:focus-visible {
   line-height: 1.6;
   text-align: center;
 }
+
+/* Verified receipt, browser-local persistence and playback are distinct outcomes. */
+.tv-diagnostics { grid-column: 1 / -1; margin: 24px auto; width: min(1000px, 92%); padding: 16px; border: 1px solid #687583; border-radius: 12px; color: #d5dce2; overflow-wrap: anywhere; }
+.tv-diagnostics summary { cursor: pointer; font-weight: 700; }
+.tv-storage-error, .tv-playback-error { grid-column: 1 / -1; background: #3b2222; border: 1px solid #e79787; padding: 16px; border-radius: 12px; color: #ffe4dd; max-width: 100%; }
+.tv-save-status, .tv-library-status, .tv-integrity, .tv-playback-status { max-width: 850px; color: #d5dce2; line-height: 1.8; }
+.tv-integrity { color: var(--signal); }
+.tv-file-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.tv-file-select { overflow-wrap: anywhere; }
+.tv-media { max-width: 100%; }
+.tv-media audio { display: block; min-height: 54px; }
+.tv-actions a { text-decoration: none; }
+.tv-diagnostics summary:focus-visible { outline: 3px solid var(--signal); outline-offset: 5px; }

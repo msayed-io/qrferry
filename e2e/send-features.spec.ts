@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("sender handles multiple files and shows the bundle list", async ({ page }) => {
   await page.goto("/");

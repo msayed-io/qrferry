@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { installCameraStub } from "./helpers/camera-stub";
 
 const PEER_HOST = { host: "localhost", port: 9000, path: "/", secure: false };

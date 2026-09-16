@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { installCameraStub, readLastBlobBytes } from "./helpers/camera-stub";
 
 type SerializedFrame = { n: number; dataB64: string };

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("password QR modal opens and renders a QR canvas", async ({ page }) => {
   await page.goto("/");
