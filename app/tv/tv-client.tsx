@@ -35,7 +35,7 @@ import {
   type ReceivedDelivery,
 } from "@/lib/received-media";
 import { getTrustedKeys } from "@/lib/identity-store";
-import { saveReceivedFile } from "@/lib/save-received-file";
+import { saveReceivedFile, ReceivedDownloads } from "@/lib/save-received-file";
 import { ReceivedPlayer, type DisplayFile } from "./received-player";
 
 declare global {
@@ -59,7 +59,8 @@ type TvState =
   | "complete"
   | "error";
 type LibraryState = "idle" | "saving" | "saved" | "failed" | "loaded";
-const VERSION = "TV-RECEIVE-2";
+const VERSION = "TV-RECEIVE-3";
+const AUTO_DOWNLOAD_KEY = "qrferry-tv-auto-download-v1";
 
 export function TvClient() {
   const { t, lang } = useI18n();
@@ -95,6 +96,14 @@ export function TvClient() {
   const [compat, setCompat] = useState<TvCompatibility | null>(null);
   const [userAgent, setUserAgent] = useState("");
   const [secure, setSecure] = useState(false);
+  const [downloads] = useState(() => new ReceivedDownloads());
+  const autoDownloadEnabled = useRef(true);
+  const [autoDownload, setAutoDownload] = useState(true);
+  const [autoResult, setAutoResult] = useState<{
+    requested: number;
+    unsupported: number;
+    failed: number;
+  } | null>(null);
 
   const invalidatePendingWork = useCallback(() => {
     generation.current++;
@@ -142,6 +151,7 @@ export function TvClient() {
         job = ++deliveryJob.current;
       const current = () =>
         gen === generation.current && job === deliveryJob.current;
+      setAutoResult(null);
       setState("verifying");
       setError("");
       setLibraryError("");
@@ -154,6 +164,19 @@ export function TvClient() {
         if (!current()) return;
         setChecksum(incoming.checksum ?? null);
         displayDelivery(delivery);
+        // Only newly received, verified deliveries. Never a render effect or a library reopen.
+        // A failed/blocked download must not interrupt playback or browser-library persistence.
+        if (autoDownloadEnabled.current) {
+          const result = { requested: 0, unsupported: 0, failed: 0 };
+          for (const received of delivery.files) {
+            try {
+              result[downloads.request(received)]++;
+            } catch {
+              result.failed++;
+            }
+          }
+          setAutoResult(result);
+        }
         // Only explicit, injected test contexts get byte-array hooks; never expand large files in production.
         if (window.__qrferryTestMode)
           window.__qrferryTvReceived = {
@@ -189,7 +212,7 @@ export function TvClient() {
         }
       }
     },
-    [ar, displayDelivery],
+    [ar, displayDelivery, downloads],
   );
 
   const initReceiver = useCallback(async () => {
@@ -207,6 +230,7 @@ export function TvClient() {
       delete window.__qrferryTvModules;
       delete window.__qrferryTvReceived;
     }
+    setAutoResult(null);
     setState("starting");
     setError("");
     setStatus("");
@@ -313,6 +337,13 @@ export function TvClient() {
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
+      try {
+        const enabled = localStorage.getItem(AUTO_DOWNLOAD_KEY) !== "false";
+        autoDownloadEnabled.current = enabled;
+        setAutoDownload(enabled);
+      } catch {
+        /* Default on for this session when preferences are unavailable. */
+      }
       void initReceiver();
       void listReceivedFiles(50)
         .then((rows) => {
@@ -333,16 +364,17 @@ export function TvClient() {
       invalidatePendingWork();
       receiver.current?.destroy();
       releaseUrl();
+      downloads.dispose();
       bytes.current = [];
     };
-  }, [ar, initReceiver, releaseUrl, invalidatePendingWork]);
+  }, [ar, initReceiver, releaseUrl, invalidatePendingWork, downloads]);
   useEffect(() => {
     if (qrCanvas && qrHost.current) qrHost.current.replaceChildren(qrCanvas);
   }, [qrCanvas]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       // Leave cursor movement in inputs/native controls to the browser.
-      if ((document.activeElement as HTMLElement)?.matches("input,audio,video"))
+      if ((document.activeElement as HTMLElement)?.matches('input:not([type="checkbox"]),audio,video'))
         return;
       if (
         !["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)
@@ -350,7 +382,7 @@ export function TvClient() {
         return;
       const elements = Array.from(
         document.querySelectorAll<HTMLElement>(
-          ".tv-btn:not(:disabled), .tv-library-item, .tv-file-select, input.tv-signal-input, .tv-diagnostics summary",
+          ".tv-btn:not(:disabled), .tv-library-item, .tv-file-select, input.tv-signal-input, .tv-diagnostics summary, .tv-save-options summary, .tv-auto-download input",
         ),
       ).filter((el) => el.getClientRects().length > 0);
       if (!elements.length) return;
@@ -388,6 +420,7 @@ export function TvClient() {
   const openFromLibrary = async (entry: ReceivedFileMetadata) => {
     const gen = generation.current,
       job = ++deliveryJob.current;
+    setAutoResult(null);
     try {
       const data = await loadReceivedFileBytes(entry.id);
       if (!data)
@@ -493,6 +526,39 @@ export function TvClient() {
           {ar ? "الملفات المستلمة" : "Received files"}
           {library.length ? ` (${library.length})` : ""}
         </button>
+      </div>
+      <div className="tv-auto-download">
+        <label>
+          <input
+            type="checkbox"
+            checked={autoDownload}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              autoDownloadEnabled.current = enabled;
+              setAutoDownload(enabled);
+              try {
+                localStorage.setItem(AUTO_DOWNLOAD_KEY, String(enabled));
+              } catch {
+                /* Session preference still applies. */
+              }
+            }}
+          />
+          {ar
+            ? "تنزيل تلقائي عند الاستلام"
+            : "Automatically download received files"}
+        </label>
+        <p className="tv-hint">
+          {ar
+            ? "قد يطلب المتصفح الإذن بالتنزيل أو يحدد مكان الحفظ حسب إعداداته. لو منع التنزيل التلقائي، اضغط «تنزيل الملف». مكتبتك والتشغيل لا يتأثران."
+            : "Your browser may ask permission or choose a save location according to its settings. If automatic downloading is blocked, use Download file. Playback and your library are independent."}
+        </p>
+        {autoResult ? (
+          <p className="tv-auto-status" role="status">
+            {ar
+              ? `طلبات التنزيل التلقائي: ${autoResult.requested}. غير مدعوم: ${autoResult.unsupported}. تعذّر الطلب: ${autoResult.failed}. هذا ليس تأكيدًا لحفظ الملفات على الجهاز؛ قد يلزم السماح بتنزيل ملفات متعددة.`
+              : `Automatic download requests: ${autoResult.requested}. Unsupported: ${autoResult.unsupported}. Failed requests: ${autoResult.failed}. This does not confirm a disk save; multiple downloads may need permission.`}
+          </p>
+        ) : null}
       </div>
       {libraryError ? (
         <p className="tv-storage-error" role="alert">
@@ -633,6 +699,9 @@ export function TvClient() {
           <ReceivedPlayer
             key={file.url}
             file={file}
+            onDownload={() =>
+              downloads.request(bytes.current[activeIndex.current])
+            }
             onSave={() =>
               saveReceivedFile(file, bytes.current[activeIndex.current].bytes)
             }

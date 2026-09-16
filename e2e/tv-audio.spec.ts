@@ -1,5 +1,15 @@
 import { expect, test, type BrowserContext, type Page } from "./test";
+import type { Download } from "@playwright/test";
 import { installCameraStub } from "./helpers/camera-stub";
+
+// Existing playback/picker cases isolate manual saving; new cases exercise the default auto mode.
+test.beforeEach(async ({ context }, info) => {
+  if (!info.title.startsWith("Auto download:")) {
+    await context.addInitScript(() =>
+      localStorage.setItem("qrferry-tv-auto-download-v1", "false"),
+    );
+  }
+});
 
 // Actual decodable PCM audio, not random bytes labelled as audio.
 function wav() {
@@ -28,6 +38,7 @@ async function transfer(
   context: BrowserContext,
   files: { name: string; mimeType: string; buffer: Buffer }[],
   tv?: Page,
+  beforeSend?: (tv: Page) => Promise<void>,
 ) {
   await context.addInitScript(() => {
     localStorage.setItem(
@@ -46,6 +57,7 @@ async function transfer(
   tv ??= await context.newPage();
   await tv.goto("/tv");
   await tv.waitForFunction(() => !!window.__qrferryTvModules);
+  await beforeSend?.(tv);
   const phone = await context.newPage();
   await phone.addInitScript(installCameraStub);
   await phone.goto("/");
@@ -88,7 +100,7 @@ test("TV plays real WAV with generic MIME and downloads exact received bytes", a
     }),
   );
   const download = tv.waitForEvent("download", { timeout: 10000 });
-  await tv.getByRole("button", { name: /حفظ الملف/ }).click();
+  await tv.getByRole("button", { name: "تنزيل الملف", exact: true }).click();
   const result = await download;
   expect(result.suggestedFilename()).toBe("تسجيل.wav");
   const fs = await import("node:fs/promises");
@@ -168,7 +180,10 @@ test("Cancelling the save picker never triggers a fallback download", async ({
   });
   let downloads = 0;
   tv.on("download", () => downloads++);
-  await tv.getByRole("button", { name: /حفظ الملف/ }).click();
+  await tv.locator(".tv-save-options summary").click();
+  await tv
+    .getByRole("button", { name: "اختيار مكان الحفظ", exact: true })
+    .click();
   await expect(tv.locator(".tv-save-status")).toHaveText("أُلغيت عملية الحفظ.");
   await tv.waitForTimeout(200);
   expect(downloads).toBe(0);
@@ -278,7 +293,10 @@ test("Native save picker receives exact bytes and the original extension, and re
       },
     });
   });
-  await tv.getByRole("button", { name: /حفظ الملف/ }).click();
+  await tv.locator(".tv-save-options summary").click();
+  await tv
+    .getByRole("button", { name: "اختيار مكان الحفظ", exact: true })
+    .click();
   await expect(tv.locator(".tv-save-status")).toHaveText(
     "تم الحفظ في المكان الذي اخترته.",
   );
@@ -364,7 +382,10 @@ for (const failure of ["write", "close"] as const) {
     }, failure);
     let downloads = 0;
     tv.on("download", () => downloads++);
-    await tv.getByRole("button", { name: /حفظ الملف/ }).click();
+    await tv.locator(".tv-save-options summary").click();
+    await tv
+      .getByRole("button", { name: "اختيار مكان الحفظ", exact: true })
+      .click();
     await expect(tv.locator(".tv-save-status")).toContainText(
       `فشل الحفظ: test ${failure} failure`,
     );
@@ -376,3 +397,136 @@ for (const failure of ["write", "close"] as const) {
     expect(downloads).toBe(0);
   });
 }
+
+function recordDownloads(context: BrowserContext): Download[] {
+  const downloads: Download[] = [];
+  context.on("page", (page) =>
+    page.on("download", (download) => downloads.push(download)),
+  );
+  return downloads;
+}
+
+test("Auto download: default receipt downloads exact Arabic-named bytes without invoking any picker", async ({
+  context,
+}) => {
+  const downloads = recordDownloads(context);
+  await context.addInitScript(() => {
+    Object.defineProperty(window, "showSaveFilePicker", {
+      configurable: true,
+      value: () => {
+        throw new Error("picker must not open");
+      },
+    });
+  });
+  const bytes = wav();
+  const tv = await transfer(context, [
+    { name: "تسجيل.wav", mimeType: "application/octet-stream", buffer: bytes },
+  ]);
+  await expect.poll(() => downloads.length).toBe(1);
+  expect(downloads[0].suggestedFilename()).toBe("تسجيل.wav");
+  const fs = await import("node:fs/promises");
+  expect(await fs.readFile((await downloads[0].path())!)).toEqual(bytes);
+  await expect(
+    tv.getByRole("checkbox", { name: "تنزيل تلقائي عند الاستلام" }),
+  ).toBeChecked();
+  await expect(tv.locator(".tv-auto-status")).toContainText(
+    "طلبات التنزيل التلقائي: 1",
+  );
+  await expect(tv.locator(".tv-auto-status")).toContainText("هذا ليس تأكيدًا");
+  await tv.getByRole("button", { name: "تشغيل", exact: true }).click();
+  await expect
+    .poll(() =>
+      tv.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime),
+    )
+    .toBeGreaterThan(0);
+  const autoToggle = tv.getByRole("checkbox", { name: "تنزيل تلقائي عند الاستلام" });
+  await autoToggle.focus();
+  await tv.keyboard.press("ArrowRight");
+  await expect(autoToggle).not.toBeFocused();
+  // Retry is a direct browser download too, even when the picker API exists.
+  await tv.getByRole("button", { name: "تنزيل الملف", exact: true }).click();
+  await expect.poll(() => downloads.length).toBe(2);
+  expect(await fs.readFile((await downloads[1].path())!)).toEqual(bytes);
+});
+
+test("Auto download: bundles download extracted files once, never on selection or library reopen", async ({
+  context,
+}) => {
+  const downloads = recordDownloads(context);
+  const bytes = wav();
+  const tv = await transfer(context, [
+    { name: "one.wav", mimeType: "audio/wav", buffer: bytes },
+    { name: "two.wav", mimeType: "audio/wav", buffer: bytes },
+  ]);
+  await expect.poll(() => downloads.length).toBe(2);
+  expect(downloads.map((d) => d.suggestedFilename()).sort()).toEqual([
+    "one.wav",
+    "two.wav",
+  ]);
+  const fs = await import("node:fs/promises");
+  for (const d of downloads)
+    expect(await fs.readFile((await d.path())!)).toEqual(bytes);
+  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ");
+  await tv.getByRole("button", { name: "two.wav", exact: true }).click();
+  await tv.reload();
+  await tv.getByRole("button", { name: /الملفات المستلمة/ }).click();
+  await tv.locator(".tv-library-item").filter({ hasText: "one.wav" }).click();
+  await expect(tv.locator("audio")).toBeVisible();
+  await tv.waitForTimeout(250);
+  expect(downloads).toHaveLength(2);
+});
+
+test("Auto download: opt-out persists and manual download remains available", async ({
+  context,
+}) => {
+  const downloads = recordDownloads(context);
+  const tv = await transfer(
+    context,
+    [{ name: "manual.wav", mimeType: "audio/wav", buffer: wav() }],
+    undefined,
+    async (tv) => {
+      await tv
+        .getByRole("checkbox", { name: "تنزيل تلقائي عند الاستلام" })
+        .uncheck();
+    },
+  );
+  await expect(tv.locator("audio")).toBeVisible();
+  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ");
+  expect(downloads).toHaveLength(0);
+  await tv.reload();
+  await expect(
+    tv.getByRole("checkbox", { name: "تنزيل تلقائي عند الاستلام" }),
+  ).not.toBeChecked();
+  await tv.getByRole("button", { name: /الملفات المستلمة/ }).click();
+  await tv
+    .locator(".tv-library-item")
+    .filter({ hasText: "manual.wav" })
+    .click();
+  await tv.getByRole("button", { name: "تنزيل الملف", exact: true }).click();
+  await expect.poll(() => downloads.length).toBe(1);
+});
+
+test("Auto download: download rejection does not break playback or library persistence", async ({
+  context,
+}) => {
+  const tv = await transfer(
+    context,
+    [{ name: "blocked.wav", mimeType: "audio/wav", buffer: wav() }],
+    undefined,
+    async (tv) => {
+      await tv.evaluate(() => {
+        HTMLAnchorElement.prototype.click = function () {
+          throw new DOMException("Blocked download", "NotAllowedError");
+        };
+      });
+    },
+  );
+  await expect(tv.locator(".tv-auto-status")).toContainText("تعذّر الطلب: 1");
+  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ");
+  await tv.getByRole("button", { name: "تشغيل", exact: true }).click();
+  await expect
+    .poll(() =>
+      tv.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime),
+    )
+    .toBeGreaterThan(0);
+});

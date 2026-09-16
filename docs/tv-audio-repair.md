@@ -1,4 +1,16 @@
-# TV audio receive repair — TV-RECEIVE-2
+# Direct and automatic downloads — TV-RECEIVE-3
+
+Follow-up to the verified TV-RECEIVE-2 repair. On a newly received, validated delivery, request direct browser downloads for each extracted file by default. Never invoke the filesystem picker automatically. The primary **Download file** action uses the same direct path; the old picker remains an explicitly optional action under **Additional save options**.
+
+- A persisted checkbox enables/disables automatic requests, defaulting on when no preference exists.
+- Library reopening, reload, selection changes and re-renders do not trigger downloads.
+- Download request failures do not prevent playback or library persistence.
+- Separate temporary download URLs survive player selection changes and are revoked after 60 seconds or on unmount. Cleanup, exact byte views, unsupported paths and failures have unit coverage.
+- Browser policies still control automatic/multiple downloads and destination prompts. The application cannot bypass those settings or infer successful disk writes from anchor clicks; the UI reports requests, not confirmed saves.
+- No transport, handshake, decoding or IndexedDB schema changes in this follow-up.
+- Regression coverage now includes 42 unit cases and 48 E2E cases. The previous optional-picker tests remain in place, alongside four new auto-download cases.
+
+## Previous repair: TV-RECEIVE-2
 
 Base commit: `a6eaaf4b0344d6d41d7ec661c8b30fdda73d0e10`.
 
@@ -40,7 +52,7 @@ For the Next adapter, after `npm run build:vercel`, run Next production on anoth
 
 ## Deployment and migration cautions
 
-- Nothing has been pushed or deployed by this repair. Test the new deployment on both phone and receiver, and confirm the TV-RECEIVE-2 diagnostic marker.
+- Verify the target commit and deployment separately. Test the new deployment on both phone and receiver, and confirm the TV-RECEIVE-3 diagnostic marker. The predecessor TV-RECEIVE-2 was published as e1c25e3.
 - Close old same-origin tabs if IndexedDB reports a blocked upgrade. Do not clear browser storage as a routine update step: that deletes the user's library.
 - The library moves to schema v2. Rolling the old v1-opening code back onto the same origin can produce `VersionError`. Back up important files before release and use a v2-compatible rollback strategy.
 - Library persistence is browser-origin-local, not a Downloads-folder save, and remains subject to quota, eviction, and user clearing. Multi-file writes are per file, not one atomic transaction for the entire package; a later failure can leave a partial library import.

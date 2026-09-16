@@ -2954,3 +2954,10 @@ input:focus-visible {
 .tv-media audio { display: block; min-height: 54px; }
 .tv-actions a { text-decoration: none; }
 .tv-diagnostics summary:focus-visible { outline: 3px solid var(--signal); outline-offset: 5px; }
+.tv-auto-download { width: min(900px, 94vw); margin: 1rem auto; text-align: center; }
+.tv-auto-download label { display: inline-flex; align-items: center; gap: .65rem; cursor: pointer; font-weight: 700; }
+.tv-auto-download input { width: 1.3rem; height: 1.3rem; accent-color: var(--accent, #27c2a0); }
+.tv-auto-status { line-height: 1.8; font-size: .9rem; }
+.tv-save-options { margin: 1rem auto; max-width: 700px; }
+.tv-save-options summary { cursor: pointer; padding: .6rem; }
+.tv-save-options p { font-size: .9rem; line-height: 1.8; }

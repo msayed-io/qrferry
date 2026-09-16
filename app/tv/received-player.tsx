@@ -20,11 +20,13 @@ export type DisplayFile = {
 export function ReceivedPlayer({
   file,
   onSave,
+  onDownload,
 }: {
   file: DisplayFile;
   onSave: () => Promise<SaveResult>;
+  onDownload: () => SaveResult;
 }) {
-  const { lang, t } = useI18n();
+  const { lang } = useI18n();
   const ar = lang === "ar";
   const media = useRef<HTMLMediaElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -86,11 +88,11 @@ export function ReceivedPlayer({
     onError: mediaError,
     onVolumeChange: () => setMuted(media.current?.muted ?? false),
   };
-  const save = async () => {
+  const save = async (chooseLocation = false) => {
     setSaving(true);
     setSaveStatus("");
     try {
-      const result = await onSave();
+      const result = await (chooseLocation ? onSave() : onDownload());
       const messages = {
         saved: ar
           ? "تم الحفظ في المكان الذي اخترته."
@@ -187,7 +189,13 @@ export function ReceivedPlayer({
           onClick={() => void save()}
         >
           <Download size={20} />
-          {saving ? (ar ? "جارٍ الحفظ…" : "Saving…") : t("tv.saveFile")}
+          {saving
+            ? ar
+              ? "جارٍ الطلب…"
+              : "Requesting…"
+            : ar
+              ? "تنزيل الملف"
+              : "Download file"}
         </button>
         {audio || video ? (
           <>
@@ -223,6 +231,24 @@ export function ReceivedPlayer({
           </a>
         ) : null}
       </div>
+      <details className="tv-save-options">
+        <summary>
+          {ar ? "خيارات حفظ إضافية" : "Additional save options"}
+        </summary>
+        <p>
+          {ar
+            ? "اختيار مكان الحفظ اختياري، ولا يُستخدم في التنزيل التلقائي أو زر التنزيل."
+            : "Choosing a save location is optional and never used by automatic or direct downloads."}
+        </p>
+        <button
+          type="button"
+          className="tv-btn tv-btn-ghost"
+          disabled={saving}
+          onClick={() => void save(true)}
+        >
+          {ar ? "اختيار مكان الحفظ" : "Choose save location"}
+        </button>
+      </details>
       {saveStatus ? (
         <p className="tv-save-status" role="status">
           {saveStatus}
