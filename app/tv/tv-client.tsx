@@ -6,6 +6,13 @@ import {
   RotateCcw,
   Smartphone,
   Trash2,
+  Settings2,
+  ShieldCheck,
+  Activity,
+  ChevronDown,
+  ArrowLeftRight,
+  Check,
+  X,
 } from "lucide-react";
 import {
   FastReceiver,
@@ -27,6 +34,7 @@ import {
   loadReceivedFileBytes,
   deleteReceivedFile,
   type ReceivedFileMetadata,
+  type StorageStage,
 } from "@/lib/received-files-store";
 import {
   unpackReceivedDelivery,
@@ -36,7 +44,18 @@ import {
 } from "@/lib/received-media";
 import { getTrustedKeys } from "@/lib/identity-store";
 import { saveReceivedFile, ReceivedDownloads } from "@/lib/save-received-file";
-import { ReceivedPlayer, type DisplayFile } from "./received-player";
+import {
+  ReceivedPlayer,
+  type DisplayFile,
+  type PlayerSnapshot,
+} from "./received-player";
+
+import {
+  BrowserOperationTimeout,
+  describeBrowserError,
+  withDeadline,
+} from "@/lib/browser-operation";
+import "./tv.css";
 
 declare global {
   interface Window {
@@ -52,14 +71,10 @@ declare global {
   }
 }
 type TvState =
-  | "starting"
-  | "ready"
-  | "receiving"
-  | "verifying"
-  | "complete"
-  | "error";
-type LibraryState = "idle" | "saving" | "saved" | "failed" | "loaded";
-const VERSION = "TV-RECEIVE-3";
+  "starting" | "ready" | "receiving" | "verifying" | "complete" | "error";
+type LibraryState =
+  "idle" | "saving" | "saved" | "failed" | "unconfirmed" | "loaded";
+const VERSION = "TV-RECEIVE-4";
 const AUTO_DOWNLOAD_KEY = "qrferry-tv-auto-download-v1";
 
 export function TvClient() {
@@ -85,6 +100,7 @@ export function TvClient() {
   >([]);
   const bytes = useRef<ReceivedMediaFile[]>([]);
   const activeIndex = useRef(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const activeUrl = useRef<string | null>(null);
   const [file, setFile] = useState<DisplayFile | null>(null);
   const [signature, setSignature] =
@@ -105,6 +121,43 @@ export function TvClient() {
     failed: number;
   } | null>(null);
 
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [storeStage, setStoreStage] = useState<StorageStage | null>(null);
+  const [storageSeconds, setStorageSeconds] = useState(0);
+  const [playerSnapshot, setPlayerSnapshot] = useState<PlayerSnapshot | null>(
+    null,
+  );
+  const [trace, setTrace] = useState<Array<{ id: number; event: string }>>([]);
+  const sequence = useRef(0);
+  const log = useCallback((event: string) => {
+    const id = ++sequence.current;
+    setTrace((previous) => [...previous.slice(-11), { id, event }]);
+  }, []);
+  const onPlayerSnapshot = useCallback(
+    (snapshot: PlayerSnapshot) => {
+      setPlayerSnapshot(snapshot);
+      if (snapshot.event !== "poll")
+        log(
+          `media:${snapshot.event} · ready=${snapshot.ready} · network=${snapshot.network}${snapshot.error ? ` · error=${snapshot.error}` : ""}`,
+        );
+    },
+    [log],
+  );
+  useEffect(() => {
+    document.documentElement.classList.add("qrferry-tv");
+    return () => document.documentElement.classList.remove("qrferry-tv");
+  }, []);
+  useEffect(() => {
+    if (libraryState !== "saving") return;
+    const started = Date.now();
+    const timer = setInterval(
+      () => setStorageSeconds(Math.floor((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [libraryState]);
+
   const invalidatePendingWork = useCallback(() => {
     generation.current++;
     deliveryJob.current++;
@@ -124,6 +177,8 @@ export function TvClient() {
       releaseUrl();
       activeUrl.current = url;
       activeIndex.current = index;
+      setSelectedIndex(index);
+      setPlayerSnapshot(null);
       setFile({ name: f.name, mime: f.mime, size: f.bytes.byteLength, url });
     },
     [releaseUrl],
@@ -152,6 +207,9 @@ export function TvClient() {
       const current = () =>
         gen === generation.current && job === deliveryJob.current;
       setAutoResult(null);
+      setStoreStage(null);
+      setStorageSeconds(0);
+      setTrace([]);
       setState("verifying");
       setError("");
       setLibraryError("");
@@ -159,7 +217,9 @@ export function TvClient() {
       try {
         const delivery = await unpackReceivedDelivery(
           incoming,
-          await getTrustedKeys(),
+          await withDeadline(getTrustedKeys(), "trusted-keys", 5000).catch(
+            () => [],
+          ),
         );
         if (!current()) return;
         setChecksum(incoming.checksum ?? null);
@@ -190,29 +250,51 @@ export function TvClient() {
           // Save actual extracted files, not an opaque QFPA container. Playback is independent of IndexedDB.
           for (const f of delivery.files) {
             if (!current()) return;
-            await storeReceivedFile(f);
+            await storeReceivedFile(f, (event) => {
+              if (!current()) return;
+              setStoreStage(event);
+              log(
+                `library:${event.phase}:${event.state} · ${event.elapsedMs} ms${event.error ? ` · ${event.error}` : ""}`,
+              );
+            });
           }
           if (!current()) return;
           setLibraryState("saved");
-          setLibrary(await listReceivedFiles(50));
+          try {
+            setLibrary(await listReceivedFiles(50));
+          } catch (cause) {
+            if (current())
+              setLibraryError(
+                (ar
+                  ? "حُفظ الملف، لكن تعذّر تحديث القائمة: "
+                  : "Saved, but library refresh failed: ") +
+                  describeBrowserError(cause),
+              );
+          }
         } catch (cause) {
           if (!current()) return;
-          setLibraryState("failed");
+          setLibraryState(
+            cause instanceof BrowserOperationTimeout ? "unconfirmed" : "failed",
+          );
           setLibraryError(
-            (ar
-              ? "وصلت البيانات، لكن الحفظ داخل مكتبة المتصفح فشل. الملف متاح الآن ما دامت الصفحة مفتوحة. السبب: "
-              : "Received, but saving in the browser library failed. The file is still available while this page remains open. Reason: ") +
-              (cause instanceof Error ? cause.message : String(cause)),
+            (cause instanceof BrowserOperationTimeout
+              ? ar
+                ? "لم يتأكد حفظ المكتبة في الوقت المحدد. لا تمسح البيانات؛ الملف ما زال متاحًا في هذه الصفحة. "
+                : "Library save was not confirmed in time. Do not clear data; the file is still available in this page. "
+              : ar
+                ? "تعذّر حفظ المكتبة. يمكنك الاستمرار في التشغيل. "
+                : "Library save failed. Playback remains available. ") +
+              describeBrowserError(cause),
           );
         }
       } catch (cause) {
         if (current()) {
           setState("error");
-          setError(cause instanceof Error ? cause.message : String(cause));
+          setError(describeBrowserError(cause));
         }
       }
     },
-    [ar, displayDelivery, downloads],
+    [ar, displayDelivery, downloads, log],
   );
 
   const initReceiver = useCallback(async () => {
@@ -231,6 +313,10 @@ export function TvClient() {
       delete window.__qrferryTvReceived;
     }
     setAutoResult(null);
+    setStoreStage(null);
+    setStorageSeconds(0);
+    setPlayerSnapshot(null);
+    setTrace([]);
     setState("starting");
     setError("");
     setStatus("");
@@ -353,7 +439,7 @@ export function TvClient() {
           if (!cancelled)
             setLibraryError(
               (ar ? "المكتبة غير متاحة: " : "Library unavailable: ") +
-                (cause instanceof Error ? cause.message : String(cause)),
+                describeBrowserError(cause),
             );
         });
     }, 0);
@@ -373,27 +459,89 @@ export function TvClient() {
   }, [qrCanvas]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      // Leave cursor movement in inputs/native controls to the browser.
-      if ((document.activeElement as HTMLElement)?.matches('input:not([type="checkbox"]),audio,video'))
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        ["Escape", "BrowserBack"].includes(event.key) ||
+        [461, 10009].includes(event.keyCode)
+      ) {
+        if (showSettings || showLibrary || showDiagnostics) {
+          event.preventDefault();
+          const selector = showSettings
+            ? ".tv-settings-button"
+            : showLibrary
+              ? ".tv-library-btn"
+              : ".tv-diagnostics-toggle";
+          setShowSettings(false);
+          setShowLibrary(false);
+          setShowDiagnostics(false);
+          document.querySelector<HTMLButtonElement>(selector)?.focus();
+        }
         return;
+      }
+      if (event.key === "Enter" && active?.matches('input[type="checkbox"]')) {
+        event.preventDefault();
+        active.click();
+        return;
+      }
+      if (event.key === "MediaPlayPause") {
+        event.preventDefault();
+        document.querySelector<HTMLButtonElement>(".tv-play-button")?.click();
+        return;
+      }
+      if (active?.matches('input:not([type="checkbox"]),audio,video')) return;
       if (
         !["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)
       )
         return;
       const elements = Array.from(
         document.querySelectorAll<HTMLElement>(
-          ".tv-btn:not(:disabled), .tv-library-item, .tv-file-select, input.tv-signal-input, .tv-diagnostics summary, .tv-save-options summary, .tv-auto-download input",
+          ".tv-page button:not(:disabled), .tv-page a[href], .tv-page input:not(:disabled)",
         ),
-      ).filter((el) => el.getClientRects().length > 0);
+      ).filter(
+        (el) =>
+          el.getClientRects().length > 0 &&
+          getComputedStyle(el).visibility !== "hidden",
+      );
       if (!elements.length) return;
       event.preventDefault();
-      const i = elements.indexOf(document.activeElement as HTMLElement),
-        step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
-      elements[(i + step + elements.length) % elements.length]?.focus();
+      let target = elements[0];
+      if (active && elements.includes(active)) {
+        const rect = active.getBoundingClientRect(),
+          x = rect.x + rect.width / 2,
+          y = rect.y + rect.height / 2;
+        const horizontal =
+          event.key === "ArrowLeft" || event.key === "ArrowRight";
+        const sign =
+          event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+        let best = Infinity;
+        target = active;
+        for (const el of elements) {
+          if (el === active) continue;
+          const box = el.getBoundingClientRect(),
+            dx = box.x + box.width / 2 - x,
+            dy = box.y + box.height / 2 - y;
+          const distance = (horizontal ? dx : dy) * sign;
+          if (distance < 2) continue;
+          // Prefer the same visual row/column before diagonal candidates.
+          const inBeam = horizontal
+            ? box.top < rect.bottom && box.bottom > rect.top
+            : box.left < rect.right && box.right > rect.left;
+          const score =
+            (inBeam ? 0 : 100_000) +
+            distance +
+            Math.abs(horizontal ? dy : dx) * 2;
+          if (score < best) {
+            best = score;
+            target = el;
+          }
+        }
+      }
+      target.focus();
+      target.scrollIntoView({ block: "nearest", inline: "nearest" });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [showSettings, showLibrary, showDiagnostics]);
   const applySignal = () => {
     const value = signalHostInput.trim(),
       parsed = value ? parsePeerServerUrl(value) : DEFAULT_PEER_SERVER;
@@ -429,15 +577,18 @@ export function TvClient() {
         );
       const delivery = await unpackReceivedDelivery(
         { ...entry, bytes: new Uint8Array(data) },
-        await getTrustedKeys(),
+        await withDeadline(getTrustedKeys(), "trusted-keys", 5000).catch(
+          () => [],
+        ),
       );
       if (gen !== generation.current || job !== deliveryJob.current) return;
       displayDelivery(delivery);
+      setShowLibrary(false);
       setChecksum(null);
       setLibraryState("loaded");
       setError("");
     } catch (cause) {
-      setLibraryError(cause instanceof Error ? cause.message : String(cause));
+      setLibraryError(describeBrowserError(cause));
     }
   };
   const removeFromLibrary = async (id: string) => {
@@ -445,7 +596,7 @@ export function TvClient() {
       await deleteReceivedFile(id);
       setLibrary(await listReceivedFiles(50));
     } catch (cause) {
-      setLibraryError(cause instanceof Error ? cause.message : String(cause));
+      setLibraryError(describeBrowserError(cause));
     }
   };
   const percent = progress.total
@@ -454,12 +605,13 @@ export function TvClient() {
   const libraryLabels = {
     idle: ar ? "لم يبدأ" : "Not started",
     saving: ar ? "جارٍ الحفظ داخل المتصفح…" : "Saving in browser…",
-    saved: ar
-      ? "حُفظ داخل مكتبة المتصفح، وليس في مجلد تنزيلات الجهاز."
-      : "Saved in browser library, not the device Downloads folder.",
+    saved: ar ? "حُفظ في مكتبة المتصفح." : "Saved in the browser library.",
     failed: ar
       ? "فشل الحفظ المحلي؛ لا تغلق الصفحة."
       : "Local save failed; keep this page open.",
+    unconfirmed: ar
+      ? "لم يتأكد الحفظ — انتهت مهلة الانتظار."
+      : "Save unconfirmed — waiting deadline reached.",
     loaded: ar ? "فُتح من مكتبة المتصفح." : "Opened from browser library.",
   };
   if (isPhone)
@@ -480,98 +632,173 @@ export function TvClient() {
         </div>
       </main>
     );
+  const stateLabels: Record<TvState, string> = ar
+    ? {
+        starting: "تجهيز الشاشة",
+        ready: "جاهز للاستقبال",
+        receiving: "جارٍ الاستقبال",
+        verifying: "التحقق من الملف",
+        complete: "ملف جاهز",
+        error: "تحتاج إلى مراجعة",
+      }
+    : {
+        starting: "Starting",
+        ready: "Ready to receive",
+        receiving: "Receiving",
+        verifying: "Verifying",
+        complete: "File ready",
+        error: "Check connection",
+      };
+  const libraryText = libraryLabels[libraryState];
+  const phaseText =
+    storeStage?.phase === "open"
+      ? ar
+        ? "فتح المكتبة"
+        : "Opening library"
+      : ar
+        ? "كتابة الملف"
+        : "Writing file";
   return (
-    <main className={`tv-page tv-${state}`}>
+    <main className={`tv-page tv-state-${state}`}>
       <header className="tv-header">
-        <span className="tv-logo">QRFerry</span>
-        <span className="tv-tag">{t("tv.tag")}</span>
-        <span className="tv-signaling">{signalingHost || "…"}</span>
-      </header>
-      <div className="tv-signal-host">
-        <label htmlFor="tv-signal-input">{t("tv.signalHost")}</label>
-        <input
-          id="tv-signal-input"
-          className="tv-signal-input"
-          dir="ltr"
-          placeholder="wss://your-server/peerjs"
-          value={signalHostInput}
-          onChange={(e) => setSignalHostInput(e.target.value)}
-        />
-        <button
-          type="button"
-          className="tv-btn tv-btn-ghost tv-signal-apply"
-          onClick={applySignal}
-        >
-          {t("tv.signalApply")}
-        </button>
-        {signalApplied ? (
-          <span className="tv-signal-applied">{t("tv.signalApplied")}</span>
-        ) : null}
-        <p className="tv-hint">{t("tv.signalHint")}</p>
-        <button
-          type="button"
-          className="tv-btn tv-btn-ghost tv-library-btn"
-          onClick={() => {
-            setShowLibrary((v) => !v);
-            void listReceivedFiles(50)
-              .then(setLibrary)
-              .catch((cause) =>
-                setLibraryError(
-                  cause instanceof Error ? cause.message : String(cause),
-                ),
-              );
-          }}
-        >
-          <FolderOpen size={20} />
-          {ar ? "الملفات المستلمة" : "Received files"}
-          {library.length ? ` (${library.length})` : ""}
-        </button>
-      </div>
-      <div className="tv-auto-download">
-        <label>
-          <input
-            type="checkbox"
-            checked={autoDownload}
-            onChange={(event) => {
-              const enabled = event.target.checked;
-              autoDownloadEnabled.current = enabled;
-              setAutoDownload(enabled);
-              try {
-                localStorage.setItem(AUTO_DOWNLOAD_KEY, String(enabled));
-              } catch {
-                /* Session preference still applies. */
-              }
-            }}
+        <div className="tv-brand">
+          <span className="tv-brand-mark">
+            <ArrowLeftRight size={26} />
+          </span>
+          <div>
+            <span className="tv-logo">QRFerry</span>
+            <span className="tv-tag">{VERSION}</span>
+          </div>
+        </div>
+        <div className="tv-header-status">
+          <span
+            className={`tv-status-dot ${state === "ready" || state === "complete" ? "is-live" : ""}`}
           />
-          {ar
-            ? "تنزيل تلقائي عند الاستلام"
-            : "Automatically download received files"}
-        </label>
-        <p className="tv-hint">
-          {ar
-            ? "قد يطلب المتصفح الإذن بالتنزيل أو يحدد مكان الحفظ حسب إعداداته. لو منع التنزيل التلقائي، اضغط «تنزيل الملف». مكتبتك والتشغيل لا يتأثران."
-            : "Your browser may ask permission or choose a save location according to its settings. If automatic downloading is blocked, use Download file. Playback and your library are independent."}
-        </p>
-        {autoResult ? (
-          <p className="tv-auto-status" role="status">
-            {ar
-              ? `طلبات التنزيل التلقائي: ${autoResult.requested}. غير مدعوم: ${autoResult.unsupported}. تعذّر الطلب: ${autoResult.failed}. هذا ليس تأكيدًا لحفظ الملفات على الجهاز؛ قد يلزم السماح بتنزيل ملفات متعددة.`
-              : `Automatic download requests: ${autoResult.requested}. Unsupported: ${autoResult.unsupported}. Failed requests: ${autoResult.failed}. This does not confirm a disk save; multiple downloads may need permission.`}
-          </p>
-        ) : null}
-      </div>
-      {libraryError ? (
-        <p className="tv-storage-error" role="alert">
-          {libraryError}
-        </p>
+          {stateLabels[state]}
+        </div>
+        <nav
+          className="tv-header-actions"
+          aria-label={ar ? "أدوات الاستقبال" : "Receiver tools"}
+        >
+          <button
+            type="button"
+            className="tv-btn tv-btn-ghost tv-library-btn"
+            aria-expanded={showLibrary}
+            aria-controls="tv-library-panel"
+            onClick={() => {
+              setShowLibrary((v) => !v);
+              setShowSettings(false);
+              void listReceivedFiles(50)
+                .then(setLibrary)
+                .catch((cause) => setLibraryError(describeBrowserError(cause)));
+            }}
+          >
+            <FolderOpen size={21} />
+            {ar ? "الملفات المستلمة" : "Received files"}
+            {library.length ? (
+              <span className="tv-count">{library.length}</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className="tv-btn tv-btn-ghost tv-settings-button"
+            aria-expanded={showSettings}
+            aria-controls="tv-settings-panel"
+            onClick={() => {
+              setShowSettings((v) => !v);
+              setShowLibrary(false);
+            }}
+          >
+            <Settings2 size={21} />
+            <span>{ar ? "الإعدادات" : "Settings"}</span>
+          </button>
+        </nav>
+      </header>
+      {showSettings ? (
+        <section
+          className="tv-panel tv-settings-panel"
+          id="tv-settings-panel"
+          aria-label={ar ? "إعدادات الاتصال" : "Connection settings"}
+        >
+          <div className="tv-panel-title">
+            <h2>{ar ? "إعدادات الاتصال" : "Connection settings"}</h2>
+            <button
+              type="button"
+              className="tv-btn tv-btn-ghost"
+              aria-label={ar ? "إغلاق الإعدادات" : "Close settings"}
+              onClick={() => {
+                setShowSettings(false);
+                document
+                  .querySelector<HTMLButtonElement>(".tv-settings-button")
+                  ?.focus();
+              }}
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <div className="tv-signal-host">
+            <label htmlFor="tv-signal-input">{t("tv.signalHost")}</label>
+            <div className="tv-input-row">
+              <input
+                id="tv-signal-input"
+                className="tv-signal-input"
+                dir="ltr"
+                placeholder="wss://your-server/peerjs"
+                value={signalHostInput}
+                onChange={(e) => setSignalHostInput(e.target.value)}
+              />
+              <button
+                type="button"
+                className="tv-btn tv-primary tv-signal-apply"
+                onClick={applySignal}
+              >
+                {t("tv.signalApply")}
+              </button>
+            </div>
+            {signalApplied ? (
+              <span className="tv-signal-applied">{t("tv.signalApplied")}</span>
+            ) : null}
+            <p className="tv-hint">{t("tv.signalHint")}</p>
+            <p className="tv-signaling" dir="ltr">
+              {signalingHost}
+            </p>
+          </div>
+        </section>
       ) : null}
       {showLibrary ? (
-        <div className="tv-library">
+        <section
+          className="tv-panel tv-library"
+          id="tv-library-panel"
+          aria-label={ar ? "مكتبة المتصفح" : "Browser library"}
+        >
+          <div className="tv-panel-title">
+            <div>
+              <h2>{ar ? "مكتبة هذه الشاشة" : "This screen’s library"}</h2>
+              <p className="tv-hint">
+                {ar
+                  ? "ملفات محفوظة داخل هذا المتصفح، وليست مجلد تنزيلات الجهاز."
+                  : "Saved in this browser, separate from device Downloads."}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="tv-btn tv-btn-ghost"
+              onClick={() => {
+                setShowLibrary(false);
+                document
+                  .querySelector<HTMLButtonElement>(".tv-library-btn")
+                  ?.focus();
+              }}
+            >
+              <X size={20} />
+              {ar ? "إغلاق المكتبة" : "Close library"}
+            </button>
+          </div>
           {!library.length ? (
             <p>
               {ar
-                ? "لا توجد ملفات محفوظة في مكتبة المتصفح بعد."
-                : "No files saved in browser library yet."}
+                ? "لا توجد ملفات في المكتبة بعد."
+                : "No files in this library yet."}
             </p>
           ) : (
             <ul className="tv-library-list">
@@ -582,9 +809,10 @@ export function TvClient() {
                     className="tv-library-item"
                     onClick={() => void openFromLibrary(f)}
                   >
+                    <FolderOpen size={22} />
                     <span className="tv-library-name">{f.name}</span>
                     <span className="tv-library-meta">
-                      {f.size.toLocaleString()} B
+                      {(f.size / 1048576).toFixed(2)} MB
                     </span>
                   </button>
                   <button
@@ -593,160 +821,354 @@ export function TvClient() {
                     aria-label={ar ? "حذف" : "Delete"}
                     onClick={() => void removeFromLibrary(f.id)}
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={20} />
                   </button>
                 </li>
               ))}
             </ul>
           )}
-        </div>
+        </section>
       ) : null}
-      {state === "starting" ? (
-        <div className="tv-center">
-          <h1>{t("tv.starting")}</h1>
-        </div>
-      ) : state === "error" ? (
-        <div className="tv-center">
-          <h1 role="alert">{error}</h1>
-          <button
-            type="button"
-            className="tv-btn"
-            onClick={() => void initReceiver()}
-          >
-            <RotateCcw size={20} />
-            {t("tv.retry")}
-          </button>
-        </div>
-      ) : state === "ready" ? (
-        <div className="tv-ready">
-          <div className="tv-qr-box">
-            <div ref={qrHost}>{!qrCanvas ? <p>…</p> : null}</div>
-            <h2>{t("tv.scanTitle")}</h2>
-            <p className="tv-code">
-              {t("tv.sessionCode")}: <b>{passcode}</b>
-            </p>
-          </div>
-          <div className="tv-instructions">
-            <h3>
-              <Monitor size={26} />
-              {t("tv.howTitle")}
-            </h3>
-            <ol className="tv-steps">
-              <li data-n="1">{t("tv.how1")}</li>
-              <li data-n="2">{t("tv.how2")}</li>
-              <li data-n="3">{t("tv.how3")}</li>
-            </ol>
-            <p className="tv-hint">{t("tv.sameNetwork")}</p>
-          </div>
-        </div>
-      ) : state === "receiving" || state === "verifying" ? (
-        <div className="tv-center">
-          <h1>
-            {state === "verifying"
-              ? ar
-                ? "فحص محتوى الملف وتجهيزه…"
-                : "Validating file content…"
-              : status || t("tv.receiving")}
-          </h1>
-          <div className="tv-progress-track">
-            <span style={{ width: `${percent}%` }} />
-          </div>
-          <p className="tv-progress-text">
-            {progress.received.toLocaleString()} /{" "}
-            {progress.total.toLocaleString()} B · {percent}%
-          </p>
-        </div>
-      ) : state === "complete" && file ? (
-        <div className="tv-center tv-complete">
-          <h1>{t("tv.complete")}</h1>
-          <p className="tv-integrity">
-            {checksum !== null
-              ? ar
-                ? "وصلت البايتات كاملة وتطابق CRC-32."
-                : "All bytes received and CRC-32 matched."
-              : ar
-                ? "تم تحميل بيانات الملف وفحص حجمها."
-                : "File bytes loaded and size checked."}
-          </p>
-          <p className="tv-library-status" role="status">
-            {libraryLabels[libraryState]}
-          </p>
-          {signature !== "unsigned" ? (
-            <p className="tv-signature-status">
-              {signature === "valid-trusted"
-                ? ar
-                  ? "توقيع صحيح بمفتاح موثوق."
-                  : "Valid signature, trusted key."
-                : ar
-                  ? "التوقيع صحيح رياضيًا، لكن هوية هذا المفتاح غير موثوقة على جهازك."
-                  : "Valid signature, but this key identity is not trusted on your device."}
-            </p>
-          ) : null}
-          {files.length > 1 ? (
-            <div className="tv-file-list">
-              {files.map((f, i) => (
+      <div className="tv-workspace">
+        <section
+          className="tv-panel tv-stage"
+          aria-label={ar ? "مساحة الاستقبال" : "Receiver stage"}
+        >
+          {state === "starting" ? (
+            <div className="tv-center">
+              <Monitor size={48} />
+              <h1>{t("tv.starting")}</h1>
+              <p className="tv-hint">
+                {ar
+                  ? "نجهّز اتصالًا مباشرًا بين أجهزتك."
+                  : "Preparing a direct connection between your devices."}
+              </p>
+            </div>
+          ) : state === "error" ? (
+            <div className="tv-center">
+              <Activity size={44} />
+              <h1>{ar ? "تعذّر تجهيز الاستقبال" : "Receiver unavailable"}</h1>
+              <p role="alert" className="tv-alert">
+                {error}
+              </p>
+              <button
+                type="button"
+                className="tv-btn tv-primary"
+                onClick={() => void initReceiver()}
+              >
+                <RotateCcw size={20} />
+                {t("tv.retry")}
+              </button>
+            </div>
+          ) : state === "ready" ? (
+            <div className="tv-ready">
+              <div className="tv-qr-box">
+                <div className="tv-qr-canvas" ref={qrHost}>
+                  {!qrCanvas ? <p>…</p> : null}
+                </div>
+                <h2>{t("tv.scanTitle")}</h2>
+                <p className="tv-code">
+                  {t("tv.sessionCode")} <b dir="ltr">{passcode}</b>
+                </p>
+              </div>
+              <div className="tv-instructions">
+                <span className="tv-eyebrow">
+                  {ar ? "من هاتفك إلى شاشتك" : "FROM PHONE TO SCREEN"}
+                </span>
+                <h1>
+                  {ar
+                    ? "ملفاتك هنا.\nبخطوات بسيطة."
+                    : "Your files.\nOn the big screen."}
+                </h1>
+                <ol className="tv-steps">
+                  <li data-n="1">{t("tv.how1")}</li>
+                  <li data-n="2">{t("tv.how2")}</li>
+                  <li data-n="3">{t("tv.how3")}</li>
+                </ol>
+                <p className="tv-hint">{t("tv.sameNetwork")}</p>
+              </div>
+            </div>
+          ) : state === "receiving" || state === "verifying" ? (
+            <div className="tv-center tv-transfer-stage">
+              <span className="tv-transfer-icon">
+                <DownloadIcon />
+              </span>
+              <span className="tv-eyebrow">
+                {ar ? "اتصال مباشر" : "DIRECT TRANSFER"}
+              </span>
+              <h1>
+                {state === "verifying"
+                  ? ar
+                    ? "نتحقق من محتوى الملف"
+                    : "Verifying file content"
+                  : t("tv.receiving")}
+              </h1>
+              <strong className="tv-transfer-percent">
+                {percent}
+                <small>%</small>
+              </strong>
+              <div className="tv-progress-track">
+                <span style={{ width: `${percent}%` }} />
+              </div>
+              <p className="tv-progress-text">
+                {progress.received.toLocaleString()} /{" "}
+                {progress.total.toLocaleString()} B · {percent}%
+              </p>
+            </div>
+          ) : state === "complete" && file ? (
+            <div className="tv-complete">
+              <div className="tv-complete-heading">
+                <span className="tv-success-icon">
+                  <Check size={22} />
+                </span>
+                <div>
+                  <h1>{t("tv.complete")}</h1>
+                  <p className="tv-integrity">
+                    {checksum !== null
+                      ? ar
+                        ? "وصلت البايتات كاملة وتطابق CRC-32."
+                        : "All bytes received; CRC-32 matched."
+                      : ar
+                        ? "فُتح الملف من مكتبة المتصفح."
+                        : "Opened from the browser library."}
+                  </p>
+                </div>
                 <button
                   type="button"
-                  className="tv-btn tv-file-select"
-                  key={i}
-                  onClick={() => selectFile(i)}
+                  className="tv-btn tv-btn-ghost tv-receive-another"
+                  onClick={() => void initReceiver()}
                 >
-                  {f.name}
+                  <RotateCcw size={19} />
+                  {t("tv.receiveAnother")}
                 </button>
-              ))}
+              </div>
+              {signature !== "unsigned" ? (
+                <p className="tv-signature-status">
+                  {signature === "valid-trusted"
+                    ? ar
+                      ? "توقيع صحيح بمفتاح موثوق."
+                      : "Verified signature, trusted key."
+                    : ar
+                      ? "توقيع صحيح، لكن المفتاح غير موثوق على هذه الشاشة."
+                      : "Valid signature; key not trusted on this screen."}
+                </p>
+              ) : null}
+              {files.length > 1 ? (
+                <div className="tv-file-list">
+                  {files.map((f, i) => (
+                    <button
+                      type="button"
+                      className="tv-btn tv-file-select"
+                      aria-pressed={i === selectedIndex}
+                      key={i}
+                      onClick={() => selectFile(i)}
+                    >
+                      {f.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <ReceivedPlayer
+                key={file.url}
+                file={file}
+                onSnapshot={onPlayerSnapshot}
+                onDownload={() =>
+                  downloads.request(bytes.current[activeIndex.current])
+                }
+                onSave={() =>
+                  saveReceivedFile(
+                    file,
+                    bytes.current[activeIndex.current].bytes,
+                  )
+                }
+              />
             </div>
           ) : null}
-          <ReceivedPlayer
-            key={file.url}
-            file={file}
-            onDownload={() =>
-              downloads.request(bytes.current[activeIndex.current])
-            }
-            onSave={() =>
-              saveReceivedFile(file, bytes.current[activeIndex.current].bytes)
-            }
-          />
-          <button
-            type="button"
-            className="tv-btn tv-btn-ghost"
-            onClick={() => void initReceiver()}
+        </section>
+        <aside className="tv-rail">
+          <section
+            className="tv-panel tv-diagnostics"
+            aria-label={ar ? "حالة العمليات الفعلية" : "Live operation status"}
           >
-            <RotateCcw size={20} />
-            {t("tv.receiveAnother")}
-          </button>
-        </div>
-      ) : null}
-      {state !== "error" && error ? <p role="alert">{error}</p> : null}
-      <details className="tv-diagnostics">
-        <summary>
-          {ar ? "تشخيص الاستقبال والتشغيل" : "Receive / playback diagnostics"} ·{" "}
-          {VERSION}
-        </summary>
-        <p>
-          {ar ? "الحالة" : "State"}: {state} · {progress.received}/
-          {progress.total} B · CRC:{" "}
-          {checksum === null ? "—" : checksum.toString(16).padStart(8, "0")}
-        </p>
-        <p>
-          {ar ? "المكتبة" : "Library"}: {libraryLabels[libraryState]}
-        </p>
-        <p>
-          Secure context: {String(secure)} · WebRTC: {String(compat?.webRtc)} ·
-          IndexedDB: {String(compat?.indexedDb)} · download attribute:{" "}
-          {String(compat?.download)}
-        </p>
-        <p>
+            <div className="tv-panel-title">
+              <h2>
+                <Activity size={21} />
+                {ar ? "حالة العمليات" : "Live status"}
+              </h2>
+              <span className="tv-live-label">{ar ? "مباشر" : "LIVE"}</span>
+            </div>
+            <div className="tv-operation">
+              <span className="tv-operation-number">01</span>
+              <div>
+                <h3>{ar ? "استقبال البيانات" : "Receipt"}</h3>
+                <p>{stateLabels[state]}</p>
+                {progress.total ? (
+                  <small dir="ltr">
+                    {progress.received.toLocaleString()} /{" "}
+                    {progress.total.toLocaleString()} B
+                  </small>
+                ) : null}
+              </div>
+            </div>
+            <div className={`tv-operation tv-library-${libraryState}`}>
+              <span className="tv-operation-number">02</span>
+              <div>
+                <h3>{ar ? "مكتبة المتصفح" : "Browser library"}</h3>
+                <p className="tv-library-status" role="status">
+                  {libraryText}
+                </p>
+                {libraryState === "saving" ? (
+                  <small className="tv-storage-stage">
+                    {phaseText} · {storageSeconds} {ar ? "ث" : "s"}
+                  </small>
+                ) : null}
+                {storeStage && libraryState !== "saving" ? (
+                  <small className="tv-storage-stage" dir="ltr">
+                    {storeStage.phase} / {storeStage.state} ·{" "}
+                    {storeStage.elapsedMs} ms
+                  </small>
+                ) : null}
+              </div>
+            </div>
+            <div className="tv-operation">
+              <span className="tv-operation-number">03</span>
+              <div>
+                <h3>{ar ? "قراءة الوسائط" : "Media readiness"}</h3>
+                <p>
+                  {!playerSnapshot
+                    ? ar
+                      ? "في انتظار ملف وسائط"
+                      : "Waiting for media"
+                    : playerSnapshot.error
+                      ? `MEDIA_ERR_${playerSnapshot.error}`
+                      : playerSnapshot.ready >= 3
+                        ? ar
+                          ? "بيانات متاحة للمشغّل"
+                          : "Media data available"
+                        : ar
+                          ? "لم تكتمل جاهزية المشغّل"
+                          : "Media not yet ready"}
+                </p>
+                {playerSnapshot ? (
+                  <small className="tv-media-metrics" dir="ltr">
+                    ready={playerSnapshot.ready} · network=
+                    {playerSnapshot.network} · {playerSnapshot.time.toFixed(1)}s
+                  </small>
+                ) : null}
+              </div>
+            </div>
+            {libraryError ? (
+              <p className="tv-storage-error" role="alert">
+                {libraryError}
+              </p>
+            ) : null}
+            {state !== "error" && error ? (
+              <p className="tv-alert" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="tv-text-button tv-diagnostics-toggle"
+              aria-expanded={showDiagnostics}
+              aria-controls="tv-diagnostics-extra"
+              onClick={() => setShowDiagnostics((v) => !v)}
+            >
+              <ChevronDown size={16} />
+              {ar ? "التفاصيل التقنية" : "Technical details"}
+            </button>
+            {showDiagnostics ? (
+              <div id="tv-diagnostics-extra" className="tv-diagnostics-extra">
+                <p>
+                  {ar
+                    ? "سجل أحداث هذه الجلسة، وليس فحصًا محاكى."
+                    : "Events from this session, not a simulated check."}
+                </p>
+                <ol className="tv-event-log" dir="ltr">
+                  {trace.length ? (
+                    trace.map((e) => <li key={e.id}>{e.event}</li>)
+                  ) : (
+                    <li>
+                      {ar
+                        ? "لم تبدأ عمليات ملف بعد."
+                        : "No file operations yet."}
+                    </li>
+                  )}
+                </ol>
+                <p>{status}</p>
+                <p dir="ltr">
+                  CRC:{" "}
+                  {checksum === null
+                    ? "—"
+                    : checksum.toString(16).padStart(8, "0")}
+                </p>
+                <p dir="ltr">
+                  Secure: {String(secure)} · WebRTC: {String(compat?.webRtc)} ·
+                  IndexedDB API: {String(compat?.indexedDb)}
+                </p>
+                <p dir="ltr" className="tv-user-agent">
+                  {userAgent}
+                </p>
+                <p className="tv-hint">
+                  {ar
+                    ? "وجود API لا يضمن عمل التخزين أو التنزيل. انتهاء المهلة يعني غياب تأكيد، وليس إثباتًا أن الملف لم يُكتب."
+                    : "API presence does not guarantee access. A timeout means no confirmation, not proof that no file was written."}
+                </p>
+              </div>
+            ) : null}
+          </section>
+          <section className="tv-panel tv-auto-download">
+            <label>
+              <input
+                type="checkbox"
+                checked={autoDownload}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  autoDownloadEnabled.current = enabled;
+                  setAutoDownload(enabled);
+                  try {
+                    localStorage.setItem(AUTO_DOWNLOAD_KEY, String(enabled));
+                  } catch {
+                    /* Session preference applies. */
+                  }
+                }}
+              />
+              <span>
+                {ar
+                  ? "تنزيل تلقائي عند الاستلام"
+                  : "Automatically download received files"}
+              </span>
+            </label>
+            <p className="tv-hint">
+              {ar
+                ? "طلب تنزيل فقط؛ المتصفح يقرر السماح والحفظ."
+                : "A download request only; the browser controls permission and saving."}
+            </p>
+            {autoResult ? (
+              <p className="tv-auto-status" role="status">
+                {ar
+                  ? `طلبات التنزيل التلقائي: ${autoResult.requested}. غير مدعوم: ${autoResult.unsupported}. تعذّر الطلب: ${autoResult.failed}. هذا ليس تأكيدًا لحفظ الملفات.`
+                  : `Download requests: ${autoResult.requested}. Unsupported: ${autoResult.unsupported}. Failed: ${autoResult.failed}. Not a confirmed disk save.`}
+              </p>
+            ) : null}
+          </section>
+        </aside>
+      </div>
+      <footer className="tv-footer">
+        <span>
+          <ShieldCheck size={17} />
+          {ar ? "نقل مباشر بين أجهزتك" : "Direct device-to-device transfer"}
+        </span>
+        <span>
           {ar
-            ? "ظهور خاصية download لا يضمن أن نظام التلفزيون يسمح بالتنزيل. مكتبة المتصفح قد تُحذف عند مسح بيانات الموقع أو نقص المساحة."
-            : "A download attribute does not guarantee TV filesystem access. Browser storage can be cleared or evicted."}
-        </p>
-        <p>
-          {ar
-            ? "نوع MIME لا يغيّر ترميز الصوت. لو البيانات وصلت والتشغيل فشل، أرسل صورة هذه المعلومات وحالة المشغّل."
-            : "MIME does not transcode audio. If receipt succeeds but playback fails, share these diagnostics and the player status."}
-        </p>
-        <p dir="ltr">{userAgent}</p>
-      </details>
+            ? "الأسهم للتنقّل · OK للاختيار"
+            : "Arrows to navigate · OK to select"}
+        </span>
+        <b dir="ltr">{VERSION}</b>
+      </footer>
     </main>
   );
+}
+function DownloadIcon() {
+  return <ArrowLeftRight size={34} />;
 }

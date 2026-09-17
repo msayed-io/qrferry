@@ -150,7 +150,7 @@ test("TV retains exact playable bytes after reload and reopening the library", a
       buffer: bytes,
     },
   ]);
-  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ داخل");
+  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ في مكتبة المتصفح");
   await tv.reload();
   await tv.getByRole("button", { name: /الملفات المستلمة/ }).click();
   await tv.locator(".tv-library-item", { hasText: "persist.wav" }).click();
@@ -180,7 +180,7 @@ test("Cancelling the save picker never triggers a fallback download", async ({
   });
   let downloads = 0;
   tv.on("download", () => downloads++);
-  await tv.locator(".tv-save-options summary").click();
+  await tv.locator(".tv-save-toggle").click();
   await tv
     .getByRole("button", { name: "اختيار مكان الحفظ", exact: true })
     .click();
@@ -212,7 +212,7 @@ test("Storage transaction abort is visible and does not prevent actual audio pla
     { name: "quota.wav", mimeType: "audio/wav", buffer: wav() },
   ]);
   await expect(tv.locator(".tv-storage-error")).toContainText(
-    "الحفظ داخل مكتبة المتصفح فشل",
+    "تعذّر حفظ المكتبة",
   );
   await expect(tv.locator(".tv-library-status")).toContainText("فشل");
   const audio = tv.locator("audio");
@@ -293,7 +293,7 @@ test("Native save picker receives exact bytes and the original extension, and re
       },
     });
   });
-  await tv.locator(".tv-save-options summary").click();
+  await tv.locator(".tv-save-toggle").click();
   await tv
     .getByRole("button", { name: "اختيار مكان الحفظ", exact: true })
     .click();
@@ -382,7 +382,7 @@ for (const failure of ["write", "close"] as const) {
     }, failure);
     let downloads = 0;
     tv.on("download", () => downloads++);
-    await tv.locator(".tv-save-options summary").click();
+    await tv.locator(".tv-save-toggle").click();
     await tv
       .getByRole("button", { name: "اختيار مكان الحفظ", exact: true })
       .click();
@@ -439,7 +439,9 @@ test("Auto download: default receipt downloads exact Arabic-named bytes without 
       tv.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime),
     )
     .toBeGreaterThan(0);
-  const autoToggle = tv.getByRole("checkbox", { name: "تنزيل تلقائي عند الاستلام" });
+  const autoToggle = tv.getByRole("checkbox", {
+    name: "تنزيل تلقائي عند الاستلام",
+  });
   await autoToggle.focus();
   await tv.keyboard.press("ArrowRight");
   await expect(autoToggle).not.toBeFocused();
@@ -530,3 +532,271 @@ test("Auto download: download rejection does not break playback or library persi
     )
     .toBeGreaterThan(0);
 });
+
+// These inject browser failures; they do not pretend to emulate an LG media engine.
+test("TV4 exposes an empty-message QuotaExceededError without losing playback", async ({
+  context,
+}) => {
+  const tv = await transfer(
+    context,
+    [{ name: "quota-name.wav", mimeType: "audio/wav", buffer: wav() }],
+    undefined,
+    async (page) => {
+      await page.evaluate(() => {
+        const original = IDBObjectStore.prototype.put;
+        IDBObjectStore.prototype.put = function (
+          ...args: Parameters<IDBObjectStore["put"]>
+        ) {
+          if (this.name === "files")
+            throw new DOMException("", "QuotaExceededError");
+          return original.apply(this, args);
+        };
+      });
+    },
+  );
+  await expect(tv.locator(".tv-storage-error")).toContainText(
+    "QuotaExceededError",
+  );
+  await expect(tv.locator(".tv-library-status")).toContainText("فشل");
+  await tv.getByRole("button", { name: "تشغيل", exact: true }).click();
+  await expect
+    .poll(() =>
+      tv.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime),
+    )
+    .toBeGreaterThan(0);
+  await tv.locator(".tv-diagnostics-toggle").click();
+  await expect(tv.locator(".tv-event-log")).toContainText(
+    "library:write:error",
+  );
+});
+
+test("TV4 bounds a lost commit callback and reports unconfirmed instead of fake success", async ({
+  context,
+}) => {
+  const page = await context.newPage();
+  await page.clock.install();
+  const tv = await transfer(
+    context,
+    [{ name: "pending.wav", mimeType: "audio/wav", buffer: wav() }],
+    page,
+    async (page) => {
+      await page.evaluate(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(
+          IDBTransaction.prototype,
+          "oncomplete",
+        )!;
+        Object.defineProperty(IDBTransaction.prototype, "oncomplete", {
+          configurable: true,
+          get: descriptor.get,
+          set(callback) {
+            if (
+              this.db.name === "qrferry-received-files" &&
+              this.mode === "readwrite"
+            )
+              return;
+            return descriptor.set!.call(this, callback);
+          },
+        });
+      });
+    },
+  );
+  await expect(tv.locator(".tv-storage-stage")).toContainText("كتابة الملف");
+  await tv.clock.fastForward(31_000);
+  await expect(tv.locator(".tv-library-status")).toContainText(
+    "لم يتأكد الحفظ",
+  );
+  await expect(tv.locator(".tv-storage-error")).toContainText(
+    "BrowserOperationTimeout",
+  );
+  await expect(tv.locator(".tv-storage-stage")).toContainText(
+    "write / timeout",
+  );
+  await tv.getByRole("button", { name: "تشغيل", exact: true }).click();
+  await expect
+    .poll(() =>
+      tv.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime),
+    )
+    .toBeGreaterThan(0);
+});
+
+test("TV4 bounds a stuck library open and closes an abandoned late connection", async ({
+  context,
+}) => {
+  await context.addInitScript(() => {
+    const original = indexedDB.open.bind(indexedDB);
+    Object.defineProperty(indexedDB, "open", {
+      configurable: true,
+      value: (name: string, version?: number) => {
+        if (name !== "qrferry-received-files") return original(name, version);
+        const request = {
+          result: {
+            close() {
+              (window as Window & { __lateClosed?: boolean }).__lateClosed =
+                true;
+            },
+          },
+          onsuccess: null as null | (() => void),
+          onerror: null,
+          onblocked: null,
+          onupgradeneeded: null,
+        };
+        (window as Window & { __lateOpen?: typeof request }).__lateOpen =
+          request;
+        return request;
+      },
+    });
+  });
+  const page = await context.newPage();
+  await page.clock.install();
+  const tv = await transfer(
+    context,
+    [{ name: "open-pending.wav", mimeType: "audio/wav", buffer: wav() }],
+    page,
+  );
+  await expect(tv.locator("audio")).toBeVisible();
+  await tv.clock.fastForward(16_000);
+  await expect(tv.locator(".tv-library-status")).toContainText(
+    "لم يتأكد الحفظ",
+  );
+  await expect(tv.locator(".tv-storage-stage")).toContainText("open / timeout");
+  await tv.evaluate(() =>
+    (
+      window as Window & { __lateOpen?: { onsuccess?: () => void } }
+    ).__lateOpen?.onsuccess?.(),
+  );
+  expect(
+    await tv.evaluate(
+      () => (window as Window & { __lateClosed?: boolean }).__lateClosed,
+    ),
+  ).toBe(true);
+  await expect(tv.locator(".tv-library-status")).toContainText(
+    "لم يتأكد الحفظ",
+  );
+});
+
+test("TV4 detects missing media readiness and offers a working reload action", async ({
+  context,
+}) => {
+  const page = await context.newPage();
+  await page.clock.install();
+  const tv = await transfer(
+    context,
+    [{ name: "media-pending.wav", mimeType: "audio/wav", buffer: wav() }],
+    page,
+    async (page) => {
+      await page.evaluate(() => {
+        const original = Object.getOwnPropertyDescriptor(
+          HTMLMediaElement.prototype,
+          "readyState",
+        )!;
+        (window as Window & { __restoreReady?: () => void }).__restoreReady =
+          () =>
+            Object.defineProperty(
+              HTMLMediaElement.prototype,
+              "readyState",
+              original,
+            );
+        Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
+          configurable: true,
+          get: () => 0,
+        });
+      });
+    },
+  );
+  await expect(tv.locator("audio")).toBeVisible();
+  await tv.clock.fastForward(16_000);
+  await expect(tv.locator(".tv-playback-error")).toContainText(
+    "MEDIA_WAIT_TIMEOUT",
+  );
+  await expect(tv.locator(".tv-media-metrics")).toContainText("ready=0");
+  await tv.evaluate(() =>
+    (window as Window & { __restoreReady?: () => void }).__restoreReady?.(),
+  );
+  await tv.locator(".tv-reload-player").click();
+  await expect
+    .poll(() =>
+      tv.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime),
+    )
+    .toBeGreaterThan(0);
+  await expect(tv.locator(".tv-playback-error")).toHaveCount(0);
+});
+
+test("TV4 does not wait forever for a play promise that never settles", async ({
+  context,
+}) => {
+  const page = await context.newPage();
+  await page.clock.install();
+  const tv = await transfer(
+    context,
+    [{ name: "play-pending.wav", mimeType: "audio/wav", buffer: wav() }],
+    page,
+  );
+  await tv.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => new Promise<void>(() => {});
+  });
+  await tv.getByRole("button", { name: "تشغيل", exact: true }).click();
+  await tv.clock.fastForward(16_000);
+  await expect(tv.locator(".tv-playback-error")).toContainText("media-play");
+  await expect(tv.locator(".tv-playback-error")).toContainText(
+    "BrowserOperationTimeout",
+  );
+});
+
+for (const [width, height] of [
+  [960, 540],
+  [1280, 720],
+  [1920, 1080],
+  [3840, 2160],
+  [800, 600],
+]) {
+  test(`TV4 responsive receiver and player at ${width}x${height}`, async ({
+    context,
+  }) => {
+    const page = await context.newPage();
+    await page.setViewportSize({ width, height });
+    const tv = await transfer(
+      context,
+      [
+        {
+          name: "سورة طويلة جدًا لاختبار التفاف اسم الملف على شاشة التلفاز وعدم خروج الأزرار خارج حدود العرض.wav",
+          mimeType: "audio/wav",
+          buffer: wav(),
+        },
+      ],
+      page,
+      async (page) => {
+        await expect(page.locator("main.tv-page")).toHaveCSS("display", "flex");
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        const qr = await page.locator(".tv-qr-box canvas").boundingBox();
+        expect(qr!.width).toBeGreaterThan(145);
+        expect(qr!.x).toBeGreaterThanOrEqual(0);
+        expect(qr!.x + qr!.width).toBeLessThanOrEqual(width);
+      },
+    );
+    expect(
+      await tv.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    for (const selector of [".tv-play-button", ".tv-download-button"]) {
+      const box = await tv.locator(selector).boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(48);
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+      if (width >= 960)
+        expect(box!.y + box!.height).toBeLessThanOrEqual(height);
+    }
+    await tv.locator(".tv-play-button").focus();
+    await tv.keyboard.press("ArrowLeft");
+    await expect(tv.locator(".tv-download-button")).toBeFocused();
+    await tv.locator(".tv-settings-button").click();
+    await expect(tv.locator(".tv-signal-input")).toBeVisible();
+    await tv.keyboard.press("Escape");
+    await expect(tv.locator(".tv-signal-input")).toHaveCount(0);
+    await expect(tv.locator(".tv-settings-button")).toBeFocused();
+  });
+}

@@ -1,3 +1,4 @@
+import { withDeadline } from "./browser-operation";
 import { receivedBlob } from "./received-media";
 export type SaveResult = "saved" | "requested" | "cancelled" | "unsupported";
 type SavePicker = (options: { suggestedName: string }) => Promise<{
@@ -20,11 +21,16 @@ export async function saveReceivedFile(
       const handle = await picker.call(window, { suggestedName: file.name });
       const writable = await handle.createWritable();
       try {
-        await writable.write(receivedBlob(bytes, file.mime));
-        await writable.close();
+        await withDeadline(
+          writable.write(receivedBlob(bytes, file.mime)),
+          "file-write",
+          30_000,
+        );
+        await withDeadline(writable.close(), "file-close", 30_000);
       } catch (e) {
         try {
-          await writable.abort?.();
+          if (writable.abort)
+            await withDeadline(writable.abort(), "file-abort", 2_000);
         } catch {
           /* preserve write error */
         }

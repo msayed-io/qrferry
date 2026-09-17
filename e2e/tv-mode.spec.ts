@@ -26,19 +26,27 @@ test("TV page custom signaling host applies and persists", async ({ page }) => {
   await expect(page.getByText("امسح هذا الرمز من هاتفك")).toBeVisible({
     timeout: 20_000,
   });
-  await page.getByLabel("خادم التسيير المخصص (لشبكة معزولة)").fill("ws://192.168.1.50:9000/peerjs");
+  await page.locator(".tv-settings-button").click();
+  await page
+    .getByLabel("خادم التسيير المخصص (لشبكة معزولة)")
+    .fill("ws://192.168.1.50:9000/peerjs");
   await page.getByRole("button", { name: "تطبيق" }).click();
   await expect(page.getByText("تم تطبيق خادم التسيير")).toBeVisible();
-  const stored = await page.evaluate(() => localStorage.getItem("qrferry-peer-host"));
+  const stored = await page.evaluate(() =>
+    localStorage.getItem("qrferry-peer-host"),
+  );
   expect(stored).toContain("192.168.1.50");
   expect(stored).toContain("9000");
 });
 
-test("TV page remote navigation moves focus between buttons", async ({ page }) => {
+test("TV page remote navigation moves focus between buttons", async ({
+  page,
+}) => {
   await page.goto("/tv");
   await expect(page.getByText("امسح هذا الرمز من هاتفك")).toBeVisible({
     timeout: 20_000,
   });
+  await page.locator(".tv-settings-button").click();
   await page.locator(".tv-signal-apply").focus();
   const beforeId = await page.evaluate(() => {
     const el = document.activeElement as HTMLElement | null;
@@ -74,5 +82,7 @@ test("TV page is blocked on phone-sized touch screens", async ({ page }) => {
     timeout: 10_000,
   });
   // لا يبدأ المستقبِل على الهاتف
-  await expect(page.evaluate(() => window.__qrferryTvInfo ?? null)).resolves.toBeNull();
+  await expect(
+    page.evaluate(() => window.__qrferryTvInfo ?? null),
+  ).resolves.toBeNull();
 });
