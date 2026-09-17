@@ -29,12 +29,12 @@ test("server-renders the sender product surface (Arabic RTL)", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>إرسال ملف · QRFerry<\/title>/i);
-  assert.match(html, /انقل ملفاً/);
-  assert.match(html, /اختر ملفاً/);
+  assert.match(html, /أرسل ملفاتك/);
+  assert.match(html, /ملفات الإرسال/);
   assert.match(html, /ابدأ بثّ QR/);
-  assert.match(html, /Brotli-11 \+ gzip-9/);
-  assert.match(html, /RaptorQ FEC/);
-  assert.match(html, /المزدوجة تتبادل مسارين ثابتين/i);
+  assert.match(html, /الخصوصية وخيارات إضافية/);
+  assert.match(html, /QRFERRY-UI-6/);
+  assert.match(html, /إعدادات بثّ QR/);
   assert.match(html, /Turbo 30/);
   assert.match(html, /1 Mbps/);
   assert.match(html, /تشفير الملف بكلمة مرور/);
@@ -47,11 +47,11 @@ test("server-renders the mobile scanner surface (Arabic RTL)", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>مسح نقل · QRFerry<\/title>/i);
-  assert.match(html, /وجّه\. ثبّت\. استقبل\./);
+  assert.match(html, /استقبل ملفاتك/);
   assert.match(html, /تشغيل الكاميرا/);
   assert.match(html, /تقدّم استرداد الملف/);
-  assert.match(html, /معدل الملف الفعلي/);
+  assert.match(html, /حالة الاستقبال/);
   assert.match(html, /مسار مزدوج/);
   assert.match(html, /فك p50 \/ p95/i);
-  assert.match(html, /مستقبل RaptorQ للموبايل|أي مسار ثابت يقدّم الملف/);
+  assert.match(html, /التفاصيل التقنية/);
 });

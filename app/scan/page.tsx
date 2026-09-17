@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppHeader } from "../app-header";
+import { WorkspaceHeader } from "../workspace-ui";
 import { ScannerClient } from "./scanner-client";
 
 export const metadata: Metadata = {
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function ScanPage() {
   return (
     <>
-      <AppHeader active="scan" />
+      <WorkspaceHeader active="scan" />
       <ScannerClient />
     </>
   );

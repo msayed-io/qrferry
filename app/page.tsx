@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { AppHeader } from "./app-header";
+import { WorkspaceHeader } from "./workspace-ui";
 import { SendClient } from "./send-client";
-import { Tour } from "./tour";
 
 export const metadata: Metadata = {
   title: "إرسال ملف · QRFerry",
@@ -12,9 +11,8 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <>
-      <AppHeader active="send" />
+      <WorkspaceHeader active="send" />
       <SendClient />
-      <Tour />
     </>
   );
 }

@@ -38,6 +38,7 @@ test("sender converts pasted text into a transfer", async ({ page }) => {
 
 test("sender can create and select a custom preset", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: /إعدادات بثّ QR/ }).click();
   await page.getByRole("button", { name: /بروفايل مخصص/ }).click();
   await page.getByLabel("اسم البروفايل").fill("سريع-ليلي");
   await page.getByLabel("معدل الإطارات (fps)").fill("20");
@@ -54,13 +55,14 @@ test("language switch flips the interface to English and back", async ({ page })
   await page.goto("/");
   await page.getByRole("button", { name: /Switch language/ }).click();
   await expect(page.getByRole("link", { name: "Send" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Move a file/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Send your files." })).toBeVisible();
   await page.getByRole("button", { name: /Switch language/ }).click();
   await expect(page.getByRole("link", { name: "إرسال" })).toBeVisible();
 });
 
 test("broadcast mode toggles and highlights the stage", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "الخصوصية وخيارات إضافية" }).click();
   await page.getByRole("button", { name: /بث جماعي/ }).click();
   await expect(page.locator("main.broadcast-active")).toBeVisible();
 });

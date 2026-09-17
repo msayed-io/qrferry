@@ -119,7 +119,7 @@ test("batch: dropped files respect the same maximum without silently truncating"
       );
     return dt;
   });
-  await page.locator(".drop-zone").dispatchEvent("drop", { dataTransfer });
+  await page.locator(".control-panel").dispatchEvent("drop", { dataTransfer });
   await expect(
     page.getByText(/يمكن إرسال 3 ملفات بحد أقصى في المرة الواحدة/),
   ).toBeVisible();

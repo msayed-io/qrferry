@@ -2,6 +2,7 @@ import { expect, test } from "./test";
 
 test("password QR modal opens and renders a QR canvas", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "الخصوصية وخيارات إضافية" }).click();
   await page.getByRole("button", { name: /تشفير الملف/ }).click();
   await page.getByLabel("كلمة المرور").fill("سر-1234");
   await page.getByRole("button", { name: "اعرض كلمة المرور كـ QR" }).click();

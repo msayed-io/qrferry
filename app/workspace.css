@@ -1,0 +1,1459 @@
+/* QRFERRY-UI-6. Sender/scanner only; the TV and secondary routes keep their own layouts. */
+.workspace-header,
+.transfer-page {
+  font-size: clamp(16px, 1.05vw, 26px);
+  color: var(--ink);
+}
+.workspace-header {
+  width: min(1680px, calc(100% - 64px));
+  margin: 0 auto;
+  min-height: 104px;
+  padding: 18px 0;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.workspace-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.workspace-brand .brand-mark {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+}
+.workspace-brand strong {
+  display: block;
+  font-size: 1.7em;
+  line-height: 1.2;
+  letter-spacing: -0.05em;
+}
+.workspace-brand small {
+  display: block;
+  margin-top: 4px;
+  color: var(--blue);
+  font: 0.65em var(--font-geist-mono);
+  letter-spacing: 0.04em;
+}
+.workspace-nav {
+  display: flex;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+.workspace-nav a,
+.workspace-language {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: var(--ink);
+  text-decoration: none;
+  font: inherit;
+  font-weight: 600;
+}
+.workspace-nav a[aria-current="page"] {
+  background: var(--ink);
+  color: var(--signal);
+  border-color: var(--ink);
+}
+.workspace-language {
+  cursor: pointer;
+  min-width: 48px;
+  padding: 10px;
+}
+.workspace-header svg,
+.transfer-page button svg,
+.transfer-page a svg {
+  flex-shrink: 0;
+}
+.workspace-header a:focus-visible,
+.workspace-header button:focus-visible,
+.transfer-page :is(button, a, input, textarea, select):focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}
+.transfer-page {
+  width: min(1680px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 30px 0 48px;
+  min-height: calc(100vh - 200px);
+  line-height: 1.6;
+}
+.transfer-page *,
+.transfer-page *::before,
+.transfer-page *::after {
+  box-sizing: border-box;
+}
+.transfer-page [hidden] {
+  display: none !important;
+}
+.transfer-page button,
+.transfer-page input,
+.transfer-page textarea,
+.transfer-page select {
+  font-family: inherit;
+}
+.workspace-intro {
+  margin: 0 0 28px;
+  text-align: start;
+}
+.workspace-intro h1 {
+  font-size: clamp(30px, 3vw, 52px);
+  line-height: 1.3;
+  margin: 0 0 8px;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+}
+.workspace-intro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1em;
+  line-height: 1.7;
+}
+.transfer-page .sender-grid,
+.transfer-page .scanner-shell {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+  align-items: start;
+  gap: clamp(20px, 2vw, 36px);
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.transfer-page :is(.control-panel, .qr-panel, .camera-card, .receive-card) {
+  min-width: 0;
+  padding: clamp(22px, 2.3vw, 44px);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: var(--ink);
+}
+.transfer-page .control-panel,
+.transfer-page .camera-card {
+  border-color: var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+.transfer-page .step-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.transfer-page .step-heading > span {
+  margin-top: 3px;
+  color: var(--muted);
+  font: 0.8em/1.8 var(--font-geist-mono);
+}
+.transfer-page .step-heading h2 {
+  font-size: 1.3em;
+  line-height: 1.5;
+  margin: 0;
+  font-weight: 700;
+}
+.transfer-page .step-heading p {
+  color: var(--muted);
+  font-size: 0.86em;
+  line-height: 1.7;
+  margin: 4px 0 0;
+}
+.transfer-page
+  :is(
+    .file-button,
+    .primary-action,
+    .fast-action,
+    .link-action,
+    .mini-btn,
+    .preset-add,
+    .modal-close,
+    .fast-switch-cam
+  ),
+.transfer-page .prompt-actions button,
+.transfer-page .trust-actions button {
+  min-height: 48px;
+  border-radius: 3px;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+.transfer-page
+  :is(
+    .file-button,
+    .primary-action,
+    .fast-action,
+    .mini-btn,
+    .modal-close,
+    .fast-switch-cam
+  ),
+.transfer-page .prompt-actions button,
+.transfer-page .trust-actions button {
+  border: 1px solid var(--ink);
+  background: var(--white);
+  color: var(--ink);
+  padding: 11px 18px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.transfer-page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.transfer-page :is(button, a):not(:disabled) {
+  touch-action: manipulation;
+}
+.transfer-page .file-button:hover,
+.transfer-page .primary-action:hover,
+.transfer-page .fast-action:hover {
+  transform: none;
+  background: var(--signal-soft);
+}
+.transfer-page .send-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 16px;
+  border: 0;
+}
+.transfer-page .send-tabs button {
+  flex: 1;
+  min-height: 48px;
+  font-size: 0.95em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--muted);
+}
+.transfer-page .send-tabs button.selected {
+  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--signal-soft);
+}
+.transfer-page .drop-zone {
+  margin: 0;
+  padding: 22px 14px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #11182003,
+    #11182003 8px,
+    transparent 8px,
+    transparent 16px
+  );
+}
+.transfer-page .drop-zone.dragging {
+  border-color: var(--blue);
+  background: #2f6dff0c;
+}
+.transfer-page .folder-button {
+  margin-inline-start: 10px;
+  box-shadow: none;
+  border-color: var(--line);
+}
+.transfer-page .drop-zone .batch-hint {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.82em;
+  line-height: 1.6;
+}
+.transfer-page .text-entry textarea {
+  width: 100%;
+  min-height: 170px;
+  resize: vertical;
+  padding: 14px;
+  font-size: 1em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.transfer-page .text-entry .file-button {
+  width: 100%;
+  margin-top: 12px;
+  justify-content: center;
+}
+.transfer-page .selected-files {
+  margin-top: 18px;
+  gap: 8px;
+}
+.transfer-page .selected-files .batch-file {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 44px;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.transfer-page .selected-files .fname {
+  font-size: 0.92em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.transfer-page .selected-files .fmeta {
+  font-size: 0.78em;
+  color: var(--muted);
+}
+.transfer-page .selected-files .remove-file {
+  min-height: 44px;
+  width: 44px;
+  padding: 8px;
+}
+.transfer-page .selected-files .batch-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--paper);
+}
+.transfer-page .batch-summary button {
+  min-height: 44px;
+  padding: 6px;
+  font-size: 0.85em;
+}
+.transfer-page .selected-files .batch-add {
+  min-height: 48px;
+  font-size: 0.88em;
+}
+.transfer-page .encrypted-badge {
+  font-size: 0.9em;
+}
+.transfer-page .quick-send {
+  padding-top: 22px;
+}
+.transfer-page .fast-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  background: var(--signal);
+  font-size: 1.05em;
+}
+.transfer-page .fast-action > span {
+  display: block;
+}
+.transfer-page .fast-action strong {
+  font-size: inherit;
+}
+.transfer-page .workspace-note {
+  margin: 10px 0 18px;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-align: center;
+}
+.workspace-disclosure {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.workspace-disclosure-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92em;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+.workspace-disclosure-toggle > span {
+  flex: 1;
+  min-width: 0;
+}
+.workspace-disclosure-toggle small {
+  max-width: 40%;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.82em;
+  font-weight: 400;
+}
+.workspace-disclosure-toggle > svg {
+  transition: transform 0.15s;
+}
+.workspace-disclosure-toggle[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.workspace-disclosure-content {
+  padding: 6px 0 16px;
+  font-size: 0.95em;
+}
+.transfer-page .advanced-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 0;
+}
+.transfer-page .adv-option {
+  display: block;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.transfer-page .adv-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  font-size: 1em;
+  color: var(--ink);
+  text-align: start;
+}
+.transfer-page .adv-toggle > span:last-child {
+  min-width: 0;
+}
+.transfer-page .adv-glyph {
+  flex: 0 0 32px;
+  height: 32px;
+  width: 32px;
+  background: var(--white);
+  color: var(--ink);
+}
+.transfer-page .adv-option.on {
+  border-color: var(--ink);
+  background: var(--signal-soft);
+}
+.transfer-page .adv-body {
+  margin: 12px 0 0;
+  padding: 0;
+}
+.transfer-page :is(.adv-hint, .encrypt-hint, .identity-line, .channel-warning) {
+  font-size: 0.86em;
+  line-height: 1.8;
+  margin: 8px 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.transfer-page
+  :is(.encrypt-field label, .camera-picker label, .preset-form label) {
+  display: block;
+  font-size: 0.9em;
+  margin-bottom: 6px;
+}
+.transfer-page
+  :is(
+    .password-input,
+    .preset-form input,
+    .preset-form select,
+    .camera-picker select
+  ) {
+  min-width: 0;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 1em;
+}
+.transfer-page .adv-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.transfer-page .preset-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.transfer-page .preset-list > button {
+  min-width: 0;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink);
+}
+.transfer-page .preset-list > button.selected {
+  border-color: var(--ink);
+  background: var(--signal-soft);
+}
+.transfer-page .preset-list strong {
+  font-size: 1em;
+}
+.transfer-page .preset-list small {
+  white-space: normal;
+  font-size: 0.85em;
+  line-height: 1.7;
+}
+.transfer-page .preset-list b {
+  grid-column: 2;
+  font-size: 0.8em;
+  color: var(--muted);
+  white-space: normal;
+}
+.transfer-page .preset-list .preset-add {
+  display: block;
+  text-align: center;
+  font-size: 0.9em;
+}
+.transfer-page .preset-form {
+  padding: 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.transfer-page .preset-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.transfer-page .preset-form .form-row > * {
+  min-width: 0;
+}
+.transfer-page .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.transfer-page .form-actions button {
+  min-height: 48px;
+  padding: 10px;
+  font-size: 0.95em;
+}
+.transfer-page :is(.error-message, .prompt-error) {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--red);
+  border-radius: 3px;
+  background: #fff1ed;
+  color: #912d1d;
+  font-size: 0.92em;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.transfer-page .qr-stage {
+  width: 100%;
+  min-height: 240px;
+  aspect-ratio: auto;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.transfer-page .qr-stage.ready {
+  background: var(--white);
+}
+.transfer-page .workspace-qr-empty {
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  padding: 26px 10px;
+  text-align: center;
+  font-size: 0.92em;
+  color: var(--muted);
+}
+.transfer-page .workspace-qr-empty svg {
+  color: var(--ink);
+}
+.transfer-page .qr-canvas-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.transfer-page .qr-canvas-grid.lanes-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.transfer-page .qr-canvas-grid canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  margin: auto;
+  border-radius: 0;
+  image-rendering: pixelated;
+}
+.transfer-page .fullscreen-button {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--white);
+  bottom: 8px;
+  inset-inline-end: 8px;
+}
+.transfer-page .qr-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: var(--white);
+  border: 0;
+  padding: 3vmin;
+}
+.transfer-page .qr-stage:fullscreen .qr-canvas-grid {
+  width: min(92vw, 92vh);
+  margin: auto;
+}
+.transfer-page .qr-stage:fullscreen .qr-canvas-grid.lanes-2 {
+  width: min(96vw, 180vh);
+}
+.transfer-page .stream-status {
+  margin: 16px 0;
+  color: var(--ink);
+  font-size: 0.95em;
+}
+.transfer-page .stream-status > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.transfer-page .broadcast-progress {
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 12px;
+  margin: 14px 0;
+}
+.transfer-page .broadcast-progress > div:first-child {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.transfer-page .broadcast-progress strong {
+  font-size: 0.9em;
+}
+.transfer-page .broadcast-progress span {
+  font-size: 0.8em;
+  color: var(--muted);
+  white-space: normal;
+}
+.transfer-page .broadcast-track {
+  background: var(--line);
+}
+.transfer-page .broadcast-track span {
+  background: var(--blue);
+}
+.transfer-page .primary-action {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 16px;
+  font-weight: 700;
+}
+.transfer-page .qr-panel .link-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  width: 100%;
+  padding: 10px;
+  color: var(--blue);
+  border: 1px solid var(--line);
+  background: transparent;
+}
+.transfer-page .fast-recommend {
+  color: var(--muted);
+  font-size: 0.85em;
+  line-height: 1.7;
+  margin: 14px 0;
+}
+.transfer-page .stream-details {
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.transfer-page .stream-details p {
+  margin: 12px 0 0;
+}
+/* Scanner: a stable camera viewport plus a separate status/results card. */
+.transfer-page .scanner-shell {
+  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.7fr);
+}
+.transfer-page .camera-view {
+  aspect-ratio: 4/3;
+  max-height: 58vh;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--ink);
+}
+.transfer-page .camera-view.dual {
+  aspect-ratio: 16/9;
+}
+.transfer-page .camera-view video {
+  object-fit: contain;
+}
+.transfer-page .camera-empty {
+  gap: 14px;
+  text-align: center;
+  padding: 16px;
+}
+.transfer-page .camera-empty strong {
+  font-size: 1em;
+}
+.transfer-page .camera-icon {
+  color: var(--signal);
+  margin: 0;
+}
+.transfer-page .scan-reticle i {
+  width: 34px;
+  height: 34px;
+}
+.transfer-page .camera-view.active .scan-reticle::after {
+  animation: none;
+  box-shadow: none;
+  display: none;
+}
+.transfer-page .camera-actions .primary-action {
+  background: var(--signal);
+}
+.transfer-page .camera-loading {
+  font-size: 0.9em;
+}
+.transfer-page .torch-button {
+  min-height: 44px;
+  font-size: 0.9em;
+  border-radius: 3px;
+}
+.transfer-page .camera-settings {
+  margin-top: 18px;
+}
+.transfer-page .scan-mode-picker {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  margin: 0 0 16px;
+}
+.transfer-page .scan-mode-picker button {
+  min-height: 54px;
+  padding: 12px;
+  font-size: 0.95em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.transfer-page .scan-mode-picker button.selected {
+  background: var(--signal-soft);
+  border-color: var(--ink);
+}
+.transfer-page .scan-mode-picker small {
+  font-size: 0.8em;
+  line-height: 1.7;
+}
+.transfer-page .receive-status {
+  font-size: 0.95em;
+  gap: 10px;
+}
+.transfer-page .receive-status b {
+  font: 700 1.5em var(--font-geist-mono);
+  color: var(--ink);
+}
+.transfer-page .progress-track {
+  height: 8px;
+  margin: 18px 0;
+  background: var(--line);
+  border-radius: 2px;
+}
+.transfer-page .progress-track span {
+  background: var(--blue);
+}
+.transfer-page :is(.scan-hint, .resume-note, .sign-verified-note) {
+  font-size: 0.9em;
+  color: var(--muted);
+  line-height: 1.8;
+  margin: 14px 0 0;
+  overflow-wrap: anywhere;
+}
+.transfer-page .resume-note {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 3px;
+}
+.transfer-page .stability-badge {
+  min-height: 36px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.transfer-page .stability-badge.stable {
+  background: var(--signal-soft);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.transfer-page .rate-panel {
+  gap: 10px;
+  border: 0;
+  background: none;
+  margin: 18px 0;
+}
+.transfer-page .rate-panel > div {
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.transfer-page .rate-panel span {
+  font-size: 0.8em;
+}
+.transfer-page .rate-panel strong {
+  font-size: 1.35em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.transfer-page .rate-panel small {
+  font-size: 0.72em;
+  white-space: normal;
+  line-height: 1.7;
+}
+.transfer-page .incoming-file {
+  padding: 12px 0;
+  margin: 0;
+  min-width: 0;
+  border: 0;
+  color: var(--ink);
+}
+.transfer-page .incoming-file strong {
+  font-size: 0.95em;
+}
+.transfer-page .incoming-file span {
+  font-size: 0.8em;
+  white-space: normal;
+}
+.transfer-page .incoming-file > b {
+  display: none;
+}
+.transfer-page .scan-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 0;
+}
+.transfer-page .scan-diagnostics span {
+  display: grid;
+  gap: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.transfer-page .scan-diagnostics b {
+  color: var(--ink);
+  font-size: 1.1em;
+}
+.transfer-page .password-prompt,
+.transfer-page .sign-trust-panel {
+  padding: 16px;
+  margin: 18px 0;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--paper);
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+.transfer-page .password-prompt strong,
+.transfer-page .sign-trust-panel strong {
+  font-size: 1.1em;
+}
+.transfer-page .password-prompt p,
+.transfer-page .sign-trust-panel p {
+  font-size: 0.95em;
+  line-height: 1.8;
+}
+.transfer-page .prompt-actions,
+.transfer-page .trust-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+.transfer-page .prompt-actions button,
+.transfer-page .trust-actions button {
+  flex: 1 1 160px;
+}
+.transfer-page .password-prompt > .mini-btn {
+  margin-top: 14px;
+  width: 100%;
+}
+.transfer-page .received-files {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0;
+}
+.transfer-page .received-files .file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.transfer-page .received-files .fname {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 1.05em;
+}
+.transfer-page .received-files .fmeta {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.transfer-page .received-files a {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--ink);
+  background: var(--signal);
+  color: var(--ink);
+  border-radius: 3px;
+  box-shadow: 3px 3px 0 var(--ink);
+  text-decoration: none;
+  font-size: 0.95em;
+}
+.transfer-page .receive-card .link-action {
+  color: var(--blue);
+  width: 100%;
+  min-height: 48px;
+  margin: 14px 0 0;
+}
+.transfer-page.is-complete .camera-card {
+  display: none;
+}
+.transfer-page.is-complete .scanner-shell {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1000px;
+  margin-inline: auto;
+}
+.transfer-page.is-complete .receive-card {
+  border-color: var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+.transfer-page.is-complete .scanner-details {
+  margin-top: 18px;
+}
+/* All dialogs fit a small phone/landscape screen, including an open keyboard. */
+.transfer-page .workspace-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #11182099;
+  backdrop-filter: none;
+  overflow: auto;
+}
+.transfer-page .workspace-modal {
+  width: min(640px, 100%);
+  max-width: 100%;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: clamp(20px, 3vw, 36px);
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 7px 7px 0 var(--ink);
+  text-align: start;
+}
+.transfer-page .workspace-modal h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  font-size: 1.35em;
+  line-height: 1.5;
+}
+.transfer-page .workspace-modal p,
+.transfer-page .workspace-modal li {
+  font-size: 0.95em;
+  line-height: 1.8;
+}
+.transfer-page .workspace-modal canvas {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+}
+.transfer-page .workspace-modal .modal-close {
+  margin-top: 14px;
+}
+.transfer-page .fast-steps {
+  padding-inline-start: 24px;
+  margin: 0;
+}
+.transfer-page .fast-steps li {
+  margin-bottom: 16px;
+}
+.transfer-page .fast-url {
+  display: block;
+  padding: 12px;
+  margin-top: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.85em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  direction: ltr;
+}
+.transfer-page .fast-url-copy {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  font-size: 0.9em;
+  border-radius: 3px;
+}
+.transfer-page .fast-hint,
+.transfer-page .fast-camera-info {
+  color: var(--muted);
+  font-size: 0.85em;
+  line-height: 1.8;
+}
+.transfer-page .fast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+.transfer-page .fast-actions button {
+  flex: 1 1 140px;
+  margin: 0;
+}
+.transfer-page .fast-actions .primary-action {
+  background: var(--signal);
+}
+.transfer-page .fast-video {
+  width: 100%;
+  max-height: 38vh;
+  object-fit: contain;
+  border-radius: 3px;
+  background: var(--ink);
+}
+.transfer-page .fast-status {
+  overflow-wrap: anywhere;
+  font-size: 1em;
+}
+.transfer-page .fast-ok {
+  color: var(--ink);
+  background: var(--signal-soft);
+  padding: 12px;
+}
+.transfer-page .fast-err {
+  color: #912d1d;
+}
+.transfer-page .fast-progress-track {
+  background: var(--line);
+  border-radius: 2px;
+}
+.transfer-page .fast-progress-track span {
+  background: var(--blue);
+}
+html.qrferry-workspace .network-indicator {
+  display: none;
+}
+html.qrferry-workspace .site-footer {
+  width: min(1680px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 22px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+html.qrferry-workspace .site-footer > span {
+  display: none;
+}
+html.qrferry-workspace .site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+html.qrferry-workspace .site-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted);
+}
+@media (min-width: 2200px) {
+  .workspace-header,
+  .transfer-page {
+    width: min(2800px, calc(100% - 160px));
+  }
+  .workspace-header {
+    min-height: 140px;
+  }
+  .transfer-page {
+    padding-top: 48px;
+  }
+  .workspace-intro {
+    margin-bottom: 40px;
+  }
+  .workspace-intro h1 {
+    font-size: 60px;
+  }
+  .transfer-page :is(.control-panel, .qr-panel, .camera-card, .receive-card) {
+    padding: 48px;
+  }
+  .transfer-page .qr-canvas-grid {
+    max-width: 850px;
+    margin-inline: auto;
+  }
+  .transfer-page .qr-stage {
+    min-height: 400px;
+  }
+  .transfer-page :is(.primary-action, .fast-action, .file-button) {
+    min-height: 66px;
+  }
+}
+@media (max-width: 1000px) {
+  .workspace-header,
+  .transfer-page {
+    width: calc(100% - 40px);
+  }
+  .workspace-header {
+    gap: 16px;
+  }
+  .transfer-page .sender-grid,
+  .transfer-page .scanner-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.85fr);
+    gap: 20px;
+  }
+  .transfer-page :is(.control-panel, .qr-panel, .camera-card, .receive-card) {
+    padding: 20px;
+  }
+  .transfer-page .folder-button {
+    margin: 10px 0 0;
+  }
+  .transfer-page .drop-zone .file-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+@media (max-width: 760px) {
+  .workspace-header {
+    padding: 16px 0;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .workspace-brand {
+    flex: 1;
+  }
+  .workspace-brand strong {
+    font-size: 25px;
+  }
+  .workspace-brand small {
+    font-size: 10px;
+  }
+  .workspace-brand .brand-mark {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+  .workspace-language {
+    order: 1;
+  }
+  .workspace-nav {
+    order: 2;
+    width: 100%;
+    margin: 0;
+  }
+  .workspace-nav a {
+    flex: 1;
+    padding: 10px 8px;
+    font-size: 15px;
+  }
+  .transfer-page {
+    padding: 22px 0 32px;
+  }
+  .workspace-intro {
+    margin-bottom: 20px;
+  }
+  .workspace-intro h1 {
+    font-size: 30px;
+  }
+  .workspace-intro p {
+    font-size: 15px;
+  }
+  .transfer-page .sender-grid,
+  .transfer-page .scanner-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .transfer-page .step-heading {
+    margin-bottom: 16px;
+  }
+  .transfer-page .step-heading h2 {
+    font-size: 20px;
+  }
+  .transfer-page .step-heading p {
+    font-size: 14px;
+  }
+  .transfer-page .drop-zone {
+    padding: 18px 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+  .transfer-page .drop-zone .file-button {
+    padding: 10px 8px;
+    margin: 0;
+    font-size: 14px;
+  }
+  .transfer-page .drop-zone .batch-hint {
+    grid-column: 1/-1;
+    margin: 0;
+    font-size: 13px;
+  }
+  .transfer-page .selected-files .batch-file {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 2px 10px;
+    padding: 10px;
+  }
+  .transfer-page .batch-file .file-glyph {
+    display: none;
+  }
+  .transfer-page .batch-file .fname {
+    grid-column: 1;
+    font-size: 15px;
+  }
+  .transfer-page .batch-file .fmeta {
+    grid-column: 1;
+    font-size: 12px;
+    order: initial;
+  }
+  .transfer-page .batch-file .remove-file {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+  .transfer-page .qr-stage {
+    max-width: 540px;
+    margin-inline: auto;
+    min-height: 210px;
+  }
+  .transfer-page .workspace-qr-empty {
+    padding: 16px 0;
+  }
+  .transfer-page .camera-view {
+    max-height: 42vh;
+  }
+  .transfer-page.needs-review .receive-card {
+    order: -1;
+  }
+  .transfer-page .workspace-modal-backdrop {
+    padding: 14px;
+  }
+  .transfer-page .workspace-modal {
+    max-height: calc(100vh - 28px);
+    max-height: calc(100dvh - 28px);
+    padding: 20px;
+  }
+  .transfer-page .received-files .file-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .transfer-page .received-files a {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 6px;
+  }
+  html.qrferry-workspace .site-footer {
+    width: calc(100% - 40px);
+    font-size: 13px;
+  }
+}
+@media (max-width: 360px) {
+  .workspace-header,
+  .transfer-page {
+    width: calc(100% - 28px);
+  }
+  .transfer-page :is(.control-panel, .qr-panel, .camera-card, .receive-card) {
+    padding: 16px;
+  }
+  .workspace-nav a {
+    gap: 5px;
+    font-size: 14px;
+  }
+  .transfer-page .drop-zone {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-height: 550px) and (min-width: 761px) {
+  .workspace-header {
+    min-height: 72px;
+    padding: 10px 0;
+  }
+  .transfer-page {
+    padding-top: 16px;
+  }
+  .workspace-intro {
+    margin-bottom: 16px;
+  }
+  .workspace-intro h1 {
+    font-size: 28px;
+  }
+  .transfer-page .camera-view {
+    max-height: 45vh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .transfer-page *,
+  .transfer-page *::before,
+  .transfer-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+/* Neutralize inherited dark-panel text and decoration from the previous sender. */
+.transfer-page .stream-status > div,
+.transfer-page .broadcast-progress strong {
+  color: var(--ink);
+}
+.transfer-page .broadcast-progress > div:first-child {
+  font-size: 1em;
+}
+.transfer-page .qr-stage::before,
+.transfer-page .qr-stage::after {
+  content: none;
+}
+.transfer-page .pulse-dot.live {
+  background: #44a766;
+  box-shadow: none;
+  animation: none;
+}
+html.qrferry-workspace body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+html.qrferry-workspace .workspace-header,
+html.qrferry-workspace .site-footer {
+  flex-shrink: 0;
+}
+.transfer-page {
+  flex: 1;
+  min-height: 0;
+  font-size: clamp(20px, 1.15vw, 28px);
+}
+.transfer-page .camera-view {
+  max-height: min(48vh, calc(100vh - 450px));
+}
+@media (max-width: 1100px) {
+  .transfer-page {
+    font-size: 18px;
+  }
+}
+@media (max-width: 760px) {
+  .transfer-page {
+    font-size: 16px;
+  }
+  .transfer-page .camera-view {
+    max-height: 42vh;
+  }
+  .transfer-page.ws-state-error .receive-card {
+    order: -1;
+  }
+}
+@media (max-width: 360px) {
+  .workspace-header {
+    padding: 12px 0;
+    gap: 10px;
+  }
+  .workspace-intro {
+    margin-bottom: 16px;
+  }
+  .workspace-intro p {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .transfer-page .drop-zone {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .transfer-page .drop-zone .file-button {
+    font-size: 13px;
+    gap: 6px;
+    padding: 8px 4px;
+  }
+  .transfer-page .camera-view {
+    max-height: 32vh;
+  }
+}
+@media (max-height: 550px) and (min-width: 761px) {
+  .transfer-page {
+    font-size: 16px;
+  }
+  .workspace-intro {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .workspace-intro h1 {
+    margin: 0;
+  }
+  .workspace-intro p {
+    font-size: 14px;
+  }
+  .transfer-page .camera-view {
+    max-height: 30vh;
+  }
+}
+.transfer-page .workspace-modal {
+  position: relative;
+}
+.transfer-page .workspace-modal h3 {
+  padding-inline-end: 44px;
+}
+.transfer-page .dialog-dismiss {
+  position: absolute;
+  top: 12px;
+  inset-inline-end: 12px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink);
+  background: var(--white);
+  cursor: pointer;
+}
+.transfer-page .incoming-file .file-glyph {
+  clip-path: none;
+  border-radius: 3px;
+  background: var(--signal-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.transfer-page .control-panel.dragging {
+  border-color: var(--blue);
+}

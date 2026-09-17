@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useI18n } from "./lang-provider";
+import { WorkspaceDisclosure, WorkspaceDialog } from "./workspace-ui";
 import {
   Camera,
   Flame,
@@ -22,6 +23,7 @@ import {
   RefreshCw,
   Zap,
   X,
+  QrCode,
 } from "lucide-react";
 import { compressForTransferViaWorker } from "@/lib/compression-worker";
 import { encryptPayload } from "@/lib/encryption";
@@ -930,14 +932,20 @@ export function SendClient() {
 
   const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
-    if (files.length > 0) void prepareFiles(files, appendSelectionRef.current);
+    if (files.length > 0) {
+      setTab("file");
+      void prepareFiles(files, appendSelectionRef.current);
+    }
     appendSelectionRef.current = false;
     event.target.value = "";
   };
 
   const selectFolder = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
-    if (files.length > 0) void prepareFiles(files);
+    if (files.length > 0) {
+      setTab("file");
+      void prepareFiles(files);
+    }
     event.target.value = "";
   };
 
@@ -945,7 +953,10 @@ export function SendClient() {
     event.preventDefault();
     setDragging(false);
     const files = Array.from(event.dataTransfer.files ?? []);
-    if (files.length > 0) void prepareFiles(files, !!fileData);
+    if (files.length > 0) {
+      setTab("file");
+      void prepareFiles(files, !!fileData);
+    }
   };
 
   const scanUrl = useMemo(() => {
@@ -1047,7 +1058,12 @@ export function SendClient() {
         target?.tagName === "TEXTAREA" ||
         target?.tagName === "SELECT" ||
         target?.isContentEditable;
-      if (typing) return;
+      if (
+        typing ||
+        document.querySelector('[aria-modal="true"]') ||
+        target?.closest("button,a,summary,[role=button]")
+      )
+        return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
         event.preventDefault();
         inputRef.current?.click();
@@ -1119,30 +1135,62 @@ export function SendClient() {
     : 0;
 
   return (
-    <main className={broadcastEnabled ? "broadcast-active" : ""}>
-      <section className="sender-hero">
-        <div>
-          <p className="eyebrow">{t("send.eyebrow")}</p>
-          <h1>{t("send.hero")}</h1>
-        </div>
-        <div className="hero-copy">
-          <p>{t("send.heroCopy")}</p>
-          <div className="trust-row">
-            <span>{t("send.trust.local")}</span>
-            <span>{t("send.trust.compress")}</span>
-            <span>{t("send.trust.raptorq")}</span>
-          </div>
-        </div>
+    <main
+      className={`transfer-page sender-page ${broadcastEnabled ? "broadcast-active" : ""}`}
+    >
+      <section className="workspace-intro">
+        <h1>{t("send.hero")}</h1>
+        <p>
+          {lang === "ar"
+            ? "اختر ملفاتك، ثم أرسلها عبر الشبكة أو بثّ QR."
+            : "Choose your files. Send over Wi-Fi or a QR stream."}
+        </p>
       </section>
 
       <section className="sender-grid" aria-label="إنشاء نقل عبر QR">
-        <div className="control-panel">
+        <div
+          className={`control-panel ${dragging ? "dragging" : ""}`}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={() => setDragging(false)}
+          onDrop={dropFiles}
+        >
           <div className="step-heading">
             <span>01</span>
             <div>
               <h2>{t("send.step1.title")}</h2>
-              <p>{t("send.step1.desc")}</p>
+              <p>
+                {lang === "ar"
+                  ? "حتى 3 ملفات · 512 MB إجمالًا"
+                  : "Up to 3 files · 512 MB total"}
+              </p>
             </div>
+          </div>
+
+          <div hidden>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              onChange={selectFiles}
+              aria-label={
+                lang === "ar"
+                  ? "اختر حتى 3 ملفات للنقل"
+                  : "Choose up to 3 files to send"
+              }
+            />
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              onChange={selectFolder}
+              aria-label="اختر مجلداً كاملاً للنقل"
+              {...({ webkitdirectory: "" } as Record<string, string>)}
+            />
           </div>
 
           <div className="send-tabs" role="tablist">
@@ -1169,34 +1217,8 @@ export function SendClient() {
           {tab === "file" ? (
             <div
               className={`drop-zone ${dragging ? "dragging" : ""}`}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setDragging(true);
-              }}
-              onDragOver={(event) => event.preventDefault()}
-              onDragLeave={() => setDragging(false)}
-              onDrop={dropFiles}
+              hidden={!!fileData}
             >
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                onChange={selectFiles}
-                aria-label={
-                  lang === "ar"
-                    ? "اختر حتى 3 ملفات للنقل"
-                    : "Choose up to 3 files to send"
-                }
-              />
-              <input
-                ref={folderInputRef}
-                type="file"
-                multiple
-                style={{ display: "none" }}
-                onChange={selectFolder}
-                aria-label="اختر مجلداً كاملاً للنقل"
-                {...({ webkitdirectory: "" } as Record<string, string>)}
-              />
               <button
                 className="file-button"
                 type="button"
@@ -1218,11 +1240,10 @@ export function SendClient() {
                 <Folder size={16} aria-hidden="true" />
                 {lang === "ar" ? "اختيار مجلد" : "Pick a folder"}
               </button>
-              <p>{t("send.drop")}</p>
               <p className="batch-hint">
                 {lang === "ar"
-                  ? "اختر حتى 3 ملفات معًا، أو أضفها واحدًا واحدًا ثم أرسلها مرة واحدة."
-                  : "Select up to 3 files together, or add them one by one and send once."}
+                  ? "أو اسحب الملفات إلى هنا"
+                  : "Or drop files here"}
               </p>
             </div>
           ) : (
@@ -1316,6 +1337,7 @@ export function SendClient() {
               <button
                 type="button"
                 className="batch-add"
+                hidden={fileData.items.length >= MAX_BATCH_FILES}
                 disabled={
                   processing ||
                   fastOpen ||
@@ -1337,291 +1359,328 @@ export function SendClient() {
             </div>
           ) : null}
 
-          <div className="advanced-panel">
-            {/* التشفير */}
-            <div className={`adv-option ${encryptEnabled ? "on" : ""}`}>
-              <button
-                type="button"
-                className="adv-toggle"
-                aria-pressed={encryptEnabled}
-                onClick={() => changeEncryption(!encryptEnabled)}
-              >
-                <span className="adv-glyph" aria-hidden="true">
-                  {encryptEnabled ? (
-                    <LockOpen size={14} aria-hidden="true" />
-                  ) : (
-                    <Lock size={14} aria-hidden="true" />
-                  )}
-                </span>
-                <span>
-                  {encryptEnabled
-                    ? t("send.encryptPanel.on")
-                    : t("send.encryptPanel.off")}
-                </span>
-              </button>
-              {encryptEnabled ? (
-                <div className="adv-body">
-                  <div className="encrypt-field">
-                    <label htmlFor="send-password">{t("send.password")}</label>
-                    <input
-                      id="send-password"
-                      className="password-input"
-                      type="password"
-                      dir="ltr"
-                      autoComplete="off"
-                      value={password}
-                      placeholder={t("send.passwordPlaceholder")}
-                      onChange={(event) => changePassword(event.target.value)}
-                    />
-                    <p className="encrypt-hint">{t("send.encryptHint.on")}</p>
+          <div className="quick-send">
+            <button
+              className="fast-action"
+              type="button"
+              disabled={!fileData}
+              onClick={() => {
+                setFastOpen(true);
+                setFastState("idle");
+                setFastStatus("");
+                setFastProgress(null);
+              }}
+            >
+              <Zap size={20} aria-hidden="true" />
+              <span>
+                <strong>{t("send.fast")}</strong>
+              </span>
+            </button>
+            <p className="workspace-note">{t("send.fastSameNetwork")}</p>
+          </div>
+          <WorkspaceDisclosure
+            className="privacy-settings"
+            title={
+              lang === "ar"
+                ? "الخصوصية وخيارات إضافية"
+                : "Privacy & more options"
+            }
+            badge={
+              encryptEnabled || signEnabled || burnEnabled || broadcastEnabled
+                ? lang === "ar"
+                  ? "مفعّلة"
+                  : "Active"
+                : undefined
+            }
+          >
+            <div className="advanced-panel">
+              {/* التشفير */}
+              <div className={`adv-option ${encryptEnabled ? "on" : ""}`}>
+                <button
+                  type="button"
+                  className="adv-toggle"
+                  aria-pressed={encryptEnabled}
+                  onClick={() => changeEncryption(!encryptEnabled)}
+                >
+                  <span className="adv-glyph" aria-hidden="true">
+                    {encryptEnabled ? (
+                      <LockOpen size={14} aria-hidden="true" />
+                    ) : (
+                      <Lock size={14} aria-hidden="true" />
+                    )}
+                  </span>
+                  <span>
+                    {encryptEnabled
+                      ? t("send.encryptPanel.on")
+                      : t("send.encryptPanel.off")}
+                  </span>
+                </button>
+                {encryptEnabled ? (
+                  <div className="adv-body">
+                    <div className="encrypt-field">
+                      <label htmlFor="send-password">
+                        {t("send.password")}
+                      </label>
+                      <input
+                        id="send-password"
+                        className="password-input"
+                        type="password"
+                        dir="ltr"
+                        autoComplete="off"
+                        value={password}
+                        placeholder={t("send.passwordPlaceholder")}
+                        onChange={(event) => changePassword(event.target.value)}
+                      />
+                      <p className="encrypt-hint">{t("send.encryptHint.on")}</p>
+                      <div className="adv-inline">
+                        <button
+                          type="button"
+                          className="mini-btn"
+                          disabled={passwordTooShort}
+                          onClick={() => setShowPasswordQr(true)}
+                        >
+                          {t("send.showPasswordQr")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* الحذف بعد القراءة */}
+              <div className={`adv-option ${burnEnabled ? "on" : ""}`}>
+                <button
+                  type="button"
+                  className="adv-toggle"
+                  aria-pressed={burnEnabled}
+                  onClick={() => toggleBurn(!burnEnabled)}
+                >
+                  <span className="adv-glyph" aria-hidden="true">
+                    <Flame size={15} />
+                  </span>
+                  <span>{t("send.burnLabel")}</span>
+                </button>
+                {burnEnabled ? (
+                  <p className="adv-hint">{t("send.burnHint")}</p>
+                ) : null}
+              </div>
+
+              {/* التوقيع الرقمي */}
+              <div className={`adv-option ${signEnabled ? "on" : ""}`}>
+                <button
+                  type="button"
+                  className="adv-toggle"
+                  aria-pressed={signEnabled}
+                  onClick={() => toggleSign(!signEnabled)}
+                >
+                  <span className="adv-glyph" aria-hidden="true">
+                    <PenLine size={15} />
+                  </span>
+                  <span>{t("send.signLabel")}</span>
+                </button>
+                {signEnabled ? (
+                  <div className="adv-body">
+                    <p className="identity-line">
+                      {t("send.signIdentity")}{" "}
+                      <strong>
+                        {identity?.label ?? t("send.signNoIdentity")}
+                      </strong>
+                    </p>
                     <div className="adv-inline">
                       <button
                         type="button"
                         className="mini-btn"
-                        disabled={passwordTooShort}
-                        onClick={() => setShowPasswordQr(true)}
+                        disabled={!identity}
+                        onClick={() => setShowPubKeyQr(true)}
                       >
-                        {t("send.showPasswordQr")}
+                        {t("send.signShowPub")}
                       </button>
                     </div>
+                    <p className="adv-hint">{t("send.signHint")}</p>
                   </div>
-                </div>
-              ) : (
-                <p className="adv-hint">{t("send.encryptHint.off")}</p>
-              )}
-            </div>
+                ) : null}
+              </div>
 
-            {/* الحذف بعد القراءة */}
-            <div className={`adv-option ${burnEnabled ? "on" : ""}`}>
-              <button
-                type="button"
-                className="adv-toggle"
-                aria-pressed={burnEnabled}
-                onClick={() => toggleBurn(!burnEnabled)}
-              >
-                <span className="adv-glyph" aria-hidden="true">
-                  <Flame size={15} />
-                </span>
-                <span>{t("send.burnLabel")}</span>
-              </button>
-              <p className="adv-hint">{t("send.burnHint")}</p>
+              {/* البث الجماعي */}
+              <div className={`adv-option ${broadcastEnabled ? "on" : ""}`}>
+                <button
+                  type="button"
+                  className="adv-toggle"
+                  aria-pressed={broadcastEnabled}
+                  onClick={() => setBroadcastEnabled((current) => !current)}
+                >
+                  <span className="adv-glyph" aria-hidden="true">
+                    <Radio size={15} />
+                  </span>
+                  <span>{t("send.broadcastLabel")}</span>
+                </button>
+                {broadcastEnabled ? (
+                  <p className="adv-hint">{t("send.broadcastHint")}</p>
+                ) : null}
+              </div>
             </div>
-
-            {/* التوقيع الرقمي */}
-            <div className={`adv-option ${signEnabled ? "on" : ""}`}>
-              <button
-                type="button"
-                className="adv-toggle"
-                aria-pressed={signEnabled}
-                onClick={() => toggleSign(!signEnabled)}
-              >
-                <span className="adv-glyph" aria-hidden="true">
-                  <PenLine size={15} />
-                </span>
-                <span>{t("send.signLabel")}</span>
-              </button>
-              {signEnabled ? (
-                <div className="adv-body">
-                  <p className="identity-line">
-                    {t("send.signIdentity")}{" "}
-                    <strong>
-                      {identity?.label ?? t("send.signNoIdentity")}
-                    </strong>
-                  </p>
-                  <div className="adv-inline">
-                    <button
-                      type="button"
-                      className="mini-btn"
-                      disabled={!identity}
-                      onClick={() => setShowPubKeyQr(true)}
-                    >
-                      {t("send.signShowPub")}
-                    </button>
-                  </div>
-                  <p className="adv-hint">{t("send.signHint")}</p>
-                </div>
-              ) : (
-                <p className="adv-hint">{t("send.signHint")}</p>
-              )}
-            </div>
-
-            {/* البث الجماعي */}
-            <div className={`adv-option ${broadcastEnabled ? "on" : ""}`}>
-              <button
-                type="button"
-                className="adv-toggle"
-                aria-pressed={broadcastEnabled}
-                onClick={() => setBroadcastEnabled((current) => !current)}
-              >
-                <span className="adv-glyph" aria-hidden="true">
-                  <Radio size={15} />
-                </span>
-                <span>{t("send.broadcastLabel")}</span>
-              </button>
-              <p className="adv-hint">{t("send.broadcastHint")}</p>
-            </div>
-          </div>
-
-          <div className="step-heading compact">
-            <span>02</span>
-            <div>
-              <h2>{t("send.step2.title")}</h2>
-              <p>{t("send.step2.desc")}</p>
-            </div>
-          </div>
-
-          <div
-            className="preset-list"
-            role="radiogroup"
-            aria-label="ملف ضبط الإشارة"
+          </WorkspaceDisclosure>
+          <WorkspaceDisclosure
+            className="broadcast-settings"
+            title={lang === "ar" ? "إعدادات بثّ QR" : "QR stream settings"}
+            badge={preset.label}
           >
-            {allPresets.entries.map(([key, option]) => (
-              <button
-                type="button"
-                role="radio"
-                aria-checked={presetKey === key}
-                className={presetKey === key ? "selected" : ""}
-                key={key}
-                onClick={() => changePreset(key)}
-              >
-                <span className="radio-dot" aria-hidden="true" />
-                <span>
-                  <strong>{option.label}</strong>
-                  <small>{t(`preset.${key}`)}</small>
-                </span>
-                <b>
-                  {option.lanes === 1
-                    ? `${option.fps} fps`
-                    : `${option.fps} ${lang === "ar" ? "رمز/ث" : "sym/s"} · ${option.fps / option.lanes} fps/${lang === "ar" ? "مسار" : "lane"}`}
-                  {" · "}
-                  {formatRate(option.usefulBytesPerFrame * option.fps)}
-                </b>
-              </button>
-            ))}
-            {allPresets.custom.map(({ key, preset: option }) => (
-              <button
-                type="button"
-                role="radio"
-                aria-checked={presetKey === key}
-                className={presetKey === key ? "selected" : ""}
-                key={key}
-                onClick={() => changePreset(key)}
-              >
-                <span className="radio-dot" aria-hidden="true" />
-                <span>
-                  <strong>{option.label} ⭐</strong>
-                  <small>{option.description}</small>
-                </span>
-                <b>
-                  {option.lanes === 1
-                    ? `${option.fps} fps`
-                    : `${option.fps} ${lang === "ar" ? "رمز/ث" : "sym/s"} · ${option.fps / option.lanes} fps/${lang === "ar" ? "مسار" : "lane"}`}
-                  {" · "}
-                  {formatRate(
-                    (option.usefulBytesPerFrame ?? 0) * option.fps,
-                  )}{" "}
-                  <span
-                    className="preset-delete"
-                    role="button"
-                    tabIndex={0}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      removePreset(key);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
+            <div
+              className="preset-list"
+              role="radiogroup"
+              aria-label="ملف ضبط الإشارة"
+            >
+              {allPresets.entries.map(([key, option]) => (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={presetKey === key}
+                  className={presetKey === key ? "selected" : ""}
+                  key={key}
+                  onClick={() => changePreset(key)}
+                >
+                  <span className="radio-dot" aria-hidden="true" />
+                  <span>
+                    <strong>{option.label}</strong>
+                    <small>{t(`preset.${key}`)}</small>
+                  </span>
+                  <b>
+                    {option.lanes === 1
+                      ? `${option.fps} fps`
+                      : `${option.fps} ${lang === "ar" ? "رمز/ث" : "sym/s"} · ${option.fps / option.lanes} fps/${lang === "ar" ? "مسار" : "lane"}`}
+                    {" · "}
+                    {formatRate(option.usefulBytesPerFrame * option.fps)}
+                  </b>
+                </button>
+              ))}
+              {allPresets.custom.map(({ key, preset: option }) => (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={presetKey === key}
+                  className={presetKey === key ? "selected" : ""}
+                  key={key}
+                  onClick={() => changePreset(key)}
+                >
+                  <span className="radio-dot" aria-hidden="true" />
+                  <span>
+                    <strong>{option.label} ⭐</strong>
+                    <small>{option.description}</small>
+                  </span>
+                  <b>
+                    {option.lanes === 1
+                      ? `${option.fps} fps`
+                      : `${option.fps} ${lang === "ar" ? "رمز/ث" : "sym/s"} · ${option.fps / option.lanes} fps/${lang === "ar" ? "مسار" : "lane"}`}
+                    {" · "}
+                    {formatRate(
+                      (option.usefulBytesPerFrame ?? 0) * option.fps,
+                    )}{" "}
+                    <span
+                      className="preset-delete"
+                      role="button"
+                      tabIndex={0}
+                      onClick={(event) => {
                         event.stopPropagation();
                         removePreset(key);
-                      }
-                    }}
-                    aria-label="حذف البروفايل"
-                  >
-                    ✕
-                  </span>
-                </b>
-              </button>
-            ))}
-            <button
-              type="button"
-              className="preset-add"
-              onClick={() => setShowPresetForm((current) => !current)}
-            >
-              {t("send.addPreset")}
-            </button>
-          </div>
-
-          {showPresetForm ? (
-            <form className="preset-form" onSubmit={submitPreset}>
-              <label>
-                {t("send.presetName")}
-                <input name="label" required minLength={2} maxLength={24} />
-              </label>
-              <div className="form-row">
-                <label>
-                  {t("send.presetVersion")}
-                  <input
-                    name="version"
-                    type="number"
-                    min={1}
-                    max={40}
-                    defaultValue={25}
-                  />
-                </label>
-                <label>
-                  {t("send.presetEcc")}
-                  <select name="ecc" defaultValue="M">
-                    <option value="L">L</option>
-                    <option value="M">M</option>
-                    <option value="Q">Q</option>
-                    <option value="H">H</option>
-                  </select>
-                </label>
-              </div>
-              <div className="form-row">
-                <label>
-                  {t("send.presetFps")}
-                  <input
-                    name="fps"
-                    type="number"
-                    min={1}
-                    max={120}
-                    defaultValue={10}
-                  />
-                </label>
-                <label>
-                  {t("send.presetLanes")}
-                  <select name="lanes" defaultValue="1">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                  </select>
-                </label>
-              </div>
-              <label>
-                {t("send.presetRepair")}
-                <input
-                  name="repair"
-                  type="number"
-                  min={0}
-                  max={100}
-                  defaultValue={30}
-                />
-              </label>
-              <div className="form-actions">
-                <button type="submit">{t("send.presetSave")}</button>
-                <button type="button" onClick={() => setShowPresetForm(false)}>
-                  {t("send.presetCancel")}
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.stopPropagation();
+                          removePreset(key);
+                        }
+                      }}
+                      aria-label="حذف البروفايل"
+                    >
+                      ✕
+                    </span>
+                  </b>
                 </button>
-              </div>
-            </form>
-          ) : null}
+              ))}
+              <button
+                type="button"
+                className="preset-add"
+                onClick={() => setShowPresetForm((current) => !current)}
+              >
+                {t("send.addPreset")}
+              </button>
+            </div>
 
-          {preset.fps >= 30 ? (
-            <p className="channel-warning">
-              {preset.lanes === 2
-                ? t("send.channelWarningDual")
-                : t("send.channelWarningFast")}
-            </p>
-          ) : null}
+            {showPresetForm ? (
+              <form className="preset-form" onSubmit={submitPreset}>
+                <label>
+                  {t("send.presetName")}
+                  <input name="label" required minLength={2} maxLength={24} />
+                </label>
+                <div className="form-row">
+                  <label>
+                    {t("send.presetVersion")}
+                    <input
+                      name="version"
+                      type="number"
+                      min={1}
+                      max={40}
+                      defaultValue={25}
+                    />
+                  </label>
+                  <label>
+                    {t("send.presetEcc")}
+                    <select name="ecc" defaultValue="M">
+                      <option value="L">L</option>
+                      <option value="M">M</option>
+                      <option value="Q">Q</option>
+                      <option value="H">H</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="form-row">
+                  <label>
+                    {t("send.presetFps")}
+                    <input
+                      name="fps"
+                      type="number"
+                      min={1}
+                      max={120}
+                      defaultValue={10}
+                    />
+                  </label>
+                  <label>
+                    {t("send.presetLanes")}
+                    <select name="lanes" defaultValue="1">
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  {t("send.presetRepair")}
+                  <input
+                    name="repair"
+                    type="number"
+                    min={0}
+                    max={100}
+                    defaultValue={30}
+                  />
+                </label>
+                <div className="form-actions">
+                  <button type="submit">{t("send.presetSave")}</button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPresetForm(false)}
+                  >
+                    {t("send.presetCancel")}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {preset.fps >= 30 ? (
+              <p className="channel-warning">
+                {preset.lanes === 2
+                  ? t("send.channelWarningDual")
+                  : t("send.channelWarningFast")}
+              </p>
+            ) : null}
+          </WorkspaceDisclosure>
 
           {passwordTooShort ? (
             <p className="error-message" role="alert">
@@ -1637,14 +1696,16 @@ export function SendClient() {
         </div>
 
         <div className="qr-panel">
-          <div className="step-heading inverse">
-            <span>03</span>
+          <div className="step-heading">
+            <span>02</span>
             <div>
               <h2>{t("send.step3.title")}</h2>
               <p>
                 {preset.lanes === 2
                   ? t("send.step3.descDual")
-                  : t("send.step3.descSingle")}
+                  : lang === "ar"
+                    ? "دون شبكة · افتح «المسح» على الجهاز الآخر"
+                    : "No network · open Scan on the other device"}
               </p>
             </div>
           </div>
@@ -1670,10 +1731,8 @@ export function SendClient() {
                 ))}
               </div>
             ) : (
-              <div className="qr-placeholder" aria-hidden="true">
-                <div className="finder top-left" />
-                <div className="finder top-right" />
-                <div className="finder bottom-left" />
+              <div className="workspace-qr-empty">
+                <QrCode size={54} strokeWidth={1.5} aria-hidden="true" />
                 <span>
                   {processing
                     ? t("send.qr.placeholderEncoding")
@@ -1708,15 +1767,6 @@ export function SendClient() {
                       : t("send.status.waiting")}
               </strong>
             </div>
-            <span>
-              {transfer
-                ? `${estimateDuration(transfer, preset, t)} · ${t("send.status.nominal")} ${formatRate(nominalRate)}${
-                    playing && actualFps > 0
-                      ? ` · ${actualFps.toFixed(1)} fps ${t("send.status.renderedFps")}`
-                      : ""
-                  }`
-                : t("send.status.cameraNeverNeeds")}
-            </span>
           </div>
 
           {transfer ? (
@@ -1779,268 +1829,234 @@ export function SendClient() {
             </p>
           ) : null}
 
-          <button
-            className="fast-action"
-            type="button"
-            disabled={!fileData}
-            onClick={() => {
-              setFastOpen(true);
-              setFastState("idle");
-              setFastStatus("");
-              setFastProgress(null);
-            }}
-          >
-            <Zap size={20} aria-hidden="true" />
-            <span>
-              <strong>{t("send.fast")}</strong>
-              <small>{t("send.fastDesc")}</small>
-            </span>
-          </button>
-
           <button className="link-action" type="button" onClick={copyScanLink}>
             <span aria-hidden="true">⌁</span>
             {copied ? t("send.copied") : t("send.copyScanLink")}
           </button>
 
-          <p className="keyboard-hint">{t("send.keyboardHint")}</p>
-        </div>
-      </section>
-
-      <section className="how-it-works">
-        <p className="eyebrow">{t("send.how.eyebrow")}</p>
-        <div className="how-grid">
-          <h2>{t("send.how.title")}</h2>
-          <div className="feature">
-            <span>01</span>
-            <h3>{t("send.how1.title")}</h3>
-            <p>{t("send.how1.desc")}</p>
-          </div>
-          <div className="feature">
-            <span>02</span>
-            <h3>{t("send.how2.title")}</h3>
-            <p>{t("send.how2.desc")}</p>
-          </div>
-          <div className="feature">
-            <span>03</span>
-            <h3>{t("send.how3.title")}</h3>
-            <p>{t("send.how3.desc")}</p>
-          </div>
+          <WorkspaceDisclosure
+            className="stream-details"
+            title={lang === "ar" ? "تفاصيل البث" : "Stream details"}
+          >
+            <span>
+              {transfer
+                ? `${estimateDuration(transfer, preset, t)} · ${t("send.status.nominal")} ${formatRate(nominalRate)}${
+                    playing && actualFps > 0
+                      ? ` · ${actualFps.toFixed(1)} fps ${t("send.status.renderedFps")}`
+                      : ""
+                  }`
+                : t("send.status.cameraNeverNeeds")}
+            </span>
+            <p>{t("send.keyboardHint")}</p>
+          </WorkspaceDisclosure>
         </div>
       </section>
 
       {/* نافذة QR كلمة المرور */}
       {showPasswordQr ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => setShowPasswordQr(false)}
+        <WorkspaceDialog
+          title={t("send.passwordQrTitle")}
+          onClose={() => setShowPasswordQr(false)}
         >
-          <div
-            className="modal-card"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3>{t("send.passwordQrTitle")}</h3>
-            <p>{t("send.passwordQrNote")}</p>
-            <div ref={passwordQrHostRef}>
-              {!passwordQrCanvas ? <p>…</p> : null}
-            </div>
-            <button
-              type="button"
-              className="modal-close"
-              onClick={() => setShowPasswordQr(false)}
-            >
-              {t("send.close")}
-            </button>
+          <h3>{t("send.passwordQrTitle")}</h3>
+          <p>{t("send.passwordQrNote")}</p>
+          <div ref={passwordQrHostRef}>
+            {!passwordQrCanvas ? <p>…</p> : null}
           </div>
-        </div>
+          <button
+            type="button"
+            className="modal-close"
+            onClick={() => setShowPasswordQr(false)}
+          >
+            {t("send.close")}
+          </button>
+        </WorkspaceDialog>
       ) : null}
 
       {/* نافذة النقل السريع (شبكة محلية) */}
       {fastOpen ? (
-        <div className="modal-backdrop" onClick={closeFastModal}>
-          <div
-            className="modal-card fast-modal"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3>
-              <Zap size={22} aria-hidden="true" /> {t("send.fastModalTitle")}
-            </h3>
+        <WorkspaceDialog
+          title={t("send.fastModalTitle")}
+          onClose={closeFastModal}
+          className="fast-modal"
+        >
+          <h3>
+            <Zap size={22} aria-hidden="true" /> {t("send.fastModalTitle")}
+          </h3>
 
-            {/* الفيديو والكانفاس مثبّتان دائماً داخل النافذة (مخفيان عند عدم المسح)
+          {/* الفيديو والكانفاس مثبّتان دائماً داخل النافذة (مخفيان عند عدم المسح)
                 حتى يتوفر المرجع فوراً عند بدء المسح — يتجنب سباق تركيب React. */}
-            <video
-              ref={fastVideoRef}
-              playsInline
-              muted
-              className="fast-video"
-              style={{ display: fastState === "scanning" ? "block" : "none" }}
-            />
-            <canvas ref={fastCanvasRef} hidden />
+          <video
+            ref={fastVideoRef}
+            playsInline
+            muted
+            className="fast-video"
+            style={{ display: fastState === "scanning" ? "block" : "none" }}
+          />
+          <canvas ref={fastCanvasRef} hidden />
 
-            {fastState === "idle" ? (
-              <>
-                <p className="fast-step-title">{t("send.fastStep0")}</p>
-                <ol className="fast-steps">
-                  <li>
-                    {t("send.fastStep1")}{" "}
-                    <button
-                      type="button"
-                      className="fast-url-copy"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(tvUrl).then(() => {
-                          setFastUrlCopied(true);
-                          window.setTimeout(
-                            () => setFastUrlCopied(false),
-                            2000,
-                          );
-                        });
-                      }}
-                    >
-                      {fastUrlCopied ? t("send.urlCopied") : t("send.copyUrl")}
-                    </button>
-                    <code className="fast-url">{tvUrl}</code>
-                  </li>
-                  <li>{t("send.fastStep2")}</li>
-                </ol>
-                <p className="fast-hint">{t("send.fastSameNetwork")}</p>
-                <div className="fast-actions">
+          {fastState === "idle" ? (
+            <>
+              <ol className="fast-steps">
+                <li>
+                  {t("send.fastStep1")}{" "}
                   <button
                     type="button"
-                    className="primary-action fast-start"
-                    onClick={() => void startFastScan()}
-                  >
-                    <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
-                  </button>
-                  <button
-                    type="button"
-                    className="modal-close"
-                    onClick={closeFastModal}
-                  >
-                    {t("send.fastCancel")}
-                  </button>
-                </div>
-              </>
-            ) : fastState === "scanning" ? (
-              <>
-                <p className="fast-status">{fastStatus}</p>
-                {fastCameraInfo ? (
-                  <p className="fast-camera-info">
-                    <Camera size={12} aria-hidden="true" />{" "}
-                    {t("send.fastRes", { info: fastCameraInfo })}
-                  </p>
-                ) : null}
-                <p className="fast-hint">{t("send.fastHintKeepQr")}</p>
-                <div className="fast-actions">
-                  <button
-                    type="button"
-                    className="fast-switch-cam"
-                    onClick={switchFastCamera}
-                  >
-                    <RefreshCw size={16} aria-hidden="true" />{" "}
-                    {t("send.fastSwitchCamera")}
-                  </button>
-                  <button
-                    type="button"
-                    className="modal-close"
-                    onClick={stopFastScanning}
-                  >
-                    {t("send.fastStop")}
-                  </button>
-                </div>
-              </>
-            ) : fastState === "connecting" || fastState === "transferring" ? (
-              <>
-                <p className="fast-status">{fastStatus}</p>
-                <div className="fast-progress-track">
-                  <span
-                    style={{
-                      width: fastProgress
-                        ? `${Math.min(100, (fastProgress.sent / fastProgress.total) * 100)}%`
-                        : "8%",
+                    className="fast-url-copy"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(tvUrl).then(() => {
+                        setFastUrlCopied(true);
+                        window.setTimeout(() => setFastUrlCopied(false), 2000);
+                      });
                     }}
-                  />
-                </div>
-                {fastProgress ? (
-                  <p className="fast-progress-text">
-                    {formatBytes(fastProgress.sent)} /{" "}
-                    {formatBytes(fastProgress.total)}
-                  </p>
-                ) : null}
-                <div className="fast-actions">
-                  <button
-                    type="button"
-                    className="modal-close"
-                    onClick={closeFastModal}
                   >
-                    {t("send.fastCancel")}
+                    {fastUrlCopied ? t("send.urlCopied") : t("send.copyUrl")}
                   </button>
-                </div>
-              </>
-            ) : fastState === "done" ? (
-              <>
-                <p className="fast-status fast-ok" role="status">
-                  {fastStatus}
+                  <code className="fast-url">{tvUrl}</code>
+                </li>
+                <li>{t("send.fastStep2")}</li>
+              </ol>
+              <p className="fast-hint">{t("send.fastSameNetwork")}</p>
+              <div className="fast-actions">
+                <button
+                  type="button"
+                  className="primary-action fast-start"
+                  onClick={() => void startFastScan()}
+                >
+                  <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
+                </button>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={closeFastModal}
+                >
+                  {t("send.fastCancel")}
+                </button>
+              </div>
+            </>
+          ) : fastState === "scanning" ? (
+            <>
+              <p className="fast-status">{fastStatus}</p>
+              {fastCameraInfo ? (
+                <p className="fast-camera-info">
+                  <Camera size={12} aria-hidden="true" />{" "}
+                  {t("send.fastRes", { info: fastCameraInfo })}
                 </p>
-                <div className="fast-actions">
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={closeFastModal}
-                  >
-                    {t("send.fastClose")}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="fast-status fast-err" role="alert">
-                  {fastStatus}
+              ) : null}
+              <p className="fast-hint">{t("send.fastHintKeepQr")}</p>
+              <div className="fast-actions">
+                <button
+                  type="button"
+                  className="fast-switch-cam"
+                  onClick={switchFastCamera}
+                >
+                  <RefreshCw size={16} aria-hidden="true" />{" "}
+                  {t("send.fastSwitchCamera")}
+                </button>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => {
+                    stopFastScanning();
+                    setFastState("idle");
+                    setFastStatus("");
+                  }}
+                >
+                  {t("send.fastStop")}
+                </button>
+              </div>
+            </>
+          ) : fastState === "connecting" || fastState === "transferring" ? (
+            <>
+              <p className="fast-status">{fastStatus}</p>
+              <div className="fast-progress-track">
+                <span
+                  style={{
+                    width: fastProgress
+                      ? `${Math.min(100, (fastProgress.sent / fastProgress.total) * 100)}%`
+                      : "8%",
+                  }}
+                />
+              </div>
+              {fastProgress ? (
+                <p className="fast-progress-text">
+                  {formatBytes(fastProgress.sent)} /{" "}
+                  {formatBytes(fastProgress.total)}
                 </p>
-                <p className="fast-hint">{t("send.fastFallback")}</p>
-                <div className="fast-actions">
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={() => void startFastScan()}
-                  >
-                    <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
-                  </button>
-                  <button
-                    type="button"
-                    className="modal-close"
-                    onClick={closeFastModal}
-                  >
-                    {t("send.fastCancel")}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+              ) : null}
+              <div className="fast-actions">
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={closeFastModal}
+                >
+                  {t("send.fastCancel")}
+                </button>
+              </div>
+            </>
+          ) : fastState === "done" ? (
+            <>
+              <p className="fast-status fast-ok" role="status">
+                {fastStatus}
+              </p>
+              <div className="fast-actions">
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={closeFastModal}
+                >
+                  {t("send.fastClose")}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="fast-status fast-err" role="alert">
+                {fastStatus}
+              </p>
+              <p className="fast-hint">{t("send.fastFallback")}</p>
+              <div className="fast-actions">
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() => void startFastScan()}
+                >
+                  <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
+                </button>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={closeFastModal}
+                >
+                  {t("send.fastCancel")}
+                </button>
+              </div>
+            </>
+          )}
+        </WorkspaceDialog>
       ) : null}
 
       {/* نافذة المفتاح العام */}
       {showPubKeyQr ? (
-        <div className="modal-backdrop" onClick={() => setShowPubKeyQr(false)}>
-          <div
-            className="modal-card"
-            onClick={(event) => event.stopPropagation()}
+        <WorkspaceDialog
+          title={t("send.signShowPub")}
+          onClose={() => setShowPubKeyQr(false)}
+        >
+          <h3>{t("send.signShowPub")}</h3>
+          <p>
+            {identity
+              ? `${identity.label} · ${identity.publicKeyRaw.length * 8} bit`
+              : t("send.signNoIdentity")}
+          </p>
+          <div ref={pubKeyQrHostRef}>{!pubKeyQrCanvas ? <p>…</p> : null}</div>
+          <button
+            type="button"
+            className="modal-close"
+            onClick={() => setShowPubKeyQr(false)}
           >
-            <h3>{t("send.signShowPub")}</h3>
-            <p>
-              {identity
-                ? `${identity.label} · ${identity.publicKeyRaw.length * 8} bit`
-                : t("send.signNoIdentity")}
-            </p>
-            <div ref={pubKeyQrHostRef}>{!pubKeyQrCanvas ? <p>…</p> : null}</div>
-            <button
-              type="button"
-              className="modal-close"
-              onClick={() => setShowPubKeyQr(false)}
-            >
-              {t("send.close")}
-            </button>
-          </div>
-        </div>
+            {t("send.close")}
+          </button>
+        </WorkspaceDialog>
       ) : null}
     </main>
   );

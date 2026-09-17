@@ -3,7 +3,7 @@ import { expect, test } from "./test";
 test("sender turns a selected file into a live QR stream", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /انقل ملفاً/ }),
+    page.getByRole("heading", { name: "أرسل ملفاتك." }),
   ).toBeVisible();
 
   const buffer = Buffer.from("QRFerry تجربة إرسال عربي ".repeat(8000));
@@ -35,6 +35,7 @@ test("sender turns a selected file into a live QR stream", async ({ page }) => {
 
 test("sender can encrypt the file with a password", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "الخصوصية وخيارات إضافية" }).click();
   await page.getByRole("button", { name: /تشفير الملف/ }).click();
   const passwordInput = page.getByLabel("كلمة المرور");
   await expect(passwordInput).toBeVisible();

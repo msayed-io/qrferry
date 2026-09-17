@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../lang-provider";
-import { Bird, Check, Download } from "lucide-react";
+import { WorkspaceDisclosure } from "../workspace-ui";
+import { Bird, Check, Download, Camera } from "lucide-react";
 import { decompressTransfer } from "@/lib/compression";
 import { decryptPayload } from "@/lib/encryption";
 import {
@@ -33,10 +34,7 @@ import {
   verifySignature,
   formatPublicKeyFingerprint,
 } from "@/lib/signing";
-import {
-  addTrustedKey,
-  getTrustedKeys,
-} from "@/lib/identity-store";
+import { addTrustedKey, getTrustedKeys } from "@/lib/identity-store";
 import { addHistoryEntry } from "@/lib/history-store";
 import { acquireScreenWakeLock } from "@/lib/wakelock";
 import { notifyTransferComplete } from "@/lib/transfer-notify";
@@ -122,11 +120,13 @@ function formatEta(seconds: number) {
 function percentile(values: number[], fraction: number) {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))];
+  return sorted[
+    Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))
+  ];
 }
 
 export function ScannerClient() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanModeRef = useRef<ScanMode>("single");
@@ -179,11 +179,16 @@ export function ScannerClient() {
   const [promptPassword, setPromptPassword] = useState("");
   const [promptError, setPromptError] = useState("");
   const [resumeNote, setResumeNote] = useState("");
-  const [signatureReview, setSignatureReview] = useState<SignatureReview | null>(null);
+  const [signatureReview, setSignatureReview] =
+    useState<SignatureReview | null>(null);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState("");
   const [handsFreeTip, setHandsFreeTip] = useState(false);
-  const [stability, setStability] = useState<{ stable: boolean; successRate: number; attempts: number }>({
+  const [stability, setStability] = useState<{
+    stable: boolean;
+    successRate: number;
+    attempts: number;
+  }>({
     stable: false,
     successRate: 0,
     attempts: 0,
@@ -210,25 +215,32 @@ export function ScannerClient() {
     scanModeRef.current = nextMode;
     setScanMode(nextMode);
     setGuidance(
-      nextMode === "dual" ? t("scan.guide.dualInitial") : t("scan.guide.initial"),
+      nextMode === "dual"
+        ? t("scan.guide.dualInitial")
+        : t("scan.guide.initial"),
     );
   };
 
   const finalizeAndSave = useCallback(
-    async (recoveredFiles: RecoveredFile[], options: {
-      burnAfterReading: boolean;
-      signed: boolean;
-      signerName: string | null;
-      verified: boolean;
-      encrypted: boolean;
-      fileCount: number;
-      originalSize: number;
-    }) => {
+    async (
+      recoveredFiles: RecoveredFile[],
+      options: {
+        burnAfterReading: boolean;
+        signed: boolean;
+        signerName: string | null;
+        verified: boolean;
+        encrypted: boolean;
+        fileCount: number;
+        originalSize: number;
+      },
+    ) => {
       const urls: string[] = [];
       const names: string[] = [];
       for (const file of recoveredFiles) {
         const blobPart = new Uint8Array(file.bytes).buffer as BlobPart;
-        const url = URL.createObjectURL(new Blob([blobPart], { type: file.mime }));
+        const url = URL.createObjectURL(
+          new Blob([blobPart], { type: file.mime }),
+        );
         urls.push(url);
         names.push(file.name);
       }
@@ -263,7 +275,11 @@ export function ScannerClient() {
   );
 
   const finishTransfer = useCallback(
-    async (container: Uint8Array, session: ReceiverSession, password?: string) => {
+    async (
+      container: Uint8Array,
+      session: ReceiverSession,
+      password?: string,
+    ) => {
       if (completingRef.current) return;
       completingRef.current = true;
       try {
@@ -328,7 +344,11 @@ export function ScannerClient() {
             );
             if (alreadyTrusted) {
               const key = await importPublicKeyRaw(parsed.signerPublicKey);
-              verified = await verifySignature(key, canonical, parsed.signature);
+              verified = await verifySignature(
+                key,
+                canonical,
+                parsed.signature,
+              );
             } else {
               // شاشة الثقة: نوقف وننتظر قرار المستخدم
               setSignatureReview({
@@ -340,8 +360,14 @@ export function ScannerClient() {
                   let ok = false;
                   if (trust) {
                     await addTrustedKey(parsed.signerPublicKey as Uint8Array);
-                    const key = await importPublicKeyRaw(parsed.signerPublicKey as Uint8Array);
-                    ok = await verifySignature(key, canonical, parsed.signature as Uint8Array);
+                    const key = await importPublicKeyRaw(
+                      parsed.signerPublicKey as Uint8Array,
+                    );
+                    ok = await verifySignature(
+                      key,
+                      canonical,
+                      parsed.signature as Uint8Array,
+                    );
                   }
                   completingRef.current = false;
                   await finalizeAndSave(files, {
@@ -354,7 +380,11 @@ export function ScannerClient() {
                     originalSize: recovered.meta.fileSize,
                   });
                   await deleteSession(
-                    sessionKey(session.session, session.containerLength, session.symbolSize),
+                    sessionKey(
+                      session.session,
+                      session.containerLength,
+                      session.symbolSize,
+                    ),
                   );
                 },
               });
@@ -391,7 +421,11 @@ export function ScannerClient() {
           originalSize: recovered.meta.fileSize,
         });
         await deleteSession(
-          sessionKey(session.session, session.containerLength, session.symbolSize),
+          sessionKey(
+            session.session,
+            session.containerLength,
+            session.symbolSize,
+          ),
         );
       } catch (cause) {
         completingRef.current = false;
@@ -495,9 +529,8 @@ export function ScannerClient() {
 
       let receiver = receiverRef.current;
       if (!receiver) {
-        const { RaptorQWasmDecoder } = await import(
-          "@raptorqr/core/fec/raptorq_wasm"
-        );
+        const { RaptorQWasmDecoder } =
+          await import("@raptorqr/core/fec/raptorq_wasm");
         const decoder = await RaptorQWasmDecoder.create(
           frame.containerLength,
           frame.symbolSize,
@@ -505,7 +538,11 @@ export function ScannerClient() {
         const seen = new Set<string>();
         let baseline = 0;
         let replayedDecoded: Uint8Array | null = null;
-        const key = sessionKey(frame.session, frame.containerLength, frame.symbolSize);
+        const key = sessionKey(
+          frame.session,
+          frame.containerLength,
+          frame.symbolSize,
+        );
         const stored = await loadSession(key);
         if (
           stored &&
@@ -707,8 +744,7 @@ export function ScannerClient() {
         const sourceX = Math.floor((video.videoWidth - sourceWidth) / 2);
         const sourceY = Math.floor((video.videoHeight - sourceHeight) / 2);
         const robustAttempt = decodeFailuresRef.current % 6 === 5;
-        const highDensity =
-          (receiverRef.current?.symbolSize ?? 0) > 2200;
+        const highDensity = (receiverRef.current?.symbolSize ?? 0) > 2200;
         const scanWidth = Math.min(
           dualMode
             ? highDensity
@@ -797,8 +833,7 @@ export function ScannerClient() {
 
             if (finishedAt - lastMetricsUpdateRef.current >= 500) {
               const firstDelivery = deliverySamples[0];
-              const lastDelivery =
-                deliverySamples[deliverySamples.length - 1];
+              const lastDelivery = deliverySamples[deliverySamples.length - 1];
               const deliveryElapsed =
                 lastDelivery && firstDelivery
                   ? lastDelivery.at - firstDelivery.at
@@ -917,8 +952,8 @@ export function ScannerClient() {
       try {
         const devices = await listCameras();
         setCameraDevices(devices);
-        const decoderLoad = import("@/lib/qr-scanner").then(({ prepareQrScanner }) =>
-          prepareQrScanner(),
+        const decoderLoad = import("@/lib/qr-scanner").then(
+          ({ prepareQrScanner }) => prepareQrScanner(),
         );
         const videoConstraints: MediaTrackConstraints = {
           facingMode: { ideal: "environment" },
@@ -942,15 +977,18 @@ export function ScannerClient() {
           height: settings.height ?? 0,
           frameRate: settings.frameRate ?? 0,
         });
-        const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
-          focusMode?: string[];
-          torch?: boolean;
-        };
+        const capabilities =
+          track.getCapabilities?.() as MediaTrackCapabilities & {
+            focusMode?: string[];
+            torch?: boolean;
+          };
         setTorchAvailable(Boolean(capabilities?.torch));
         if (capabilities?.focusMode?.includes("continuous")) {
           await track
             .applyConstraints({
-              advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+              advanced: [
+                { focusMode: "continuous" } as MediaTrackConstraintSet,
+              ],
             })
             .catch(() => undefined);
         }
@@ -1075,10 +1113,67 @@ export function ScannerClient() {
         )
       : 0;
 
+  const transferStats = (
+    <>
+      {incoming ? (
+        <>
+          <div className="rate-panel" aria-live="polite">
+            <div>
+              <span>{t("scan.rate.effective")}</span>
+              <strong>
+                {effectiveRate > 0 ? formatRate(effectiveRate) : "—"}
+              </strong>
+              <small>
+                {incoming?.compressed
+                  ? `${formatRate(opticalRate)} ${t("scan.rate.optical", { p: compressionPercent })}`
+                  : `${formatRate(opticalRate)} ${t("scan.rate.opticalOnly")}`}
+              </small>
+            </div>
+            <div>
+              <span>{t("scan.rate.remaining")}</span>
+              <strong>
+                {complete ? t("scan.rate.complete") : formatEta(etaSeconds)}
+              </strong>
+              <small>
+                {incoming
+                  ? `${formatBytes(recoveredBytes)} ${t("scan.rate.of")} ${formatBytes(incoming.containerLength)} ${t("scan.rate.encoded")}`
+                  : t("scan.rate.waiting")}
+              </small>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {incoming ? (
+        <div className="incoming-file">
+          <span className="file-glyph" aria-hidden="true">
+            ↓
+          </span>
+          <div>
+            <strong>
+              {incoming.compressed ? t("scan.incoming") : t("scan.incoming")}
+            </strong>
+            <span>
+              {formatBytes(incoming.originalSize)}
+              {incoming.compressed
+                ? ` · ${t("scan.incomingCompressed", { p: compressionPercent })}`
+                : ""}
+              {" · "}
+              {frames.toLocaleString()} / ~
+              {incoming.sourcePacketCount.toLocaleString()} {t("scan.symbols")}
+            </span>
+          </div>
+          <b>RQ</b>
+        </div>
+      ) : null}
+    </>
+  );
+
   return (
-    <main className="scanner-page">
-      <section className="scanner-intro">
-        <p className="eyebrow">{t("scan.eyebrow")}</p>
+    <main
+      className={`transfer-page scanner-page ws-state-${state} ${complete ? "is-complete" : ""} ${state === "password" || state === "signature-review" ? "needs-review" : ""}`}
+    >
+      <section className="workspace-intro">
         <h1>{complete ? t("scan.h1.complete") : t("scan.h1.ready")}</h1>
         <p>
           {complete
@@ -1090,45 +1185,179 @@ export function ScannerClient() {
       </section>
 
       <section className="scanner-shell">
-        <div className={`camera-view ${scanMode} ${active ? "active" : ""} ${complete ? "complete" : ""}`}>
-          <video ref={videoRef} playsInline muted aria-label="معاينة الكاميرا" />
-          <canvas ref={canvasRef} hidden />
-          <div className="scan-reticle" aria-hidden="true">
-            <i /><i /><i /><i />
+        <div className="camera-card">
+          <div className="step-heading">
+            <span>01</span>
+            <h2>{lang === "ar" ? "الكاميرا" : "Camera"}</h2>
           </div>
-          {!active && !complete && state !== "password" && state !== "signature-review" ? (
-            <div className="camera-empty">
-              <span className="camera-icon" aria-hidden="true">◎</span>
-              <strong>{t("scan.cameraOff")}</strong>
-              <span>
-                {scanMode === "dual" ? t("scan.dualSelected") : t("scan.videoLocal")}
-              </span>
+          <div
+            className={`camera-view ${scanMode} ${active ? "active" : ""} ${complete ? "complete" : ""}`}
+          >
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              aria-label="معاينة الكاميرا"
+            />
+            <canvas ref={canvasRef} hidden />
+            <div className="scan-reticle" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+            {!active &&
+            !complete &&
+            state !== "password" &&
+            state !== "signature-review" ? (
+              <div className="camera-empty">
+                <Camera
+                  size={48}
+                  strokeWidth={1.5}
+                  className="camera-icon"
+                  aria-hidden="true"
+                />
+                <strong>{t("scan.cameraOff")}</strong>
+              </div>
+            ) : null}
+            {state === "starting" ? (
+              <div className="camera-loading">{t("scan.loading")}</div>
+            ) : null}
+            {complete ? (
+              <div className="complete-mark" aria-hidden="true">
+                <Check size={44} strokeWidth={3} />
+              </div>
+            ) : null}
+            {torchAvailable && active ? (
+              <button
+                className="torch-button"
+                type="button"
+                onClick={toggleTorch}
+              >
+                {torchOn ? t("scan.torchOn") : t("scan.torchOff")}
+              </button>
+            ) : null}
+          </div>
+
+          {!complete ? (
+            <div className="camera-actions">
+              {" "}
+              <button
+                className="primary-action"
+                type="button"
+                disabled={
+                  state === "starting" ||
+                  state === "password" ||
+                  state === "signature-review"
+                }
+                onClick={
+                  active
+                    ? () => {
+                        stopCamera();
+                        setState("idle");
+                        setGuidance(t("scan.guide.cameraStopped"));
+                      }
+                    : () => void startCamera("qr")
+                }
+              >
+                <span aria-hidden="true">{active ? "■" : "◎"}</span>
+                {state === "starting"
+                  ? t("scan.loadingBtn")
+                  : active
+                    ? t("scan.stop")
+                    : t("scan.start")}
+              </button>
             </div>
           ) : null}
-          {state === "starting" ? <div className="camera-loading">{t("scan.loading")}</div> : null}
-          {complete ? <div className="complete-mark" aria-hidden="true"><Check size={44} strokeWidth={3} /></div> : null}
-          {torchAvailable && active ? (
-            <button className="torch-button" type="button" onClick={toggleTorch}>
-              {torchOn ? t("scan.torchOn") : t("scan.torchOff")}
-            </button>
-          ) : null}
+          <WorkspaceDisclosure
+            className="camera-settings"
+            title={lang === "ar" ? "إعدادات الكاميرا" : "Camera settings"}
+          >
+            <div
+              className="scan-mode-picker"
+              role="radiogroup"
+              aria-label="تخطيط الماسح"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={scanMode === "single"}
+                className={scanMode === "single" ? "selected" : ""}
+                disabled={active}
+                onClick={() => chooseScanMode("single")}
+              >
+                {t("scan.mode.single")}
+                <small>{t("scan.mode.singleSub")}</small>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={scanMode === "dual"}
+                className={scanMode === "dual" ? "selected" : ""}
+                disabled={active}
+                onClick={() => chooseScanMode("dual")}
+              >
+                {t("scan.mode.dual")}
+                <small>{t("scan.mode.dualSub")}</small>
+              </button>
+            </div>
+
+            {cameraDevices.length > 1 && !active ? (
+              <div className="camera-picker">
+                <label htmlFor="camera-select">{t("scan.cameraSelect")}</label>
+                <select
+                  id="camera-select"
+                  value={selectedCamera}
+                  onChange={(event) => setSelectedCamera(event.target.value)}
+                >
+                  <option value="auto">{t("scan.cameraAuto")}</option>
+                  {cameraDevices.map((device, index) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || `${t("scan.cameraSelect")} ${index + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+          </WorkspaceDisclosure>
         </div>
 
         <div className="receive-card">
+          <div className="step-heading">
+            <span>02</span>
+            <h2>
+              {complete
+                ? lang === "ar"
+                  ? "ملفاتك جاهزة"
+                  : "Your files are ready"
+                : lang === "ar"
+                  ? "حالة الاستقبال"
+                  : "Receive status"}
+            </h2>
+          </div>
           <div className="receive-status">
-            <span className={`pulse-dot ${active ? "live" : ""}`} aria-hidden="true" />
+            <span
+              className={`pulse-dot ${active ? "live" : ""}`}
+              aria-hidden="true"
+            />
             <strong>
-              {state === "receiving"
-                ? t("scan.status.receiving")
-                : state === "scanning"
-                  ? t("scan.status.searching")
-                  : state === "password"
-                    ? t("scan.status.password")
-                    : state === "signature-review"
-                      ? t("scan.signUntrusted")
-                      : complete
-                        ? t("scan.status.verified")
-                        : t("scan.status.ready")}
+              {state === "error"
+                ? lang === "ar"
+                  ? "تعذّر الاستقبال"
+                  : "Reception failed"
+                : state === "starting"
+                  ? t("scan.loadingBtn")
+                  : state === "receiving"
+                    ? t("scan.status.receiving")
+                    : state === "scanning"
+                      ? t("scan.status.searching")
+                      : state === "password"
+                        ? t("scan.status.password")
+                        : state === "signature-review"
+                          ? t("scan.signUntrusted")
+                          : complete
+                            ? t("scan.status.verified")
+                            : t("scan.status.ready")}
             </strong>
             <b>{Math.round(progress * 100)}%</b>
           </div>
@@ -1143,7 +1372,7 @@ export function ScannerClient() {
             <span style={{ width: `${progress * 100}%` }} />
           </div>
 
-          {handsFreeTip ? (
+          {handsFreeTip && active ? (
             <p className="resume-note handsfree-tip" role="status">
               <Bird size={14} aria-hidden="true" /> {t("scan.handsfreeTip")}
             </p>
@@ -1155,12 +1384,22 @@ export function ScannerClient() {
               data-testid="stability-badge"
               aria-live="polite"
             >
-              {stability.stable ? <Check size={13} aria-hidden="true" /> : <span aria-hidden="true">✱</span>}{" "}
-              {stability.stable ? t("scan.stableBadge") : t("scan.unstableBadge")}
+              {stability.stable ? (
+                <Check size={13} aria-hidden="true" />
+              ) : (
+                <span aria-hidden="true">✱</span>
+              )}{" "}
+              {stability.stable
+                ? t("scan.stableBadge")
+                : t("scan.unstableBadge")}
             </div>
           ) : null}
 
-          {resumeNote ? <p className="resume-note" role="status">{resumeNote}</p> : null}
+          {resumeNote && !complete ? (
+            <p className="resume-note" role="status">
+              {resumeNote}
+            </p>
+          ) : null}
 
           {state === "password" && pendingDecryption ? (
             <div className="password-prompt">
@@ -1180,7 +1419,9 @@ export function ScannerClient() {
                 }}
               />
               {promptError ? (
-                <p className="prompt-error" role="alert">{promptError}</p>
+                <p className="prompt-error" role="alert">
+                  {promptError}
+                </p>
               ) : null}
               <div className="prompt-actions">
                 <button type="button" onClick={() => void submitPassword()}>
@@ -1204,7 +1445,9 @@ export function ScannerClient() {
             <div className="sign-trust-panel">
               <strong>{t("scan.signUntrusted")}</strong>
               <p>
-                {t("scan.signFrom", { name: signatureReview.signerName ?? "?" })}
+                {t("scan.signFrom", {
+                  name: signatureReview.signerName ?? "?",
+                })}
                 <br />
                 {signatureReview.fingerprint}
               </p>
@@ -1222,7 +1465,11 @@ export function ScannerClient() {
                 >
                   {t("scan.signReject")}
                 </button>
-                <button type="button" className="mini-btn" onClick={cancelSignatureReview}>
+                <button
+                  type="button"
+                  className="mini-btn"
+                  onClick={cancelSignatureReview}
+                >
                   {t("scan.passwordCancel")}
                 </button>
               </div>
@@ -1235,142 +1482,93 @@ export function ScannerClient() {
             </p>
           ) : null}
           {complete && burnAfterReading ? (
-            <p className="resume-note" role="status">{t("scan.burnNotice")}</p>
+            <p className="resume-note" role="status">
+              {t("scan.burnNotice")}
+            </p>
           ) : null}
 
-          <div
-            className="scan-mode-picker"
-            role="radiogroup"
-            aria-label="تخطيط الماسح"
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={scanMode === "single"}
-              className={scanMode === "single" ? "selected" : ""}
-              disabled={active}
-              onClick={() => chooseScanMode("single")}
-            >
-              {t("scan.mode.single")}
-              <small>{t("scan.mode.singleSub")}</small>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={scanMode === "dual"}
-              className={scanMode === "dual" ? "selected" : ""}
-              disabled={active}
-              onClick={() => chooseScanMode("dual")}
-            >
-              {t("scan.mode.dual")}
-              <small>{t("scan.mode.dualSub")}</small>
-            </button>
-          </div>
+          {!complete ? transferStats : null}
 
-          {cameraDevices.length > 1 && !active ? (
-            <div className="camera-picker">
-              <label htmlFor="camera-select">{t("scan.cameraSelect")}</label>
-              <select
-                id="camera-select"
-                value={selectedCamera}
-                onChange={(event) => setSelectedCamera(event.target.value)}
+          <WorkspaceDisclosure
+            className="scanner-details"
+            title={lang === "ar" ? "التفاصيل التقنية" : "Technical details"}
+          >
+            {complete ? transferStats : null}
+            <div
+              className="scan-diagnostics channel-diagnostics"
+              aria-label="أداء الكاميرا والمفكك لحظياً"
+            >
+              <span>
+                <b>
+                  {cameraSettings?.frameRate
+                    ? cameraSettings.frameRate.toFixed(0)
+                    : "—"}{" "}
+                  fps
+                </b>
+                {t("scan.diag.negotiated")}
+              </span>
+              <span>
+                <b>
+                  {scanMetrics.deliveredFps
+                    ? scanMetrics.deliveredFps.toFixed(1)
+                    : "—"}{" "}
+                  fps
+                </b>
+                {t("scan.diag.delivered")}
+              </span>
+              <span>
+                <b>
+                  {scanMetrics.scannerFps
+                    ? scanMetrics.scannerFps.toFixed(1)
+                    : "—"}{" "}
+                  fps
+                </b>
+                {t("scan.diag.scanned")}
+              </span>
+              <span>
+                <b>
+                  {scanMetrics.decodeP50
+                    ? `${scanMetrics.decodeP50.toFixed(0)} / ${scanMetrics.decodeP95.toFixed(0)} ms`
+                    : "—"}
+                </b>
+                {t("scan.diag.decode")}
+              </span>
+            </div>
+            <div className="scan-diagnostics">
+              <span>
+                <b>{qrReads}</b> {t("scan.diag.msg")}
+              </span>
+              <span>
+                <b>{frames}</b> {t("scan.diag.unique")}
+              </span>
+              <span>
+                <b>{missedExposures}</b> {t("scan.diag.missed")}
+              </span>
+              <span>
+                <b>{badFrames}</b> {t("scan.diag.rejected")}
+              </span>
+            </div>
+          </WorkspaceDisclosure>
+          {active ? (
+            <p className="scan-hint" role="status">
+              {guidance}
+            </p>
+          ) : null}
+
+          {error ? (
+            <>
+              <p className="error-message" role="alert">
+                {error}
+              </p>
+              <button
+                type="button"
+                className="primary-action camera-retry"
+                onClick={() => void startCamera("qr")}
               >
-                <option value="auto">{t("scan.cameraAuto")}</option>
-                {cameraDevices.map((device, index) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `${t("scan.cameraSelect")} ${index + 1}`}
-                  </option>
-                ))}
-              </select>
-            </div>
+                {lang === "ar" ? "إعادة المحاولة" : "Try again"}
+              </button>
+            </>
           ) : null}
-
-          <div className="rate-panel" aria-live="polite">
-            <div>
-              <span>{t("scan.rate.effective")}</span>
-              <strong>{effectiveRate > 0 ? formatRate(effectiveRate) : "—"}</strong>
-              <small>
-                {incoming?.compressed
-                  ? `${formatRate(opticalRate)} ${t("scan.rate.optical", { p: compressionPercent })}`
-                  : `${formatRate(opticalRate)} ${t("scan.rate.opticalOnly")}`}
-              </small>
-            </div>
-            <div>
-              <span>{t("scan.rate.remaining")}</span>
-              <strong>{complete ? t("scan.rate.complete") : formatEta(etaSeconds)}</strong>
-              <small>
-                {incoming
-                  ? `${formatBytes(recoveredBytes)} ${t("scan.rate.of")} ${formatBytes(incoming.containerLength)} ${t("scan.rate.encoded")}`
-                  : t("scan.rate.waiting")}
-              </small>
-            </div>
-          </div>
-
-          {incoming ? (
-            <div className="incoming-file">
-              <span className="file-glyph" aria-hidden="true">↓</span>
-              <div>
-                <strong>{incoming.compressed ? t("scan.incoming") : t("scan.incoming")}</strong>
-                <span>
-                  {formatBytes(incoming.originalSize)}
-                  {incoming.compressed ? ` · ${t("scan.incomingCompressed", { p: compressionPercent })}` : ""}
-                  {" · "}
-                  {frames.toLocaleString()} / ~{incoming.sourcePacketCount.toLocaleString()} {t("scan.symbols")}
-                </span>
-              </div>
-              <b>RQ</b>
-            </div>
-          ) : null}
-
-          <div
-            className="scan-diagnostics channel-diagnostics"
-            aria-label="أداء الكاميرا والمفكك لحظياً"
-          >
-            <span>
-              <b>
-                {cameraSettings?.frameRate
-                  ? cameraSettings.frameRate.toFixed(0)
-                  : "—"}{" "}
-                fps
-              </b>
-              {t("scan.diag.negotiated")}
-            </span>
-            <span>
-              <b>
-                {scanMetrics.deliveredFps
-                  ? scanMetrics.deliveredFps.toFixed(1)
-                  : "—"}{" "}
-                fps
-              </b>
-              {t("scan.diag.delivered")}
-            </span>
-            <span>
-              <b>
-                {scanMetrics.scannerFps
-                  ? scanMetrics.scannerFps.toFixed(1)
-                  : "—"}{" "}
-                fps
-              </b>
-              {t("scan.diag.scanned")}
-            </span>
-            <span>
-              <b>
-                {scanMetrics.decodeP50
-                  ? `${scanMetrics.decodeP50.toFixed(0)} / ${scanMetrics.decodeP95.toFixed(0)} ms`
-                  : "—"}
-              </b>
-              {t("scan.diag.decode")}
-            </span>
-          </div>
-          <div className="scan-diagnostics" aria-live="polite">
-            <span><b>{qrReads}</b> {t("scan.diag.msg")}</span>
-            <span><b>{frames}</b> {t("scan.diag.unique")}</span>
-            <span><b>{missedExposures}</b> {t("scan.diag.missed")}</span>
-            <span><b>{badFrames}</b> {t("scan.diag.rejected")}</span>
-          </div>
-          <p className="scan-hint">{guidance}</p>
-
-          {error ? <p className="error-message" role="alert">{error}</p> : null}
 
           {complete && recoveredFiles.length > 0 ? (
             <>
@@ -1378,17 +1576,21 @@ export function ScannerClient() {
                 {recoveredFiles.map((file, index) => (
                   <div className="file-row" key={`${file.name}-${index}`}>
                     <span className="fname">{file.name}</span>
-                    <span className="fmeta">{formatBytes(file.bytes.length)}</span>
+                    <span className="fmeta">
+                      {formatBytes(file.bytes.length)}
+                    </span>
                     <a
                       href={downloadUrlsRef.current[index] ?? "#"}
                       download={file.name}
+                      aria-label={t("scan.save", { name: file.name })}
                       onClick={() => {
                         if (burnAfterReading) {
                           setTimeout(() => revokeDownloadUrls(), 60_000);
                         }
                       }}
                     >
-                      ↓ {t("scan.save", { name: file.name })}
+                      <Download size={18} aria-hidden="true" />{" "}
+                      {lang === "ar" ? "تنزيل" : "Download"}
                     </a>
                   </div>
                 ))}
@@ -1403,40 +1605,16 @@ export function ScannerClient() {
                   {t("scan.saveAll")}
                 </button>
               ) : null}
-              <button className="link-action" type="button" onClick={() => void startCamera()}>
+              <button
+                className="link-action"
+                type="button"
+                onClick={() => void startCamera()}
+              >
                 {t("scan.scanAnother")}
               </button>
             </>
-          ) : (
-            <button
-              className="primary-action"
-              type="button"
-              disabled={state === "starting" || state === "password" || state === "signature-review"}
-              onClick={
-                active
-                  ? () => {
-                      stopCamera();
-                      setState("idle");
-                      setGuidance(t("scan.guide.cameraStopped"));
-                    }
-                  : () => void startCamera("qr")
-              }
-            >
-              <span aria-hidden="true">{active ? "■" : "◎"}</span>
-              {state === "starting"
-                ? t("scan.loadingBtn")
-                : active
-                  ? t("scan.stop")
-                  : t("scan.start")}
-            </button>
-          )}
+          ) : null}
         </div>
-      </section>
-
-      <section className="scan-tips">
-        <div><span>1</span><p>{t("scan.tip1")}</p></div>
-        <div><span>2</span><p>{t("scan.tip2")}</p></div>
-        <div><span>3</span><p>{t("scan.tip3")}</p></div>
       </section>
     </main>
   );
