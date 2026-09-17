@@ -24,7 +24,7 @@ test("sender handles multiple files and shows the bundle list", async ({ page })
   await expect(page.getByText("one.txt")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("two.csv")).toBeVisible();
   await expect(page.getByText("three.bin")).toBeVisible();
-  await expect(page.getByText("3 ملف مختار")).toBeVisible();
+  await expect(page.locator(".batch-summary")).toContainText("3 / 3");
   await expect(page.getByText("جاهز للبث")).toBeVisible({ timeout: 60_000 });
 });
 

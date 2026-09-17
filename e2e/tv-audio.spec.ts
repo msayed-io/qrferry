@@ -39,6 +39,7 @@ async function transfer(
   files: { name: string; mimeType: string; buffer: Buffer }[],
   tv?: Page,
   beforeSend?: (tv: Page) => Promise<void>,
+  selectOnPhone?: (phone: Page) => Promise<void>,
 ) {
   await context.addInitScript(() => {
     localStorage.setItem(
@@ -61,7 +62,8 @@ async function transfer(
   const phone = await context.newPage();
   await phone.addInitScript(installCameraStub);
   await phone.goto("/");
-  await phone.setInputFiles("input[type=file]", files);
+  if (selectOnPhone) await selectOnPhone(phone);
+  else await phone.setInputFiles("input[type=file]", files);
   const modules = await tv.evaluate(() => window.__qrferryTvModules!);
   await phone.evaluate(
     (fr) =>
@@ -150,7 +152,9 @@ test("TV retains exact playable bytes after reload and reopening the library", a
       buffer: bytes,
     },
   ]);
-  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ في مكتبة المتصفح");
+  await expect(tv.locator(".tv-library-status")).toContainText(
+    "حُفظ في مكتبة المتصفح",
+  );
   await tv.reload();
   await tv.getByRole("button", { name: /الملفات المستلمة/ }).click();
   await tv.locator(".tv-library-item", { hasText: "persist.wav" }).click();
@@ -749,7 +753,7 @@ for (const [width, height] of [
   [3840, 2160],
   [800, 600],
 ]) {
-  test(`TV4 responsive receiver and player at ${width}x${height}`, async ({
+  test(`TV5 brand, three-file layout and remote at ${width}x${height}`, async ({
     context,
   }) => {
     const page = await context.newPage();
@@ -762,10 +766,41 @@ for (const [width, height] of [
           mimeType: "audio/wav",
           buffer: wav(),
         },
+        { name: "الثاني.wav", mimeType: "audio/wav", buffer: wav() },
+        { name: "الثالث.wav", mimeType: "audio/wav", buffer: wav() },
       ],
       page,
       async (page) => {
         await expect(page.locator("main.tv-page")).toHaveCSS("display", "flex");
+        await expect(page.locator("main.tv-page")).toHaveCSS(
+          "background-color",
+          "rgb(244, 241, 234)",
+        );
+        await expect(page.locator(".tv-stage")).toHaveCSS(
+          "background-color",
+          "rgb(255, 255, 255)",
+        );
+        await expect(page.locator(".tv-stage")).toHaveCSS(
+          "color",
+          "rgb(17, 24, 32)",
+        );
+        await expect(page.locator(".tv-stage")).toHaveCSS(
+          "border-radius",
+          "3px",
+        );
+        await expect(page.locator(".tv-brand .brand-mark i")).toHaveCount(4);
+        await expect(page.locator(".tv-steps li").first()).toHaveCSS(
+          "color",
+          "rgb(17, 24, 32)",
+        );
+        await expect(page.locator(".tv-library-status")).toHaveCSS(
+          "color",
+          "rgb(17, 24, 32)",
+        );
+        await expect(page.locator(".tv-qr-box canvas")).toHaveCSS(
+          "box-shadow",
+          "none",
+        );
         expect(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= innerWidth,
@@ -800,3 +835,88 @@ for (const [width, height] of [
     await expect(tv.locator(".tv-settings-button")).toBeFocused();
   });
 }
+
+test("TV5: three incrementally selected files arrive in one session and all persist byte-for-byte", async ({
+  context,
+}) => {
+  const files = [
+    { name: "الأول.wav", mimeType: "audio/wav", buffer: wav() },
+    { name: "الثاني.wav", mimeType: "audio/wav", buffer: wav() },
+    {
+      name: "ملاحظات.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("ثلاثة ملفات في إرسالية واحدة"),
+    },
+  ];
+  const tv = await transfer(
+    context,
+    files,
+    undefined,
+    undefined,
+    async (phone) => {
+      await phone.setViewportSize({ width: 390, height: 844 });
+      await phone.setInputFiles("input[type=file]", files[0]);
+      const chooser = phone.waitForEvent("filechooser");
+      await phone.locator(".batch-add").click();
+      await (await chooser).setFiles(files.slice(1));
+      await expect(phone.locator(".batch-file")).toHaveCount(3);
+    },
+  );
+  await expect(tv.locator(".tv-file-select")).toHaveCount(3);
+  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ");
+  const fs = await import("node:fs/promises");
+  for (const f of files) {
+    await tv.locator(".tv-file-select").filter({ hasText: f.name }).click();
+    await expect(tv.locator(".tv-file-name")).toHaveText(f.name);
+    if (f.mimeType.startsWith("audio")) {
+      await tv.getByRole("button", { name: "تشغيل", exact: true }).click();
+      await expect
+        .poll(() =>
+          tv.locator("audio").evaluate((a: HTMLAudioElement) => a.currentTime),
+        )
+        .toBeGreaterThan(0);
+    }
+    const download = tv.waitForEvent("download");
+    await tv.locator(".tv-download-button").click();
+    const d = await download;
+    expect(d.suggestedFilename()).toBe(f.name);
+    expect(await fs.readFile((await d.path())!)).toEqual(f.buffer);
+  }
+  await tv.reload();
+  for (const f of files) {
+    await tv.locator(".tv-library-btn").click();
+    await expect(tv.locator(".tv-library-item")).toHaveCount(3);
+    await tv.locator(".tv-library-item").filter({ hasText: f.name }).click();
+    await expect(tv.locator(".tv-file-name")).toHaveText(f.name);
+    const download = tv.waitForEvent("download");
+    await tv.locator(".tv-download-button").click();
+    expect(await fs.readFile((await (await download).path())!)).toEqual(
+      f.buffer,
+    );
+  }
+});
+
+test("Auto download: TV5 requests each of three files once without losing library entries", async ({
+  context,
+}) => {
+  const downloads = recordDownloads(context);
+  const files = [1, 2, 3].map((i) => ({
+    name: `batch-${i}.wav`,
+    mimeType: "audio/wav",
+    buffer: wav(),
+  }));
+  const tv = await transfer(context, files);
+  await expect.poll(() => downloads.length).toBe(3);
+  const fs = await import("node:fs/promises");
+  for (const f of files) {
+    const d = downloads.find((d) => d.suggestedFilename() === f.name)!;
+    expect(d).toBeTruthy();
+    expect(await fs.readFile((await d.path())!)).toEqual(f.buffer);
+  }
+  await expect(tv.locator(".tv-library-status")).toContainText("حُفظ");
+  await expect(tv.locator(".tv-auto-status")).toContainText(
+    "طلبات التنزيل التلقائي: 3",
+  );
+  await tv.locator(".tv-library-btn").click();
+  await expect(tv.locator(".tv-library-item")).toHaveCount(3);
+});

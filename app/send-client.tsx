@@ -21,6 +21,7 @@ import {
   Radio,
   RefreshCw,
   Zap,
+  X,
 } from "lucide-react";
 import { compressForTransferViaWorker } from "@/lib/compression-worker";
 import { encryptPayload } from "@/lib/encryption";
@@ -33,14 +34,8 @@ import {
   OpticalTransfer,
   PreparedOpticalFile,
 } from "@/lib/optical-transfer";
-import {
-  TRANSFER_PRESETS,
-  TransferPresetKey,
-} from "@/lib/transfer-presets";
-import {
-  buildTransferPackage,
-  type PackageFile,
-} from "@/lib/transfer-package";
+import { TRANSFER_PRESETS, TransferPresetKey } from "@/lib/transfer-presets";
+import { buildTransferPackage, type PackageFile } from "@/lib/transfer-package";
 import {
   exportPrivateKeyPkcs8,
   exportPublicKeyRaw,
@@ -54,6 +49,11 @@ import {
   saveStoredIdentity,
   type StoredIdentity,
 } from "@/lib/identity-store";
+import {
+  MAX_BATCH_FILES,
+  FileSelectionError,
+  planFileSelection,
+} from "@/lib/file-selection";
 import { takeSharedFiles } from "@/lib/shared-files-store";
 import {
   loadCustomPresets,
@@ -139,6 +139,9 @@ export function SendClient() {
   const playedFramesRef = useRef(0);
   const broadcastFrameTimesRef = useRef<number[]>([]);
   const encodeJobRef = useRef(0);
+  const prepareJobRef = useRef(0);
+  const preparingRef = useRef(false);
+  const appendSelectionRef = useRef(false);
   const [tab, setTab] = useState<"file" | "text">("file");
   const [textValue, setTextValue] = useState("");
   const [fileData, setFileData] = useState<PreparedFiles>();
@@ -164,13 +167,17 @@ export function SendClient() {
   const [sharedNotice, setSharedNotice] = useState("");
   // النقل السريع (شبكة محلية)
   const [fastOpen, setFastOpen] = useState(false);
-  const [fastState, setFastState] = useState<"idle" | "scanning" | "connecting" | "transferring" | "done" | "error">("idle");
+  const [fastState, setFastState] = useState<
+    "idle" | "scanning" | "connecting" | "transferring" | "done" | "error"
+  >("idle");
   const [fastStatus, setFastStatus] = useState("");
   const [fastUrlCopied, setFastUrlCopied] = useState(false);
   const [fastCameraInfo, setFastCameraInfo] = useState("");
   const fastFacingRef = useRef<"environment" | "user">("environment");
   const fastFramesSinceRobustRef = useRef(0);
-  const [fastProgress, setFastProgress] = useState<TransferProgress | null>(null);
+  const [fastProgress, setFastProgress] = useState<TransferProgress | null>(
+    null,
+  );
   const fastVideoRef = useRef<HTMLVideoElement>(null);
   const fastCanvasRef = useRef<HTMLCanvasElement>(null);
   const fastStreamRef = useRef<MediaStream | null>(null);
@@ -208,8 +215,26 @@ export function SendClient() {
   // الملفات القادمة من «المشاركة» (Web Share Target)
   useEffect(() => {
     let cancelled = false;
+    const job = prepareJobRef.current;
     void takeSharedFiles().then(async (entries) => {
-      if (cancelled || !entries || entries.length === 0) return;
+      if (
+        cancelled ||
+        job !== prepareJobRef.current ||
+        !entries ||
+        entries.length === 0
+      )
+        return;
+      if (
+        entries.length > MAX_BATCH_FILES ||
+        entries.reduce((sum, e) => sum + e.data.byteLength, 0) > MAX_FILE_BYTES
+      ) {
+        setError(
+          lang === "ar"
+            ? "يمكن إرسال 3 ملفات بحد أقصى، ضمن حد الحجم الإجمالي. اختر دفعة أصغر."
+            : "Send up to 3 files within the total size limit. Choose a smaller batch.",
+        );
+        return;
+      }
       try {
         const items: PreparedFileItem[] = [];
         for (const entry of entries) {
@@ -222,6 +247,7 @@ export function SendClient() {
             compressedMode: compressed.mode,
           });
         }
+        if (cancelled || job !== prepareJobRef.current) return;
         const prepared: PreparedFiles = { items };
         setFileData(prepared);
         setTab("file");
@@ -272,7 +298,9 @@ export function SendClient() {
   }, []);
 
   useEffect(() => {
-    void ensureIdentity().then((id) => setIdentity(id)).catch(() => undefined);
+    void ensureIdentity()
+      .then((id) => setIdentity(id))
+      .catch(() => undefined);
   }, [ensureIdentity]);
 
   const installTransfer = useCallback((next: OpticalTransfer) => {
@@ -291,11 +319,7 @@ export function SendClient() {
     async (prepared: PreparedFiles): Promise<BuiltOptical> => {
       const activePassword = encryptEnabled ? password.trim() : "";
 
-      if (
-        prepared.items.length === 1 &&
-        !signEnabled &&
-        !burnEnabled
-      ) {
+      if (prepared.items.length === 1 && !signEnabled && !burnEnabled) {
         // المسار الكلاسيكي: ملف واحد بلا توقيع/حذف — بضغط كسول (يُضغط عند الطلب فقط)
         const item = prepared.items[0];
         if (!item.compressedBytes || !item.compressedMode) {
@@ -382,7 +406,9 @@ export function SendClient() {
           setTransfer(undefined);
           transferRef.current = undefined;
           setError(
-            cause instanceof Error ? cause.message : t("send.error.streamPrepare"),
+            cause instanceof Error
+              ? cause.message
+              : t("send.error.streamPrepare"),
           );
         }
       } finally {
@@ -393,41 +419,80 @@ export function SendClient() {
   );
 
   const prepareFiles = useCallback(
-    async (files: File[]) => {
+    async (incoming: File[], append = false) => {
+      // Do not replace a batch during reading or an active transfer/modal.
+      if (preparingRef.current || fastOpen) return;
+      const previous = fileData;
+      let files: File[];
+      try {
+        files = planFileSelection(
+          previous?.items.map((item) => item.file) ?? [],
+          incoming,
+          append,
+          MAX_FILE_BYTES,
+        );
+      } catch (cause) {
+        setError(
+          cause instanceof FileSelectionError && cause.reason === "count"
+            ? lang === "ar"
+              ? "يمكن إرسال 3 ملفات بحد أقصى في المرة الواحدة. لم تتغير قائمتك؛ أزل ملفًا أو اختر عددًا أقل."
+              : "Send up to 3 files at once. Your list is unchanged; remove a file or select fewer files."
+            : t("send.error.tooLarge"),
+        );
+        return;
+      }
+      const job = ++prepareJobRef.current;
+      ++encodeJobRef.current;
+      preparingRef.current = true;
+      setProcessing(true);
       setError("");
       setPlaying(false);
       setActualFps(0);
       setSharedNotice("");
-      if (files.length === 0) return;
-      const total = files.reduce((sum, file) => sum + file.size, 0);
-      if (total > MAX_FILE_BYTES) {
-        setError(t("send.error.tooLarge"));
-        return;
-      }
-      setProcessing(true);
+      // A previous optical payload must never remain available for a new selection.
+      setTransfer(undefined);
+      transferRef.current = undefined;
+      orderRef.current = [];
+      playedFramesRef.current = 0;
+      setPlayedFrames(0);
+      setFileData(undefined);
       try {
-        // قراءة خام سريعة فقط — لا ضغط ولا ترميز هنا (تُؤجل عند الحاجة)
+        if (!files.length) return;
         const items: PreparedFileItem[] = [];
         for (const file of files) {
-          const original = new Uint8Array(await file.arrayBuffer());
-          items.push({ file, original });
+          // Reuse already-read bytes when adding/removing; don't read large files again.
+          const cached = previous?.items.find((item) => item.file === file);
+          items.push(
+            cached ?? {
+              file,
+              original: new Uint8Array(await file.arrayBuffer()),
+            },
+          );
         }
+        if (job !== prepareJobRef.current) return;
         const prepared: PreparedFiles = { items };
         setFileData(prepared);
-        setProcessing(false);
-        // للملفات الصغيرة: جهّز البث البصري تلقائياً كالمعتاد (تجربة سلسة).
-        // للملفات الكبيرة: نتوقف — المستخدم يختار «نقل سريع» فوراً أو
-        // يضغط «ابدأ بث QR» فيُجهَّز عند الطلب.
-        const total = items.reduce((sum, item) => sum + item.original.length, 0);
-        if (total <= FAST_PREPARE_THRESHOLD) {
+        const total = items.reduce(
+          (sum, item) => sum + item.original.length,
+          0,
+        );
+        if (total <= FAST_PREPARE_THRESHOLD)
           await encodePrepared(prepared, presetKey);
-        }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : t("send.error.prepare"));
-        setProcessing(false);
+        if (job === prepareJobRef.current) {
+          setFileData(previous);
+          setError(
+            cause instanceof Error ? cause.message : t("send.error.prepare"),
+          );
+        }
+      } finally {
+        if (job === prepareJobRef.current) {
+          preparingRef.current = false;
+          setProcessing(false);
+        }
       }
     },
-    [encodePrepared, presetKey, t],
+    [encodePrepared, presetKey, t, lang, fileData, fastOpen],
   );
 
   const prepareText = useCallback(async () => {
@@ -457,7 +522,9 @@ export function SendClient() {
   const changeEncryption = (nextEnabled: boolean) => {
     setEncryptEnabled(nextEnabled);
     if (transfer && fileData && !nextEnabled) {
-      void buildOptical(fileData).then(() => encodePrepared(fileData, presetKey));
+      void buildOptical(fileData).then(() =>
+        encodePrepared(fileData, presetKey),
+      );
     }
   };
 
@@ -470,12 +537,14 @@ export function SendClient() {
 
   const toggleBurn = (next: boolean) => {
     setBurnEnabled(next);
-    if (transfer && fileData && next !== burnEnabled) void encodePrepared(fileData, presetKey);
+    if (transfer && fileData && next !== burnEnabled)
+      void encodePrepared(fileData, presetKey);
   };
 
   const toggleSign = (next: boolean) => {
     setSignEnabled(next);
-    if (transfer && fileData && next !== signEnabled) void encodePrepared(fileData, presetKey);
+    if (transfer && fileData && next !== signEnabled)
+      void encodePrepared(fileData, presetKey);
   };
 
   const renderPacket = useCallback(
@@ -613,7 +682,10 @@ export function SendClient() {
     if (signEnabled) {
       const id = await ensureIdentity();
       const privateKey = await importPrivateKeyRaw(id.privateKeyPkcs8);
-      const unsigned = buildTransferPackage({ files: packageFiles, burnAfterReading: burnEnabled });
+      const unsigned = buildTransferPackage({
+        files: packageFiles,
+        burnAfterReading: burnEnabled,
+      });
       const signature = await signHash(privateKey, unsigned);
       return buildTransferPackage({
         files: packageFiles,
@@ -623,11 +695,11 @@ export function SendClient() {
         signerPublicKey: id.publicKeyRaw,
       });
     }
-    return buildTransferPackage({ files: packageFiles, burnAfterReading: burnEnabled });
+    return buildTransferPackage({
+      files: packageFiles,
+      burnAfterReading: burnEnabled,
+    });
   }, [burnEnabled, ensureIdentity, fileData, signEnabled]);
-
-
-
 
   const beginFastTransfer = useCallback(
     async (pairing: PairingInfo) => {
@@ -676,33 +748,37 @@ export function SendClient() {
   );
 
   /** يطلب الكاميرا بدقة عالية، مع احتياط لدقة أقل عند الفشل. */
-  const requestCamera = useCallback(async (facing: "environment" | "user"): Promise<MediaStream> => {
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: facing },
-          width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 },
-          frameRate: { ideal: 30 },
-        },
-      });
-    } catch {
-      // احتياط: أي كاميرا متاحة (قد تكون دقة أقل لكنها تعمل)
-      return navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: facing } },
-      });
-    }
-  }, []);
+  const requestCamera = useCallback(
+    async (facing: "environment" | "user"): Promise<MediaStream> => {
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+            frameRate: { ideal: 30 },
+          },
+        });
+      } catch {
+        // احتياط: أي كاميرا متاحة (قد تكون دقة أقل لكنها تعمل)
+        return navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: facing } },
+        });
+      }
+    },
+    [],
+  );
 
   /** يفعّل التركيز التلقائي المستمر (مهم جداً عند تصوير شاشة — يزيل الضبابية). */
   const enableContinuousFocus = useCallback(async (stream: MediaStream) => {
     try {
       const track = stream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities?.() as MediaTrackCapabilities & {
-        focusMode?: string[];
-      };
+      const capabilities =
+        track.getCapabilities?.() as MediaTrackCapabilities & {
+          focusMode?: string[];
+        };
       if (capabilities?.focusMode?.includes("continuous")) {
         await track
           .applyConstraints({
@@ -768,7 +844,17 @@ export function SendClient() {
           canvas.width = SCAN_SIZE;
           canvas.height = SCAN_SIZE;
           context.imageSmoothingEnabled = false;
-          context.drawImage(video, offsetX, offsetY, side, side, 0, 0, SCAN_SIZE, SCAN_SIZE);
+          context.drawImage(
+            video,
+            offsetX,
+            offsetY,
+            side,
+            side,
+            0,
+            0,
+            SCAN_SIZE,
+            SCAN_SIZE,
+          );
           const image = context.getImageData(0, 0, SCAN_SIZE, SCAN_SIZE);
           const { scanRawQr } = await import("@/lib/qr-scanner");
           // تكيّف: معظم المحاولات سريعة (بدون tryHarder)؛ وكل 6 محاولات tryHarder
@@ -788,7 +874,9 @@ export function SendClient() {
           // أي خطأ غير متوقع: نتجاهله ونواصل — الحلقة لا تموت أبداً
         } finally {
           if (fastScanActiveRef.current) {
-            fastScanLoopRef.current = window.requestAnimationFrame(() => void loop());
+            fastScanLoopRef.current = window.requestAnimationFrame(
+              () => void loop(),
+            );
           }
         }
       };
@@ -815,7 +903,8 @@ export function SendClient() {
 
   /** تبديل الكاميرا الأمامية/الخلفية أثناء المسح. */
   const switchFastCamera = useCallback(() => {
-    const next = fastFacingRef.current === "environment" ? "user" : "environment";
+    const next =
+      fastFacingRef.current === "environment" ? "user" : "environment";
     fastFacingRef.current = next;
     setFastStatus(t("send.fastScanning"));
     void (async () => {
@@ -832,14 +921,17 @@ export function SendClient() {
         await beginFastLoop(stream);
       } catch {
         setFastState("error");
-        setFastStatus(t("send.fastError", { msg: t("scan.error.cameraStart") }));
+        setFastStatus(
+          t("send.fastError", { msg: t("scan.error.cameraStart") }),
+        );
       }
     })();
   }, [beginFastLoop, enableContinuousFocus, requestCamera, t]);
 
   const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
-    if (files.length > 0) void prepareFiles(files);
+    if (files.length > 0) void prepareFiles(files, appendSelectionRef.current);
+    appendSelectionRef.current = false;
     event.target.value = "";
   };
 
@@ -853,7 +945,7 @@ export function SendClient() {
     event.preventDefault();
     setDragging(false);
     const files = Array.from(event.dataTransfer.files ?? []);
-    if (files.length > 0) void prepareFiles(files);
+    if (files.length > 0) void prepareFiles(files, !!fileData);
   };
 
   const scanUrl = useMemo(() => {
@@ -905,8 +997,10 @@ export function SendClient() {
     return canvas;
   }, []);
 
-  const [passwordQrCanvas, setPasswordQrCanvas] = useState<HTMLCanvasElement | null>(null);
-  const [pubKeyQrCanvas, setPubKeyQrCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [passwordQrCanvas, setPasswordQrCanvas] =
+    useState<HTMLCanvasElement | null>(null);
+  const [pubKeyQrCanvas, setPubKeyQrCanvas] =
+    useState<HTMLCanvasElement | null>(null);
   const passwordQrHostRef = useRef<HTMLDivElement>(null);
   const pubKeyQrHostRef = useRef<HTMLDivElement>(null);
 
@@ -1009,7 +1103,9 @@ export function SendClient() {
   const orderLength = transfer?.packets.length ?? 0;
   const cycleFrame =
     orderLength > 0
-      ? playedFrames === 0 ? 0 : ((playedFrames - 1) % orderLength) + 1
+      ? playedFrames === 0
+        ? 0
+        : ((playedFrames - 1) % orderLength) + 1
       : 0;
   const cycleNumber =
     orderLength > 0 && playedFrames > 0
@@ -1086,7 +1182,11 @@ export function SendClient() {
                 type="file"
                 multiple
                 onChange={selectFiles}
-                aria-label="اختر ملفاً أو أكثر للنقل"
+                aria-label={
+                  lang === "ar"
+                    ? "اختر حتى 3 ملفات للنقل"
+                    : "Choose up to 3 files to send"
+                }
               />
               <input
                 ref={folderInputRef}
@@ -1101,7 +1201,10 @@ export function SendClient() {
                 className="file-button"
                 type="button"
                 disabled={processing}
-                onClick={() => inputRef.current?.click()}
+                onClick={() => {
+                  appendSelectionRef.current = false;
+                  inputRef.current?.click();
+                }}
               >
                 <span aria-hidden="true">{processing ? "…" : "＋"}</span>
                 {processing ? t("send.processing") : t("send.browse")}
@@ -1116,6 +1219,11 @@ export function SendClient() {
                 {lang === "ar" ? "اختيار مجلد" : "Pick a folder"}
               </button>
               <p>{t("send.drop")}</p>
+              <p className="batch-hint">
+                {lang === "ar"
+                  ? "اختر حتى 3 ملفات معًا، أو أضفها واحدًا واحدًا ثم أرسلها مرة واحدة."
+                  : "Select up to 3 files together, or add them one by one and send once."}
+              </p>
             </div>
           ) : (
             <div className="text-entry">
@@ -1136,13 +1244,22 @@ export function SendClient() {
             </div>
           )}
 
-          {sharedNotice ? <p className="resume-note" role="status">{sharedNotice}</p> : null}
+          {sharedNotice ? (
+            <p className="resume-note" role="status">
+              {sharedNotice}
+            </p>
+          ) : null}
 
           {fileData ? (
             <div className="selected-files">
               {fileData.items.map((item, index) => (
-                <div className="file-row" key={`${item.file.name}-${index}`}>
-                  <span className="file-glyph" aria-hidden="true">↗</span>
+                <div
+                  className="file-row batch-file"
+                  key={`${item.file.name}-${index}`}
+                >
+                  <span className="file-glyph" aria-hidden="true">
+                    ↗
+                  </span>
                   <span className="fname">{item.file.name}</span>
                   <span className="fmeta">
                     {formatBytes(item.file.size)}
@@ -1150,22 +1267,73 @@ export function SendClient() {
                       ? ` → ${formatBytes(item.compressedBytes.length)} · ${item.compressedMode}`
                       : ""}
                   </span>
+                  <button
+                    type="button"
+                    className="remove-file"
+                    disabled={processing || fastOpen}
+                    aria-label={
+                      lang === "ar"
+                        ? `إزالة ${item.file.name}`
+                        : `Remove ${item.file.name}`
+                    }
+                    onClick={() =>
+                      void prepareFiles(
+                        fileData.items
+                          .filter((_, i) => i !== index)
+                          .map((item) => item.file),
+                      )
+                    }
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
                 </div>
               ))}
-              <div className="file-row" key="total">
+              <div className="file-row batch-summary" key="total">
                 <span className="fname">
-                  {fileData.items.length} {t("send.multiSelected")}
+                  {fileData.items.length} / {MAX_BATCH_FILES}{" "}
+                  {t("send.multiSelected")}
                 </span>
                 <span className="fmeta">
                   {formatBytes(totalOriginalSize)}
                   {encryptEnabled && password.trim().length >= 4 ? (
-                    <span className="encrypted-badge"><Lock size={11} aria-hidden="true" /> {t("send.encryptedBadge")}</span>
+                    <span className="encrypted-badge">
+                      <Lock size={11} aria-hidden="true" />{" "}
+                      {t("send.encryptedBadge")}
+                    </span>
                   ) : null}
                 </span>
-                <button type="button" onClick={() => inputRef.current?.click()}>
+                <button
+                  type="button"
+                  disabled={processing || fastOpen}
+                  onClick={() => {
+                    appendSelectionRef.current = false;
+                    inputRef.current?.click();
+                  }}
+                >
                   {t("send.change")}
                 </button>
               </div>
+              <button
+                type="button"
+                className="batch-add"
+                disabled={
+                  processing ||
+                  fastOpen ||
+                  fileData.items.length >= MAX_BATCH_FILES
+                }
+                onClick={() => {
+                  appendSelectionRef.current = true;
+                  inputRef.current?.click();
+                }}
+              >
+                {fileData.items.length >= MAX_BATCH_FILES
+                  ? lang === "ar"
+                    ? "اكتملت الدفعة: 3 ملفات"
+                    : "Batch full: 3 files"
+                  : lang === "ar"
+                    ? "＋ إضافة ملف للدفعة"
+                    : "＋ Add a file to this batch"}
+              </button>
             </div>
           ) : null}
 
@@ -1179,10 +1347,16 @@ export function SendClient() {
                 onClick={() => changeEncryption(!encryptEnabled)}
               >
                 <span className="adv-glyph" aria-hidden="true">
-                  {encryptEnabled ? <LockOpen size={14} aria-hidden="true" /> : <Lock size={14} aria-hidden="true" />}
+                  {encryptEnabled ? (
+                    <LockOpen size={14} aria-hidden="true" />
+                  ) : (
+                    <Lock size={14} aria-hidden="true" />
+                  )}
                 </span>
                 <span>
-                  {encryptEnabled ? t("send.encryptPanel.on") : t("send.encryptPanel.off")}
+                  {encryptEnabled
+                    ? t("send.encryptPanel.on")
+                    : t("send.encryptPanel.off")}
                 </span>
               </button>
               {encryptEnabled ? (
@@ -1225,7 +1399,9 @@ export function SendClient() {
                 aria-pressed={burnEnabled}
                 onClick={() => toggleBurn(!burnEnabled)}
               >
-                <span className="adv-glyph" aria-hidden="true"><Flame size={15} /></span>
+                <span className="adv-glyph" aria-hidden="true">
+                  <Flame size={15} />
+                </span>
                 <span>{t("send.burnLabel")}</span>
               </button>
               <p className="adv-hint">{t("send.burnHint")}</p>
@@ -1239,14 +1415,18 @@ export function SendClient() {
                 aria-pressed={signEnabled}
                 onClick={() => toggleSign(!signEnabled)}
               >
-                <span className="adv-glyph" aria-hidden="true"><PenLine size={15} /></span>
+                <span className="adv-glyph" aria-hidden="true">
+                  <PenLine size={15} />
+                </span>
                 <span>{t("send.signLabel")}</span>
               </button>
               {signEnabled ? (
                 <div className="adv-body">
                   <p className="identity-line">
                     {t("send.signIdentity")}{" "}
-                    <strong>{identity?.label ?? t("send.signNoIdentity")}</strong>
+                    <strong>
+                      {identity?.label ?? t("send.signNoIdentity")}
+                    </strong>
                   </p>
                   <div className="adv-inline">
                     <button
@@ -1273,7 +1453,9 @@ export function SendClient() {
                 aria-pressed={broadcastEnabled}
                 onClick={() => setBroadcastEnabled((current) => !current)}
               >
-                <span className="adv-glyph" aria-hidden="true"><Radio size={15} /></span>
+                <span className="adv-glyph" aria-hidden="true">
+                  <Radio size={15} />
+                </span>
                 <span>{t("send.broadcastLabel")}</span>
               </button>
               <p className="adv-hint">{t("send.broadcastHint")}</p>
@@ -1288,7 +1470,11 @@ export function SendClient() {
             </div>
           </div>
 
-          <div className="preset-list" role="radiogroup" aria-label="ملف ضبط الإشارة">
+          <div
+            className="preset-list"
+            role="radiogroup"
+            aria-label="ملف ضبط الإشارة"
+          >
             {allPresets.entries.map(([key, option]) => (
               <button
                 type="button"
@@ -1331,8 +1517,9 @@ export function SendClient() {
                     ? `${option.fps} fps`
                     : `${option.fps} ${lang === "ar" ? "رمز/ث" : "sym/s"} · ${option.fps / option.lanes} fps/${lang === "ar" ? "مسار" : "lane"}`}
                   {" · "}
-                  {formatRate((option.usefulBytesPerFrame ?? 0) * option.fps)}
-                  {" "}
+                  {formatRate(
+                    (option.usefulBytesPerFrame ?? 0) * option.fps,
+                  )}{" "}
                   <span
                     className="preset-delete"
                     role="button"
@@ -1372,7 +1559,13 @@ export function SendClient() {
               <div className="form-row">
                 <label>
                   {t("send.presetVersion")}
-                  <input name="version" type="number" min={1} max={40} defaultValue={25} />
+                  <input
+                    name="version"
+                    type="number"
+                    min={1}
+                    max={40}
+                    defaultValue={25}
+                  />
                 </label>
                 <label>
                   {t("send.presetEcc")}
@@ -1387,7 +1580,13 @@ export function SendClient() {
               <div className="form-row">
                 <label>
                   {t("send.presetFps")}
-                  <input name="fps" type="number" min={1} max={120} defaultValue={10} />
+                  <input
+                    name="fps"
+                    type="number"
+                    min={1}
+                    max={120}
+                    defaultValue={10}
+                  />
                 </label>
                 <label>
                   {t("send.presetLanes")}
@@ -1399,7 +1598,13 @@ export function SendClient() {
               </div>
               <label>
                 {t("send.presetRepair")}
-                <input name="repair" type="number" min={0} max={100} defaultValue={30} />
+                <input
+                  name="repair"
+                  type="number"
+                  min={0}
+                  max={100}
+                  defaultValue={30}
+                />
               </label>
               <div className="form-actions">
                 <button type="submit">{t("send.presetSave")}</button>
@@ -1412,15 +1617,23 @@ export function SendClient() {
 
           {preset.fps >= 30 ? (
             <p className="channel-warning">
-              {preset.lanes === 2 ? t("send.channelWarningDual") : t("send.channelWarningFast")}
+              {preset.lanes === 2
+                ? t("send.channelWarningDual")
+                : t("send.channelWarningFast")}
             </p>
           ) : null}
 
           {passwordTooShort ? (
-            <p className="error-message" role="alert">{t("send.error.passwordShort")}</p>
+            <p className="error-message" role="alert">
+              {t("send.error.passwordShort")}
+            </p>
           ) : null}
 
-          {error ? <p className="error-message" role="alert">{error}</p> : null}
+          {error ? (
+            <p className="error-message" role="alert">
+              {error}
+            </p>
+          ) : null}
         </div>
 
         <div className="qr-panel">
@@ -1429,7 +1642,9 @@ export function SendClient() {
             <div>
               <h2>{t("send.step3.title")}</h2>
               <p>
-                {preset.lanes === 2 ? t("send.step3.descDual") : t("send.step3.descSingle")}
+                {preset.lanes === 2
+                  ? t("send.step3.descDual")
+                  : t("send.step3.descSingle")}
               </p>
             </div>
           </div>
@@ -1460,7 +1675,9 @@ export function SendClient() {
                 <div className="finder top-right" />
                 <div className="finder bottom-left" />
                 <span>
-                  {processing ? t("send.qr.placeholderEncoding") : t("send.qr.placeholderIdle")}
+                  {processing
+                    ? t("send.qr.placeholderEncoding")
+                    : t("send.qr.placeholderIdle")}
                 </span>
               </div>
             )}
@@ -1477,7 +1694,10 @@ export function SendClient() {
 
           <div className="stream-status" aria-live="polite">
             <div>
-              <span className={`pulse-dot ${playing ? "live" : ""}`} aria-hidden="true" />
+              <span
+                className={`pulse-dot ${playing ? "live" : ""}`}
+                aria-hidden="true"
+              />
               <strong>
                 {playing
                   ? t("send.status.broadcasting")
@@ -1502,12 +1722,16 @@ export function SendClient() {
           {transfer ? (
             <div className="broadcast-progress">
               <div>
-                <strong>{t("send.progress.cycle")} {cycleNumber}</strong>
+                <strong>
+                  {t("send.progress.cycle")} {cycleNumber}
+                </strong>
                 <span>
                   {t("send.progress.frame")} {cycleFrame.toLocaleString()} /{" "}
                   {orderLength.toLocaleString()} ·{" "}
-                  {transfer.sourcePacketCount.toLocaleString()} {t("send.progress.source")} +{" "}
-                  {transfer.repairPacketIndices.length.toLocaleString()} {t("send.progress.repair")}
+                  {transfer.sourcePacketCount.toLocaleString()}{" "}
+                  {t("send.progress.source")} +{" "}
+                  {transfer.repairPacketIndices.length.toLocaleString()}{" "}
+                  {t("send.progress.repair")}
                 </span>
               </div>
               <div
@@ -1606,14 +1830,24 @@ export function SendClient() {
 
       {/* نافذة QR كلمة المرور */}
       {showPasswordQr ? (
-        <div className="modal-backdrop" onClick={() => setShowPasswordQr(false)}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowPasswordQr(false)}
+        >
+          <div
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
             <h3>{t("send.passwordQrTitle")}</h3>
             <p>{t("send.passwordQrNote")}</p>
             <div ref={passwordQrHostRef}>
               {!passwordQrCanvas ? <p>…</p> : null}
             </div>
-            <button type="button" className="modal-close" onClick={() => setShowPasswordQr(false)}>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setShowPasswordQr(false)}
+            >
               {t("send.close")}
             </button>
           </div>
@@ -1627,7 +1861,9 @@ export function SendClient() {
             className="modal-card fast-modal"
             onClick={(event) => event.stopPropagation()}
           >
-            <h3><Zap size={22} aria-hidden="true" /> {t("send.fastModalTitle")}</h3>
+            <h3>
+              <Zap size={22} aria-hidden="true" /> {t("send.fastModalTitle")}
+            </h3>
 
             {/* الفيديو والكانفاس مثبّتان دائماً داخل النافذة (مخفيان عند عدم المسح)
                 حتى يتوفر المرجع فوراً عند بدء المسح — يتجنب سباق تركيب React. */}
@@ -1652,7 +1888,10 @@ export function SendClient() {
                       onClick={() => {
                         void navigator.clipboard.writeText(tvUrl).then(() => {
                           setFastUrlCopied(true);
-                          window.setTimeout(() => setFastUrlCopied(false), 2000);
+                          window.setTimeout(
+                            () => setFastUrlCopied(false),
+                            2000,
+                          );
                         });
                       }}
                     >
@@ -1671,7 +1910,11 @@ export function SendClient() {
                   >
                     <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
                   </button>
-                  <button type="button" className="modal-close" onClick={closeFastModal}>
+                  <button
+                    type="button"
+                    className="modal-close"
+                    onClick={closeFastModal}
+                  >
                     {t("send.fastCancel")}
                   </button>
                 </div>
@@ -1680,14 +1923,26 @@ export function SendClient() {
               <>
                 <p className="fast-status">{fastStatus}</p>
                 {fastCameraInfo ? (
-                  <p className="fast-camera-info"><Camera size={12} aria-hidden="true" /> {t("send.fastRes", { info: fastCameraInfo })}</p>
+                  <p className="fast-camera-info">
+                    <Camera size={12} aria-hidden="true" />{" "}
+                    {t("send.fastRes", { info: fastCameraInfo })}
+                  </p>
                 ) : null}
                 <p className="fast-hint">{t("send.fastHintKeepQr")}</p>
                 <div className="fast-actions">
-                  <button type="button" className="fast-switch-cam" onClick={switchFastCamera}>
-                    <RefreshCw size={16} aria-hidden="true" /> {t("send.fastSwitchCamera")}
+                  <button
+                    type="button"
+                    className="fast-switch-cam"
+                    onClick={switchFastCamera}
+                  >
+                    <RefreshCw size={16} aria-hidden="true" />{" "}
+                    {t("send.fastSwitchCamera")}
                   </button>
-                  <button type="button" className="modal-close" onClick={stopFastScanning}>
+                  <button
+                    type="button"
+                    className="modal-close"
+                    onClick={stopFastScanning}
+                  >
                     {t("send.fastStop")}
                   </button>
                 </div>
@@ -1706,33 +1961,54 @@ export function SendClient() {
                 </div>
                 {fastProgress ? (
                   <p className="fast-progress-text">
-                    {formatBytes(fastProgress.sent)} / {formatBytes(fastProgress.total)}
+                    {formatBytes(fastProgress.sent)} /{" "}
+                    {formatBytes(fastProgress.total)}
                   </p>
                 ) : null}
                 <div className="fast-actions">
-                  <button type="button" className="modal-close" onClick={closeFastModal}>
+                  <button
+                    type="button"
+                    className="modal-close"
+                    onClick={closeFastModal}
+                  >
                     {t("send.fastCancel")}
                   </button>
                 </div>
               </>
             ) : fastState === "done" ? (
               <>
-                <p className="fast-status fast-ok" role="status">{fastStatus}</p>
+                <p className="fast-status fast-ok" role="status">
+                  {fastStatus}
+                </p>
                 <div className="fast-actions">
-                  <button type="button" className="primary-action" onClick={closeFastModal}>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={closeFastModal}
+                  >
                     {t("send.fastClose")}
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <p className="fast-status fast-err" role="alert">{fastStatus}</p>
+                <p className="fast-status fast-err" role="alert">
+                  {fastStatus}
+                </p>
                 <p className="fast-hint">{t("send.fastFallback")}</p>
                 <div className="fast-actions">
-                  <button type="button" className="primary-action" onClick={() => void startFastScan()}>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={() => void startFastScan()}
+                  >
                     <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
                   </button>
-                  <button type="button" className="modal-close" onClick={closeFastModal}>
+                  <button
+                    type="button"
+                    className="modal-close"
+                    onClick={closeFastModal}
+                  >
                     {t("send.fastCancel")}
                   </button>
                 </div>
@@ -1745,17 +2021,22 @@ export function SendClient() {
       {/* نافذة المفتاح العام */}
       {showPubKeyQr ? (
         <div className="modal-backdrop" onClick={() => setShowPubKeyQr(false)}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
             <h3>{t("send.signShowPub")}</h3>
             <p>
               {identity
                 ? `${identity.label} · ${identity.publicKeyRaw.length * 8} bit`
                 : t("send.signNoIdentity")}
             </p>
-            <div ref={pubKeyQrHostRef}>
-              {!pubKeyQrCanvas ? <p>…</p> : null}
-            </div>
-            <button type="button" className="modal-close" onClick={() => setShowPubKeyQr(false)}>
+            <div ref={pubKeyQrHostRef}>{!pubKeyQrCanvas ? <p>…</p> : null}</div>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setShowPubKeyQr(false)}
+            >
               {t("send.close")}
             </button>
           </div>

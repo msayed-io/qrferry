@@ -74,7 +74,7 @@ type TvState =
   "starting" | "ready" | "receiving" | "verifying" | "complete" | "error";
 type LibraryState =
   "idle" | "saving" | "saved" | "failed" | "unconfirmed" | "loaded";
-const VERSION = "TV-RECEIVE-4";
+const VERSION = "TV-RECEIVE-5";
 const AUTO_DOWNLOAD_KEY = "qrferry-tv-auto-download-v1";
 
 export function TvClient() {
@@ -662,8 +662,13 @@ export function TvClient() {
     <main className={`tv-page tv-state-${state}`}>
       <header className="tv-header">
         <div className="tv-brand">
-          <span className="tv-brand-mark">
-            <ArrowLeftRight size={26} />
+          <span className="tv-brand-mark" aria-hidden="true">
+            <span className="brand-mark">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
           </span>
           <div>
             <span className="tv-logo">QRFerry</span>
@@ -959,11 +964,15 @@ export function TvClient() {
                     <button
                       type="button"
                       className="tv-btn tv-file-select"
+                      title={f.name}
                       aria-pressed={i === selectedIndex}
                       key={i}
                       onClick={() => selectFile(i)}
                     >
-                      {f.name}
+                      <span className="tv-file-index" aria-hidden="true">
+                        {i + 1}
+                      </span>
+                      <span className="tv-file-label">{f.name}</span>
                     </button>
                   ))}
                 </div>
