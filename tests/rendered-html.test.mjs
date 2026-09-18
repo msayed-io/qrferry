@@ -3,7 +3,10 @@ import test from "node:test";
 
 async function render(pathname) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${pathname}`);
+  workerUrl.searchParams.set(
+    "test",
+    `${process.pid}-${Date.now()}-${pathname}`,
+  );
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
@@ -33,7 +36,7 @@ test("server-renders the sender product surface (Arabic RTL)", async () => {
   assert.match(html, /ملفات الإرسال/);
   assert.match(html, /ابدأ بثّ QR/);
   assert.match(html, /الخصوصية وخيارات إضافية/);
-  assert.match(html, /QRFERRY-UI-6/);
+  assert.match(html, /QRFERRY-UI-7/);
   assert.match(html, /إعدادات بثّ QR/);
   assert.match(html, /Turbo 30/);
   assert.match(html, /1 Mbps/);
@@ -55,3 +58,19 @@ test("server-renders the mobile scanner surface (Arabic RTL)", async () => {
   assert.match(html, /فك p50 \/ p95/i);
   assert.match(html, /التفاصيل التقنية/);
 });
+
+for (const [path, title] of [
+  ["/history", "سجل النقل المحلي"],
+  ["/offline", "حزمة النشر الأوفلاين"],
+  ["/privacy", "سياسة الخصوصية"],
+]) {
+  test(`server-renders ${path} with shared identity and an explicit home link`, async () => {
+    const response = await render(path);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /QRFERRY-UI-7/);
+    assert.match(html, /class="support-page"/);
+    assert.match(html, /الرجوع للرئيسية/);
+    assert.ok(html.includes(title));
+  });
+}

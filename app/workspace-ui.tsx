@@ -6,9 +6,13 @@ import { ArrowUpRight, ScanLine, Tv, ChevronDown, X } from "lucide-react";
 import { useI18n } from "./lang-provider";
 import "./workspace.css";
 
-export const WORKSPACE_VERSION = "QRFERRY-UI-6";
+export const WORKSPACE_VERSION = "QRFERRY-UI-7";
 
-export function WorkspaceHeader({ active }: { active: "send" | "scan" }) {
+export function WorkspaceHeader({
+  active,
+}: {
+  active: "send" | "scan" | "history" | "offline" | "privacy";
+}) {
   const { t, lang, setLang } = useI18n();
   useEffect(() => {
     document.documentElement.classList.add("qrferry-workspace");

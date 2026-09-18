@@ -1,4 +1,4 @@
-/* QRFERRY-UI-6. Sender/scanner only; the TV and secondary routes keep their own layouts. */
+/* Shared workspace chrome and sender/scanner layouts. TV styles remain separate. */
 .workspace-header,
 .transfer-page {
   font-size: clamp(16px, 1.05vw, 26px);
@@ -957,7 +957,7 @@
   margin-top: 18px;
 }
 /* All dialogs fit a small phone/landscape screen, including an open keyboard. */
-.transfer-page .workspace-modal-backdrop {
+:is(.transfer-page, .support-page) .workspace-modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -968,7 +968,7 @@
   backdrop-filter: none;
   overflow: auto;
 }
-.transfer-page .workspace-modal {
+:is(.transfer-page, .support-page) .workspace-modal {
   width: min(640px, 100%);
   max-width: 100%;
   max-height: calc(100vh - 40px);
@@ -984,7 +984,7 @@
   box-shadow: 7px 7px 0 var(--ink);
   text-align: start;
 }
-.transfer-page .workspace-modal h3 {
+:is(.transfer-page, .support-page) .workspace-modal h3 {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -992,17 +992,17 @@
   font-size: 1.35em;
   line-height: 1.5;
 }
-.transfer-page .workspace-modal p,
-.transfer-page .workspace-modal li {
+:is(.transfer-page, .support-page) .workspace-modal p,
+:is(.transfer-page, .support-page) .workspace-modal li {
   font-size: 0.95em;
   line-height: 1.8;
 }
-.transfer-page .workspace-modal canvas {
+:is(.transfer-page, .support-page) .workspace-modal canvas {
   max-width: 100%;
   height: auto;
   border-radius: 0;
 }
-.transfer-page .workspace-modal .modal-close {
+:is(.transfer-page, .support-page) .workspace-modal .modal-close {
   margin-top: 14px;
 }
 .transfer-page .fast-steps {
@@ -1270,10 +1270,10 @@ html.qrferry-workspace .site-footer a {
   .transfer-page.needs-review .receive-card {
     order: -1;
   }
-  .transfer-page .workspace-modal-backdrop {
+  :is(.transfer-page, .support-page) .workspace-modal-backdrop {
     padding: 14px;
   }
-  .transfer-page .workspace-modal {
+  :is(.transfer-page, .support-page) .workspace-modal {
     max-height: calc(100vh - 28px);
     max-height: calc(100dvh - 28px);
     padding: 20px;
@@ -1426,13 +1426,13 @@ html.qrferry-workspace .site-footer {
     max-height: 30vh;
   }
 }
-.transfer-page .workspace-modal {
+:is(.transfer-page, .support-page) .workspace-modal {
   position: relative;
 }
-.transfer-page .workspace-modal h3 {
+:is(.transfer-page, .support-page) .workspace-modal h3 {
   padding-inline-end: 44px;
 }
-.transfer-page .dialog-dismiss {
+:is(.transfer-page, .support-page) .dialog-dismiss {
   position: absolute;
   top: 12px;
   inset-inline-end: 12px;

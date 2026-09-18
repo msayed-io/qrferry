@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { AppHeader } from "../app-header";
 import { OfflineClient } from "./offline-client";
 
 export const metadata: Metadata = {
@@ -10,7 +9,6 @@ export const metadata: Metadata = {
 export default function OfflinePage() {
   return (
     <>
-      <AppHeader active="send" />
       <OfflineClient />
     </>
   );

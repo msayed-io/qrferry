@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { AppHeader } from "../app-header";
 import { HistoryClient } from "./history-client";
 
 export const metadata: Metadata = {
@@ -10,7 +9,6 @@ export const metadata: Metadata = {
 export default function HistoryPage() {
   return (
     <>
-      <AppHeader active="send" />
       <HistoryClient />
     </>
   );

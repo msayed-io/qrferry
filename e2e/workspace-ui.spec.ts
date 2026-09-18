@@ -33,7 +33,7 @@ for (const [width, height] of sizes)
       await page.evaluate(() => document.fonts.ready);
       await noOverflow(page);
       await expect(page.locator(".workspace-brand small")).toHaveText(
-        "QRFERRY-UI-6",
+        "QRFERRY-UI-7",
       );
       await expect(
         page.locator(".workspace-nav a[aria-current=page]"),
