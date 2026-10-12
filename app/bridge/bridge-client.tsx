@@ -45,7 +45,7 @@ import {
 import { formatBytes, MAX_FILE_BYTES } from "@/lib/optical-transfer";
 import { receivedBlob } from "@/lib/received-media";
 import { renderRawQr } from "@/lib/qr-renderer";
-import "./bridge.css";
+import "./bridge.style.css";
 
 declare global {
   interface Window {
