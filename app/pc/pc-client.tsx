@@ -46,6 +46,11 @@ import {
 import { formatBytes, MAX_FILE_BYTES } from "@/lib/optical-transfer";
 import { receivedBlob } from "@/lib/received-media";
 import { renderRawQr } from "@/lib/qr-renderer";
+import {
+  notifyBridgeIncoming,
+  playBridgeNotificationTone,
+  requestBridgeNotificationPermission,
+} from "@/lib/bridge-notifications";
 import "./pc.css";
 
 declare global {
@@ -196,6 +201,12 @@ export function BridgeClient() {
   const localTypingRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifiedIncomingRef = useRef(new Set<string>());
+
+  const announceIncoming = (kind: "message" | "file", title: string, body: string) => {
+    playBridgeNotificationTone(kind);
+    notifyBridgeIncoming(title, body);
+  };
 
   // ---------- الكاميرا ----------
 
@@ -242,6 +253,7 @@ export function BridgeClient() {
           setPhase("connected");
           setNotice("");
           setJoinError("");
+          void requestBridgeNotificationPermission();
           return;
         }
         if (status === "authenticating") return;
@@ -263,10 +275,29 @@ export function BridgeClient() {
         setJoinError(detail ?? tx("انقطع الاتصال.", "The connection closed."));
       },
       onChat(message: BridgeChatMessage) {
-        if (live()) setItems((list) => upsertItem(list, message));
+        if (!live()) return;
+        setItems((list) => upsertItem(list, message));
+        announceIncoming(
+          "message",
+          tx("رسالة جديدة · QRFerry", "New message · QRFerry"),
+          message.text,
+        );
       },
       onFile(item: BridgeFileItem) {
-        if (live()) setItems((list) => upsertItem(list, item));
+        if (!live()) return;
+        setItems((list) => upsertItem(list, item));
+        if (
+          item.direction === "in" &&
+          item.status === "done" &&
+          !notifiedIncomingRef.current.has(item.id)
+        ) {
+          notifiedIncomingRef.current.add(item.id);
+          announceIncoming(
+            "file",
+            tx("ملف جديد · QRFerry", "New file · QRFerry"),
+            item.name,
+          );
+        }
       },
       onTyping(typing: boolean) {
         if (!live()) return;
