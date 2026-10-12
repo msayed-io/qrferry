@@ -22,7 +22,12 @@ jobs:
           cache: npm
 
       - name: تثبيت الاعتماديات
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: البناء الإنتاجي
         run: npm run build

@@ -57,7 +57,7 @@ export function WorkspaceHeader({
         <Link
           href="/bridge"
           className="workspace-nav-bridge"
-          aria-current={active === "pc" ? "page" : undefined}
+          aria-current={active === "bridge" ? "page" : undefined}
         >
           <ArrowLeftRight size={18} />
           {lang === "ar" ? "جسر النقل الذكي" : "Smart Bridge"}
