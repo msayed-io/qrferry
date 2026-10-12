@@ -3,12 +3,13 @@
 import { LangProvider } from "./lang-provider";
 
 export default function GlobalError({
-  error,
+  error: _error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  void _error;
   return (
     <html lang="ar" dir="rtl">
       <body>

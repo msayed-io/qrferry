@@ -6,7 +6,6 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   ScanLine,
-  Tv,
   ChevronDown,
   X,
 } from "lucide-react";
@@ -18,7 +17,7 @@ export const WORKSPACE_VERSION = "QRFERRY-UI-7";
 export function WorkspaceHeader({
   active,
 }: {
-  active: "send" | "scan" | "bridge" | "history" | "offline" | "privacy";
+  active: "send" | "scan" | "bridge" | "pc" | "history" | "offline" | "privacy";
 }) {
   const { t, lang, setLang } = useI18n();
   useEffect(() => {
