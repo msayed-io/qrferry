@@ -1193,7 +1193,7 @@ html.qrferry-workspace .site-footer a {
     font-size: 15px;
   }
   /* الجسر يبقى في التذييل على الهاتف حتى لا يكبر الهيدر ويدفع الكاميرا للأسفل. */
-  .workspace-nav a.workspace-nav-pc {
+  .workspace-nav a.workspace-nav-bridge {
     display: none;
   }
   .transfer-page {

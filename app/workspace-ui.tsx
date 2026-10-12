@@ -18,7 +18,7 @@ export const WORKSPACE_VERSION = "QRFERRY-UI-7";
 export function WorkspaceHeader({
   active,
 }: {
-  active: "send" | "scan" | "pc" | "history" | "offline" | "privacy";
+  active: "send" | "scan" | "bridge" | "history" | "offline" | "privacy";
 }) {
   const { t, lang, setLang } = useI18n();
   useEffect(() => {
@@ -54,17 +54,13 @@ export function WorkspaceHeader({
           <ScanLine size={18} />
           {t("nav.scan")}
         </Link>
-        <Link href="/tv">
-          <Tv size={18} />
-          {lang === "ar" ? "التلفزيون" : "TV"}
-        </Link>
         <Link
-          href="/pc"
-          className="workspace-nav-pc"
+          href="/bridge"
+          className="workspace-nav-bridge"
           aria-current={active === "pc" ? "page" : undefined}
         >
           <ArrowLeftRight size={18} />
-          {lang === "ar" ? "جسر الكمبيوتر" : "PC Bridge"}
+          {lang === "ar" ? "جسر النقل الذكي" : "Smart Bridge"}
         </Link>
       </nav>
       <button
