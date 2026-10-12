@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { WorkspaceHeader } from "../workspace-ui";
 import { BridgeClient } from "./bridge-client";
+import "./bridge.style.css";
 
 export const metadata: Metadata = {
   title: "جسر النقل الذكي · QRFerry",
