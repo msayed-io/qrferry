@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { flushSync } from "react-dom";
 import { useI18n } from "../lang-provider";
+import { WorkspaceHeader } from "../workspace-ui";
 import {
   BRIDGE_MAX_CHAT_CHARS,
   type BridgeChatMessage,
@@ -636,7 +637,9 @@ export function BridgeClient() {
   );
 
   return (
-    <main className="transfer-page bridge-page" data-page="pc" data-phase={phase}>
+    <>
+      {phase !== "connected" && <WorkspaceHeader active="pc" />}
+      <main className="transfer-page bridge-page" data-page="pc" data-phase={phase}>
       <section className="workspace-intro bridge-intro">
         <h1>{tx("اربط هاتفك بالكمبيوتر", "Link your phone and computer")}</h1>
         <p>
@@ -914,6 +917,7 @@ export function BridgeClient() {
           </p>
         </section>
       )}
-    </main>
+      </main>
+    </>
   );
 }

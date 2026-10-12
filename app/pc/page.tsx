@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { WorkspaceHeader } from "../workspace-ui";
 import { BridgeClient } from "./pc-client";
 
 export const metadata: Metadata = {
@@ -9,10 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function PcPage() {
-  return (
-    <>
-      <WorkspaceHeader active="pc" />
-      <BridgeClient />
-    </>
-  );
+  return <BridgeClient />;
 }
