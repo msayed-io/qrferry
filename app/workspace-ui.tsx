@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ArrowUpRight, ScanLine, Tv, ChevronDown, X } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ArrowUpRight,
+  ScanLine,
+  Tv,
+  ChevronDown,
+  X,
+} from "lucide-react";
 import { useI18n } from "./lang-provider";
 import "./workspace.css";
 
@@ -11,7 +18,7 @@ export const WORKSPACE_VERSION = "QRFERRY-UI-7";
 export function WorkspaceHeader({
   active,
 }: {
-  active: "send" | "scan" | "history" | "offline" | "privacy";
+  active: "send" | "scan" | "pc" | "history" | "offline" | "privacy";
 }) {
   const { t, lang, setLang } = useI18n();
   useEffect(() => {
@@ -50,6 +57,14 @@ export function WorkspaceHeader({
         <Link href="/tv">
           <Tv size={18} />
           {lang === "ar" ? "التلفزيون" : "TV"}
+        </Link>
+        <Link
+          href="/pc"
+          className="workspace-nav-pc"
+          aria-current={active === "pc" ? "page" : undefined}
+        >
+          <ArrowLeftRight size={18} />
+          {lang === "ar" ? "جسر الكمبيوتر" : "PC Bridge"}
         </Link>
       </nav>
       <button
