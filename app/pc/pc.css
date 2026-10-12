@@ -1,0 +1,412 @@
+/* صفحة الجسر /pc: جلسة ثنائية الاتجاه بين الهاتف والكمبيوتر. تستخدم متغيرات التصميم العامة. */
+
+.bridge-page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 980px;
+}
+
+.bridge-intro {
+  margin-bottom: 0;
+}
+
+.bridge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.bridge-card,
+.bridge-panel,
+.bridge-session,
+.bridge-paste,
+.bridge-history {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--white);
+  padding: 22px;
+}
+
+.bridge-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bridge-card h2,
+.bridge-history h2 {
+  margin: 4px 0 0;
+  font-size: 1.15em;
+  letter-spacing: -0.02em;
+}
+
+.bridge-card p,
+.bridge-muted {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+  font-size: 0.9em;
+}
+
+.bridge-card .primary-action {
+  margin-top: auto;
+  width: 100%;
+}
+
+.bridge-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bridge-paste label {
+  font-weight: 700;
+  font-size: 0.95em;
+}
+
+.bridge-paste-row {
+  display: flex;
+  gap: 10px;
+}
+
+.bridge-paste-row input,
+.bridge-composer textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95em;
+}
+
+.bridge-composer textarea {
+  resize: none;
+  max-height: 160px;
+  line-height: 1.5;
+}
+
+.bridge-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 18px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--white);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bridge-button.ghost {
+  background: var(--white);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.bridge-button:disabled,
+.bridge-icon-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bridge-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.bridge-error {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--red);
+  border-radius: 3px;
+  background: #fff3f0;
+  color: #8f2a1a;
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+
+.bridge-steps {
+  margin: 0;
+  padding: 0 1.4em;
+  color: var(--muted);
+  line-height: 1.9;
+  font-size: 0.92em;
+}
+
+.bridge-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.bridge-strong {
+  margin: 0;
+  font-weight: 800;
+  font-size: 1.1em;
+}
+
+.bridge-qr-canvas {
+  width: min(360px, 80vw);
+  height: auto;
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+  background: var(--white);
+  border-radius: 4px;
+}
+
+.bridge-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.bridge-link-row code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  border-radius: 3px;
+  background: var(--paper);
+  font: 0.8em var(--font-geist-mono);
+  direction: ltr;
+  text-align: start;
+}
+
+.bridge-camera {
+  position: relative;
+  width: min(480px, 100%);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--ink);
+}
+
+.bridge-camera video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bridge-camera-frame {
+  position: absolute;
+  inset: 12%;
+  border: 3px solid var(--signal);
+  border-radius: 6px;
+  box-shadow: 0 0 0 999px rgba(17, 24, 32, 0.35);
+  pointer-events: none;
+}
+
+.bridge-session {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bridge-session-bar,
+.bridge-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bridge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.bridge-status small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.bridge-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2fb36b;
+  box-shadow: 0 0 0 4px rgba(47, 179, 107, 0.18);
+}
+
+.bridge-drop {
+  min-height: 220px;
+  max-height: 58vh;
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.bridge-drop.dragging {
+  border-color: var(--blue);
+  background: #eef3ff;
+}
+
+.bridge-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  text-align: center;
+}
+
+.bridge-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bridge-bubble {
+  max-width: min(640px, 86%);
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.bridge-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.bridge-bubble time {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font: 0.7em var(--font-geist-mono);
+}
+
+.bridge-bubble.out {
+  align-self: flex-end;
+  background: var(--signal-soft);
+  border-color: var(--signal);
+}
+
+.bridge-bubble.in {
+  align-self: flex-start;
+}
+
+.bridge-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(640px, 92%);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+}
+
+.bridge-file.out {
+  align-self: flex-end;
+}
+
+.bridge-file.in {
+  align-self: flex-start;
+}
+
+.bridge-file-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bridge-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.bridge-file-main small {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+
+.bridge-file-error {
+  color: var(--red) !important;
+}
+
+.bridge-progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--blue);
+}
+
+.bridge-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.bridge-composer .bridge-button {
+  min-height: 44px;
+}
+
+.bridge-hint {
+  font-size: 0.82em;
+}
+
+.bridge-history {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .bridge-paste-row {
+    flex-direction: column;
+  }
+  .bridge-paste-row .bridge-button {
+    width: 100%;
+  }
+  .bridge-bubble,
+  .bridge-file {
+    max-width: 100%;
+  }
+  .bridge-card,
+  .bridge-panel,
+  .bridge-session,
+  .bridge-paste,
+  .bridge-history {
+    padding: 16px;
+  }
+}

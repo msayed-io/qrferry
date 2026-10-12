@@ -75,6 +75,7 @@ export default function RootLayout({
             <span>QRFerry · ملفاتك لا تغادر أجهزتك أبداً</span>
             <nav aria-label="روابط الموقع">
               <Link href="/tv">استقبال على التلفاز</Link>
+              <Link href="/pc">جسر الكمبيوتر</Link>
               <Link href="/history">السجل</Link>
               <Link href="/offline">أوفلاين</Link>
               <Link href="/privacy">الخصوصية</Link>
