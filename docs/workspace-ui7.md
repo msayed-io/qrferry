@@ -20,9 +20,9 @@ The history, offline and privacy pages now use the same paper/ink/signal identit
 
 - ESLint and TypeScript: passed.
 - Unit tests: 52 passed; SSR tests: 5 passed (including all three new page shells).
-- Next and vinext production builds: passed.
+- Next.js production build: passed.
 - Full Next production E2E suite: **112/112 passed** (2.9 minutes).
-- New secondary-page suite on vinext: **23/23 passed** (16.4 seconds).
+- New secondary-page suite: **23/23 passed** (16.4 seconds).
 - Six viewports per page: 320×568, 390×844, 768×1024, 844×390, 1440×900 and 3840×2160. Tested actual home navigation, initial-fold home visibility, no horizontal overflow, colors, selected navigation and touch-target size.
 - Additional tests verify seeded history display, long names, cancellation/focus, confirmed deletion surviving reload, real ZIP contents including the updated privacy HTML, injected fetch failure/retry, English/reload navigation and enlarged base text. Failure injection disables service workers so cached responses cannot bypass the simulated network error; assertions are scoped to the app, not Next's route announcer.
 - Reviewed real browser screenshots on phone and desktop. Enlarged-base-text tests are not a native browser zoom or WCAG certification.

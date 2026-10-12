@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 /**
  * إعداد اختبارات Playwright للنهاية-إلى-النهاية.
- * يُشغَّل خادم الإنتاج (vinext start) تلقائياً قبل الاختبارات.
+ * يُشغَّل خادم الإنتاج (Next.js start) تلقائياً قبل الاختبارات.
  */
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 

@@ -1,6 +1,6 @@
 /**
  * يشغّل خوادم اختبار E2E معاً:
- *  - خادم التطبيق (vinext start على المنفذ المحدد)
+ *  - خادم التطبيق (Next.js start على المنفذ المحدد)
  *  - خادم PeerJS محلي (منفذ 9000) للاقتران — يضمن استقرار اختبارات النقل السريع
  */
 import { spawn } from "node:child_process";
@@ -27,7 +27,7 @@ function run(name, command, args, env = {}) {
   });
 }
 
-run("vinext", "npm", ["run", "start"], { PORT });
+run("next", "npm", ["run", "start"], { PORT });
 run("peerjs", "npx", ["peer", "--port", PEER_PORT]);
 
 const shutdown = () => {

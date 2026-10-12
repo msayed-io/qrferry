@@ -121,31 +121,19 @@ npx tsc --noEmit     # فحص الأنواع
 ```
 app/                 # صفحات Next.js (إرسال / مسح / خصوصية)
 lib/                 # البروتوكول البصري، الضغط، التشفير، الاستئناف، الرسم والمسح
-worker/              # نقطة دخول Cloudflare Worker
 tests/               # اختبارات الكوديك + SSR
 e2e/                 # اختبارات Playwright للنهاية-إلى-النهاية
 scripts/             # توليد الأيقونات وبيانات E2E
 build/               # مكوّن البناء (يولّد قائمة أصول الكاش)
-db/                  # Drizzle (غير مستخدمة حالياً — لا حاجة لقاعدة بيانات)
 ```
 
 ## النشر
 
-المشروع يدعم منصتين، وكلاهما مجاني — **اختر الأنسب لك**:
+المشروع يعمل كتطبيق Next.js مستقل ومجهز للنشر على **Vercel فقط**:
 
-### 🥇 Vercel (الأسهل من الهاتف)
-- المشروع جاهز: ملف `vercel.json` + سكربت `build:vercel` (بناء Next.js قياسي).
-- من `vercel.com` ← **Continue with GitHub** ← **Add New → Project** ← اختر
-  `qrferry` ← **Deploy**.
-- راجع **[دليل النشر الكامل](DEPLOY.md)** — خطوة بخطوة، من الهاتف.
+1. اربط مستودع GitHub `msayed-io/qrferry` بمشروع Vercel.
+2. استخدم الفرع `main`.
+3. اترك أمر البناء كما هو: `npm run build`.
+4. كل Push إلى `main` سيطلق Deployment تلقائيًا.
 
-### 🥈 Cloudflare Workers
-- المشروع مبني أصلاً على قالب vinext، والملفات جاهزة:
-  ```bash
-  npm run build
-  npx wrangler deploy --config wrangler.jsonc
-  ```
-- أو من GitHub Actions: زر **"Deploy to Cloudflare Workers"** في تبويب Actions
-  (بعد إضافة سر `CLOUDFLARE_API_TOKEN`).
-
-
+راجع [دليل النشر الكامل](DEPLOY.md) للتفاصيل.

@@ -33,11 +33,11 @@ No wire-format, signaling/handshake, codec conversion, IndexedDB schema, existin
 - ESLint and TypeScript: pass.
 - Unit tests: 52/52; rendered HTML checks: 2/2.
 - Next production build: pass; complete browser suite in bundled Chromium: 89/89 (2.4 minutes).
-- vinext production build: pass; complete browser suite in official Chrome: 89/89 (4.5 minutes).
+- Next.js production build: pass; complete browser suite in official Chrome: 89/89 (4.5 minutes).
 - Responsive/interaction suite: 23 cases, included above. Includes a real native file-chooser event after switching to the text tab, three-file queue controls, and first-download visibility after completion.
 - Screenshots reviewed from Chrome for phone and desktop: initial/selected files, pairing dialog, scanner idle and completed multi-file recovery. Seven-viewport assertions also cover short landscape and 4K. Enlarged-base-text checks do not constitute a native browser zoom or WCAG certification.
 
-An initial vinext run timed out in an existing TV auto-download/library test after downloads had returned exact bytes (59 prior cases passed). It also had a signaling-server port conflict because a prior local server was still running. No cause for the browser timeout is established, and the port conflict is not presented as a proven cause. With a clean test-server lifecycle, the exact same three-file auto-download test passed 10/10 repeated runs without changing production logic or relaxing assertions. This is not evidence that the user's physical LG incident has been reproduced or cured.
+An initial Next.js run timed out in an existing TV auto-download/library test after downloads had returned exact bytes (59 prior cases passed). It also had a signaling-server port conflict because a prior local server was still running. No cause for the browser timeout is established, and the port conflict is not presented as a proven cause. With a clean test-server lifecycle, the exact same three-file auto-download test passed 10/10 repeated runs without changing production logic or relaxing assertions. This is not evidence that the user's physical LG incident has been reproduced or cured.
 
 A further traced bundled-Chromium run stalled on the receiver's first `page.evaluate` after an automatic-download event, while the sender reported completion. The trace is retained in the local QA evidence. The full official-Chrome run above passed all cases, including this case and three-file automatic download/persistence. The intermittent bundled-browser stall remains an observed QA limitation, not a claimed application fix.
 

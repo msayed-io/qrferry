@@ -45,7 +45,7 @@ function prepareZXing() {
         overrides: {
           wasmBinary: readFileSync(
             require.resolve("zxing-wasm/reader/zxing_reader.wasm"),
-          ),
+          ) as unknown as ArrayBuffer,
         },
         equalityFn: Object.is,
         fireImmediately: true,
