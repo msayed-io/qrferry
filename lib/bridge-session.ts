@@ -41,6 +41,7 @@ export type BridgeHandle = {
   /** يعيد true إذا كانت القناة مصادقة وجاهزة للإرسال. */
   isReady(): boolean;
   sendChat(text: string): void;
+  sendTyping(typing: boolean): void;
   sendFile(file: BridgeOutgoingFile): void;
   destroy(): void;
 };
@@ -167,6 +168,7 @@ export async function openBridgeHost(
     },
     onChat: callbacks.onChat,
     onFile: callbacks.onFile,
+    onTyping: callbacks.onTyping,
   });
 
   peer.on("connection", (raw: unknown) => {
@@ -202,6 +204,10 @@ export async function openBridgeHost(
     sendChat(text: string) {
       if (!active || !active.isReady) throw new Error("لا يوجد جهاز متصل.");
       active.sendChat(text);
+    },
+    sendTyping(typing: boolean) {
+      if (!active || !active.isReady) return;
+      active.sendTyping(typing);
     },
     sendFile(file: BridgeOutgoingFile) {
       if (!active || !active.isReady) throw new Error("لا يوجد جهاز متصل.");
@@ -259,6 +265,7 @@ export async function joinBridge(
   return {
     isReady: () => channel.isReady,
     sendChat: (text: string) => channel.sendChat(text),
+    sendTyping: (typing: boolean) => channel.sendTyping(typing),
     sendFile: (file: BridgeOutgoingFile) => {
       channel.sendFile(file);
     },

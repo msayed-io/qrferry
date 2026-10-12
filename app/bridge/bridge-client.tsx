@@ -45,6 +45,7 @@ import {
 import { formatBytes, MAX_FILE_BYTES } from "@/lib/optical-transfer";
 import { receivedBlob } from "@/lib/received-media";
 import { renderRawQr } from "@/lib/qr-renderer";
+import "./bridge.css";
 
 declare global {
   interface Window {
@@ -124,6 +125,37 @@ function isTestMode(): boolean {
   return typeof window !== "undefined" && window.__qrferryTestMode === true;
 }
 
+function BridgeMediaPreview({
+  item,
+  alt,
+}: {
+  item: BridgeFileItem;
+  alt: string;
+}) {
+  const [url] = useState<string | null>(() =>
+    item.bytes && /^(image|audio|video)\//i.test(item.mime)
+      ? URL.createObjectURL(receivedBlob(item.bytes, item.mime))
+      : null,
+  );
+
+  useEffect(() => {
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [url]);
+
+  if (!url) return null;
+  if (item.mime.toLowerCase().startsWith("image/")) {
+    // Blob URLs are local peer-to-peer media and cannot use next/image optimization.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="bridge-media-image" src={url} alt={alt} />;
+  }
+  if (item.mime.toLowerCase().startsWith("video/")) {
+    return <video className="bridge-media-video" src={url} controls preload="metadata" />;
+  }
+  return <audio className="bridge-media-audio" src={url} controls preload="metadata" />;
+}
+
 export function BridgeClient() {
   const { lang } = useI18n();
   const tx: Tx = (ar, en) => (lang === "ar" ? ar : en);
@@ -142,6 +174,7 @@ export function BridgeClient() {
   const [items, setItems] = useState<Item[]>([]);
   const [draft, setDraft] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [remoteTyping, setRemoteTyping] = useState(false);
 
   const hostRef = useRef<BridgeHostHandle | null>(null);
   const activeRef = useRef<BridgeHandle | null>(null);
@@ -159,6 +192,9 @@ export function BridgeClient() {
   const scanCountRef = useRef(0);
   /** يزداد مع كل إيقاف للكاميرا، فيُغلق أي تدفق يصل بعد الإلغاء. */
   const cameraTokenRef = useRef(0);
+  const localTypingRef = useRef(false);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---------- الكاميرا ----------
 
@@ -230,6 +266,17 @@ export function BridgeClient() {
       },
       onFile(item: BridgeFileItem) {
         if (live()) setItems((list) => upsertItem(list, item));
+      },
+      onTyping(typing: boolean) {
+        if (!live()) return;
+        setRemoteTyping(typing);
+        if (remoteTypingTimerRef.current) clearTimeout(remoteTypingTimerRef.current);
+        if (typing) {
+          remoteTypingTimerRef.current = setTimeout(() => {
+            setRemoteTyping(false);
+            remoteTypingTimerRef.current = null;
+          }, 2600);
+        }
       },
       onHostState(state: BridgeHostState, detail?: string) {
         if (!live()) return;
@@ -332,6 +379,12 @@ export function BridgeClient() {
     setRole(null);
     setPhase("home");
     setNotice("");
+    setRemoteTyping(false);
+    localTypingRef.current = false;
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    if (remoteTypingTimerRef.current) clearTimeout(remoteTypingTimerRef.current);
+    typingStopTimerRef.current = null;
+    remoteTypingTimerRef.current = null;
   };
 
   // ---------- المسح بالكاميرا ----------
@@ -434,11 +487,41 @@ export function BridgeClient() {
 
   const ready = phase === "connected";
 
+  const sendTypingState = (typing: boolean) => {
+    const handle = activeRef.current;
+    if (!handle?.isReady() || localTypingRef.current === typing) return;
+    localTypingRef.current = typing;
+    handle.sendTyping(typing);
+  };
+
+  const scheduleTypingStop = () => {
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    typingStopTimerRef.current = setTimeout(() => {
+      sendTypingState(false);
+      typingStopTimerRef.current = null;
+    }, 1800);
+  };
+
+  const onDraftChange = (value: string) => {
+    setDraft(value);
+    if (!value.trim()) {
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      typingStopTimerRef.current = null;
+      sendTypingState(false);
+      return;
+    }
+    sendTypingState(true);
+    scheduleTypingStop();
+  };
+
   const sendChat = () => {
     const handle = activeRef.current;
     const text = draft.trim();
     if (!ready || !handle?.isReady() || !text) return;
     try {
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      typingStopTimerRef.current = null;
+      sendTypingState(false);
       handle.sendChat(text.slice(0, BRIDGE_MAX_CHAT_CHARS));
       setDraft("");
       setNotice("");
@@ -576,6 +659,8 @@ export function BridgeClient() {
       // لا نغيّر رقم الجلسة هنا: في StrictMode يعاد التركيب فوراً ويجب أن يبقى الاتصال التلقائي صالحاً.
       mountedRef.current = false;
       releaseHandles();
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      if (remoteTypingTimerRef.current) clearTimeout(remoteTypingTimerRef.current);
     };
     // يعمل مرة عند التركيب والتفكيك فقط.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -615,9 +700,12 @@ export function BridgeClient() {
                   value={Math.min(item.progress, item.size || 1)}
                 />
               )}
+              {item.status === "done" && item.bytes && (
+                <BridgeMediaPreview item={item} alt={item.name} />
+              )}
               {item.error && <small className="bridge-file-error">{item.error}</small>}
             </div>
-            {item.direction === "in" && item.status === "done" && item.bytes && (
+            {item.status === "done" && item.bytes && (
               <button
                 type="button"
                 className="bridge-icon-button"
@@ -635,7 +723,7 @@ export function BridgeClient() {
   );
 
   return (
-    <main className="transfer-page bridge-page" data-page="pc" data-phase={phase}>
+    <main className="transfer-page bridge-page" data-page="bridge" data-phase={phase}>
       <section className="workspace-intro bridge-intro">
         <h1>{tx("اربط هاتفك بالكمبيوتر", "Link your phone and computer")}</h1>
         <p>
@@ -833,6 +921,16 @@ export function BridgeClient() {
                     : tx("هذا الجهاز: الهاتف", "This device: phone")}
                 </small>
               )}
+              {remoteTyping && (
+                <span className="bridge-typing-indicator" role="status" aria-live="polite">
+                  <span className="bridge-typing-dots" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  {tx("يكتب الآن…", "typing…")}
+                </span>
+              )}
             </span>
             <button type="button" className="bridge-button ghost" onClick={disconnect}>
               <Unplug size={16} aria-hidden="true" />
@@ -878,6 +976,7 @@ export function BridgeClient() {
               ref={fileInputRef}
               type="file"
               multiple
+              accept="image/*,audio/*,video/*,*/*"
               hidden
               onChange={onPickFiles}
               tabIndex={-1}
@@ -895,7 +994,7 @@ export function BridgeClient() {
               rows={1}
               value={draft}
               maxLength={BRIDGE_MAX_CHAT_CHARS}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => onDraftChange(event.target.value)}
               onKeyDown={onComposerKey}
               placeholder={tx("اكتب رسالة…", "Type a message…")}
               aria-label={tx("اكتب رسالة", "Type a message")}

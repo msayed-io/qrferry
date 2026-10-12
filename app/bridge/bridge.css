@@ -249,6 +249,34 @@
   font-weight: 500;
 }
 
+.bridge-typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--blue);
+  font-size: 0.82em;
+  font-weight: 700;
+  animation: bridge-typing-fade 180ms ease-out both;
+}
+
+.bridge-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 22px;
+}
+
+.bridge-typing-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: bridge-typing-bounce 1.1s infinite ease-in-out;
+}
+
+.bridge-typing-dots i:nth-child(2) { animation-delay: 140ms; }
+.bridge-typing-dots i:nth-child(3) { animation-delay: 280ms; }
+
 .bridge-dot {
   width: 10px;
   height: 10px;
@@ -361,6 +389,26 @@
   font-size: 0.8em;
 }
 
+.bridge-media-image,
+.bridge-media-video {
+  display: block;
+  width: min(360px, 100%);
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.bridge-media-image {
+  aspect-ratio: auto;
+}
+
+.bridge-media-audio {
+  display: block;
+  width: min(360px, 100%);
+  height: 42px;
+}
+
 .bridge-file-error {
   color: var(--red) !important;
 }
@@ -391,6 +439,104 @@
   gap: 14px;
 }
 
+/* وضع المحادثة: بعد الاقتران تتحول الصفحة إلى مساحة دردشة كاملة مثل تطبيقات المراسلة. */
+.bridge-page[data-phase="connected"] {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  background: var(--paper);
+  animation: bridge-chat-enter 220ms ease-out both;
+}
+
+.bridge-page[data-phase="connected"] .bridge-intro {
+  display: none;
+}
+
+.bridge-page[data-phase="connected"] .bridge-session {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.bridge-page[data-phase="connected"] .bridge-session-bar {
+  flex: 0 0 auto;
+  min-height: 76px;
+  padding: 14px clamp(18px, 4vw, 56px);
+  border-bottom: 1px solid var(--line);
+  background: var(--white);
+}
+
+.bridge-page[data-phase="connected"] .bridge-drop {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  padding: clamp(18px, 3vw, 42px) clamp(18px, 5vw, 88px);
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 12% 15%, rgba(47, 179, 107, 0.06), transparent 28%),
+    var(--paper);
+}
+
+.bridge-page[data-phase="connected"] .bridge-empty {
+  min-height: 100%;
+}
+
+.bridge-page[data-phase="connected"] .bridge-composer {
+  flex: 0 0 auto;
+  align-items: flex-end;
+  padding: 14px clamp(18px, 4vw, 56px) 16px;
+  border-top: 1px solid var(--line);
+  background: var(--white);
+}
+
+.bridge-page[data-phase="connected"] .bridge-composer textarea {
+  min-height: 48px;
+  max-height: 132px;
+  border-radius: 22px;
+  padding-inline: 18px;
+  background: var(--paper);
+}
+
+.bridge-page[data-phase="connected"] .bridge-composer .bridge-button {
+  min-width: 48px;
+  width: 48px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.bridge-page[data-phase="connected"] .bridge-composer .bridge-button span,
+.bridge-page[data-phase="connected"] .bridge-hint {
+  display: none;
+}
+
+.bridge-page[data-phase="connected"] .bridge-icon-button {
+  border-radius: 50%;
+}
+
+@keyframes bridge-chat-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bridge-typing-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bridge-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.55; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
 @media (max-width: 640px) {
   .bridge-paste-row {
     flex-direction: column;
@@ -408,5 +554,36 @@
   .bridge-paste,
   .bridge-history {
     padding: 16px;
+  }
+
+  .bridge-page[data-phase="connected"] .bridge-session-bar {
+    min-height: 68px;
+    padding: 10px 14px;
+  }
+
+  .bridge-page[data-phase="connected"] .bridge-status {
+    font-size: 0.92em;
+  }
+
+  .bridge-page[data-phase="connected"] .bridge-status small {
+    display: none;
+  }
+
+  .bridge-page[data-phase="connected"] .bridge-session-bar .bridge-button {
+    min-height: 42px;
+    padding: 8px 12px;
+  }
+
+  .bridge-page[data-phase="connected"] .bridge-session-bar .bridge-button span {
+    display: none;
+  }
+
+  .bridge-page[data-phase="connected"] .bridge-drop {
+    padding: 16px 12px;
+  }
+
+  .bridge-page[data-phase="connected"] .bridge-composer {
+    gap: 7px;
+    padding: 10px 10px max(10px, env(safe-area-inset-bottom));
   }
 }

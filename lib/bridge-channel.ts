@@ -83,7 +83,7 @@ export type BridgeFileItem = {
   progress: number;
   error?: string;
   at: number;
-  /** يُملأ فقط للملفات المستلمة بعد التحقق الكامل. */
+  /** يُملأ للملفات المستلمة بعد التحقق أو لوسائط الإرسال المحلية لمعاينتها. */
   bytes?: Uint8Array;
 };
 
@@ -97,6 +97,7 @@ export type BridgeCallbacks = {
   onStatus(status: BridgeStatus, detail?: string): void;
   onChat(message: BridgeChatMessage): void;
   onFile(item: BridgeFileItem): void;
+  onTyping?(typing: boolean): void;
 };
 
 /** الحد الأدنى من واجهة الاتصال المطلوبة (تطابق DataConnection في PeerJS). */
@@ -289,6 +290,12 @@ export class BridgeChannel {
     return id;
   }
 
+  /** إشعار خفيف لا يدخل في سجل الرسائل ولا يوقف نقل الملفات. */
+  sendTyping(typing: boolean): void {
+    if (this.state !== "ready") return;
+    this.sendControl({ t: "typing", v: typing });
+  }
+
   sendFile(file: BridgeOutgoingFile): string {
     if (this.state !== "ready") throw new Error("الجلسة غير متصلة بعد.");
     const name = file.name.trim() || "transfer.bin";
@@ -313,6 +320,7 @@ export class BridgeChannel {
       status: "queued",
       progress: 0,
       at: Date.now(),
+      ...( /^(image|audio|video)\//i.test(mime) ? { bytes: file.bytes } : {}),
     };
     this.outgoing.push({
       id,
@@ -589,6 +597,9 @@ export class BridgeChannel {
       case "chat":
         this.onRemoteChat(message);
         return;
+      case "typing":
+        this.onRemoteTyping(message);
+        return;
       case "file-start":
         this.onRemoteFileStart(message);
         return;
@@ -628,6 +639,13 @@ export class BridgeChannel {
       text: message.text,
       at: Date.now(),
     });
+  }
+
+  private onRemoteTyping(message: ControlMessage): void {
+    if (typeof message.v !== "boolean") {
+      throw new BridgeProtocolError("إشارة كتابة غير صالحة.");
+    }
+    this.callbacks.onTyping?.(message.v);
   }
 
   private onRemoteProgress(message: ControlMessage): void {

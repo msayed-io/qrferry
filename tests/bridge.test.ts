@@ -112,6 +112,7 @@ type Recorder = {
   statuses: Array<{ status: BridgeStatus; detail?: string }>;
   chats: BridgeChatMessage[];
   files: Map<string, BridgeFileItem>;
+  typing: boolean[];
   callbacks: BridgeCallbacks;
   lastStatus(): BridgeStatus | undefined;
 };
@@ -120,10 +121,12 @@ function recorder(): Recorder {
   const statuses: Recorder["statuses"] = [];
   const chats: BridgeChatMessage[] = [];
   const files = new Map<string, BridgeFileItem>();
+  const typing: boolean[] = [];
   return {
     statuses,
     chats,
     files,
+    typing,
     callbacks: {
       onStatus(status, detail) {
         statuses.push({ status, detail });
@@ -133,6 +136,9 @@ function recorder(): Recorder {
       },
       onFile(item) {
         files.set(`${item.direction}:${item.id}`, item);
+      },
+      onTyping(value) {
+        typing.push(value);
       },
     },
     lastStatus() {
@@ -316,6 +322,19 @@ test("chat rejects empty and oversized text", async () => {
   assert.throws(() => session.host.sendChat("   "));
   assert.throws(() => session.host.sendChat("x".repeat(BRIDGE_MAX_CHAT_CHARS + 1)));
   session.host.sendChat("x".repeat(BRIDGE_MAX_CHAT_CHARS));
+});
+
+test("typing notifications flow without entering the chat transcript", async () => {
+  const session = await connected();
+  session.host.sendTyping(true);
+  session.host.sendTyping(false);
+  await until(
+    () => session.joinerEvents.typing.length === 2,
+    "وصول مؤشر الكتابة",
+  );
+  assert.deepEqual(session.joinerEvents.typing, [true, false]);
+  assert.equal(session.hostEvents.chats.length, 0);
+  assert.equal(session.joinerEvents.chats.length, 0);
 });
 
 test("files flow in both directions across many chunks, byte-exact", async () => {
