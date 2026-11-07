@@ -17,7 +17,7 @@ try {
  for(let i=0;i<2;i++)browsers.push(await chromium.launch({headless:true,args:['--no-sandbox']}));
  const pages=[];
  for(const [i,browser] of browsers.entries()){
-  const context=await browser.newContext({viewport:{width:i?390:1280,height:900},acceptDownloads:true});
+  const context=await browser.newContext({viewport:{width:i?390:1280,height:900},acceptDownloads:true,locale:"ar-EG"});
   // This is the app's existing, documented signaling-server preference, NOT a stub.
   await context.addInitScript(()=>localStorage.setItem('qrferry-peer-host',JSON.stringify({host:'localhost',port:9000,path:'/',secure:false})));
   const page=await context.newPage();
@@ -41,7 +41,7 @@ try {
  // Decode screenshots of the actual rendered QR tile, not raw QR data nor a generated fixture.
  for(const width of [390,1280])for(const theme of ['light','dark']){
   await host.setViewportSize({width,height:900});
-  await host.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+  await host.emulateMedia({colorScheme:theme});
   const png=await host.locator('.qrt').screenshot();
   await fs.writeFile(`${dir}/pairing-qr-${width}-${theme}.png`,png);
   const img=PNG.sync.read(png);
@@ -51,7 +51,7 @@ try {
   if(!match) throw new Error(`QR screenshot failed decode ${width}/${theme}`);
  }
  await host.setViewportSize({width:1280,height:900});
- await host.evaluate(()=>document.documentElement.dataset.theme='light');
+ await host.emulateMedia({colorScheme:'light'});
  await host.locator('#nav-send').click();await expect(host.locator('.sender-page')).toBeVisible();
  const start=Date.now();
  await guest.locator('#bridge-paste-input').fill(url);
@@ -89,18 +89,27 @@ try {
  // Session must survive navigation; its owner is still the same BridgeClient.
  await host.locator('#nav-send').click();
  await expect(host.locator('.sender-page')).toBeVisible();
- await expect(host.locator('.bridge-composer')).toHaveCount(0);
+ await expect(host.locator('.bridge-composer')).toBeHidden();
  await expect(host.locator('#nav-chat')).toBeVisible();
  await host.locator('#nav-chat').click();
  await expect(host.locator('.chatbar')).toBeVisible();
  event('tab navigation preserves real session',{result:'connected, original messages retained'});
+ await host.getByRole('button',{name:'قائمة التطبيق',exact:true}).click();
+ await host.getByRole('menuitem',{name:'الخصوصية',exact:true}).click();await host.waitForURL('**/privacy');
+ await expect(host.locator('.bottom-nav')).toHaveCount(0);await expect(host.locator('.app-header')).toHaveCount(0);await expect(host.locator('.bridge-composer')).toBeHidden();
+ const backgroundMessage='رسالة حقيقية أثناء فتح صفحة الخصوصية';
+ await guest.getByLabel('اكتب رسالة').fill(backgroundMessage);await guest.getByRole('button',{name:'إرسال',exact:true}).click();
+ await expect(host.locator('.bridge-bubble.pc').filter({hasText:backgroundMessage})).toHaveCount(1);
+ await host.getByRole('button',{name:'الرجوع إلى التطبيق',exact:true}).click();await expect(host.locator('.chatbar')).toBeVisible();await expect(host.locator('#nav-chat')).toHaveAttribute('aria-selected','true');
+ await expect(host.locator('.bridge-bubble.pc').filter({hasText:backgroundMessage})).toBeVisible();
+ event('standalone page preserves actual connected session',{returnRoute:host.url(),noGlobalChrome:true,realMessageReceivedWhileStandalone:true});
  const reference=await browsers[0].newPage();await reference.goto('file:///home/user/uploads/qrferry-redesign.html');
  await reference.evaluate(()=>{window.go('chat');document.getElementById('chatTab').hidden=false;});
  const sentText=await host.locator('.bridge-bubble.me p').first().textContent(),receivedText=await host.locator('.bridge-bubble.pc p').first().textContent();
  await reference.evaluate(([sent,received])=>{for(const [cls,text] of [['me',sent],['pc',received]]){const el=document.createElement('div');el.className='m '+cls;el.textContent=text;document.getElementById('msgs').append(el);}},[sentText,receivedText]);
  for(const width of [390,1280]) for(const theme of ['light','dark']){
   await host.setViewportSize({width,height:900});await reference.setViewportSize({width,height:900});
-  for(const p of [host,reference])await p.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+  await host.emulateMedia({colorScheme:theme});await reference.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   await host.waitForTimeout(550);await reference.waitForTimeout(550);
   const layout=await host.evaluate(()=>{const c=document.querySelector('.bridge-composer').getBoundingClientRect(),n=document.querySelector('.bottom-nav').getBoundingClientRect();return {composerTop:c.top,composerBottom:c.bottom,navTop:n.top,gap:n.top-c.bottom};});
   if(layout.gap<0)throw new Error('Composer overlaps bottom navigation');

@@ -54,3 +54,20 @@
   .lg-button { scale: 1 !important; translate: none !important; }
   /* Glisse's createSpring also reads this media query and settles instantly. */
 }
+
+/* Mulberry identity: the native optical maps, rim and springs remain Glisse's. */
+:root{
+  --lg-foreground:var(--label); --lg-muted:var(--label2); --lg-glass:var(--glass);
+  --lg-edge:var(--hair); --lg-selection:var(--fill); --lg-segment-track:var(--fill);
+  --lg-surface:color-mix(in srgb,var(--card) 92%,transparent);
+  --lg-highlight:var(--fill); --lg-destructive:var(--danger);
+}
+.lg-button[data-variant="filled"]{color:var(--on-accent)}
+.app-header{position:relative;z-index:20}
+.app-menu{flex:none}
+.app-menu>.lg-button::before{content:"";position:absolute;inset:-2px;border-radius:inherit}
+.app-menu .lg-menu-item{min-height:44px;text-align:start}
+.app-menu .lg-menu-item>svg{color:var(--tint);stroke-width:1.7}
+@media(prefers-reduced-transparency:reduce){
+  html .lg-menu-surface{background:var(--solid);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
+}

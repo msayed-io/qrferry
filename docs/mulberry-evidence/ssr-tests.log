@@ -1,0 +1,105 @@
+TAP version 13
+# Subtest: real HTTP SSR: / ar system locale and page chrome
+ok 1 - real HTTP SSR: / ar system locale and page chrome
+  ---
+  duration_ms: 124.101815
+  ...
+# Subtest: real HTTP SSR: /scan ar system locale and page chrome
+ok 2 - real HTTP SSR: /scan ar system locale and page chrome
+  ---
+  duration_ms: 70.965437
+  ...
+# Subtest: real HTTP SSR: /bridge ar system locale and page chrome
+ok 3 - real HTTP SSR: /bridge ar system locale and page chrome
+  ---
+  duration_ms: 35.377361
+  ...
+# Subtest: real HTTP SSR: /pc ar system locale and page chrome
+ok 4 - real HTTP SSR: /pc ar system locale and page chrome
+  ---
+  duration_ms: 40.769753
+  ...
+# Subtest: real HTTP SSR: /history ar system locale and page chrome
+ok 5 - real HTTP SSR: /history ar system locale and page chrome
+  ---
+  duration_ms: 38.655906
+  ...
+# Subtest: real HTTP SSR: /offline ar system locale and page chrome
+ok 6 - real HTTP SSR: /offline ar system locale and page chrome
+  ---
+  duration_ms: 61.50977
+  ...
+# Subtest: real HTTP SSR: /privacy ar system locale and page chrome
+ok 7 - real HTTP SSR: /privacy ar system locale and page chrome
+  ---
+  duration_ms: 45.391846
+  ...
+# Subtest: real HTTP SSR: / en system locale and page chrome
+ok 8 - real HTTP SSR: / en system locale and page chrome
+  ---
+  duration_ms: 47.823616
+  ...
+# Subtest: real HTTP SSR: /scan en system locale and page chrome
+ok 9 - real HTTP SSR: /scan en system locale and page chrome
+  ---
+  duration_ms: 59.347499
+  ...
+# Subtest: real HTTP SSR: /bridge en system locale and page chrome
+ok 10 - real HTTP SSR: /bridge en system locale and page chrome
+  ---
+  duration_ms: 35.706942
+  ...
+# Subtest: real HTTP SSR: /pc en system locale and page chrome
+ok 11 - real HTTP SSR: /pc en system locale and page chrome
+  ---
+  duration_ms: 30.932766
+  ...
+# Subtest: real HTTP SSR: /history en system locale and page chrome
+ok 12 - real HTTP SSR: /history en system locale and page chrome
+  ---
+  duration_ms: 26.713636
+  ...
+# Subtest: real HTTP SSR: /offline en system locale and page chrome
+ok 13 - real HTTP SSR: /offline en system locale and page chrome
+  ---
+  duration_ms: 30.211735
+  ...
+# Subtest: real HTTP SSR: /privacy en system locale and page chrome
+ok 14 - real HTTP SSR: /privacy en system locale and page chrome
+  ---
+  duration_ms: 29.128535
+  ...
+# Subtest: pre-existing missing receiver stays 404, not an invented route
+ok 15 - pre-existing missing receiver stays 404, not an invented route
+  ---
+  duration_ms: 27.760801
+  ...
+# Subtest: manifest follows request language ar
+ok 16 - manifest follows request language ar
+  ---
+  duration_ms: 34.490681
+  ...
+# Subtest: real multipart share transitional HTML follows ar
+ok 17 - real multipart share transitional HTML follows ar
+  ---
+  duration_ms: 35.587606
+  ...
+# Subtest: manifest follows request language en
+ok 18 - manifest follows request language en
+  ---
+  duration_ms: 5.239062
+  ...
+# Subtest: real multipart share transitional HTML follows en
+ok 19 - real multipart share transitional HTML follows en
+  ---
+  duration_ms: 5.414799
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 868.236116

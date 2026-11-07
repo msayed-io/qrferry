@@ -26,7 +26,7 @@ for (const { name, size } of SIZES) {
 // أيقونة maskable: الخلفية ممتلئة حتى الحواف (بدون زوايا دائرية) لأن
 // النظام قد يقصّها في أشكال مختلفة، ويُحفظ الشعار داخل منطقة الأمان 80%.
 const maskable = await sharp({
-  create: { width: 512, height: 512, channels: 4, background: "#F2F2F7" },
+  create: { width: 512, height: 512, channels: 4, background: "#F7F4F6" },
 })
   .composite([
     {
@@ -40,3 +40,6 @@ writeFileSync(join(outDir, "maskable-512.png"), maskable);
 console.log("✓ maskable-512.png (512×512)");
 
 console.log("تم توليد جميع الأيقونات.");
+
+await sharp(readFileSync(join(root, "scripts", "og-source.svg"))).png().toFile(join(root, "public", "og.png"));
+console.log("✓ og.png (1732×908)");

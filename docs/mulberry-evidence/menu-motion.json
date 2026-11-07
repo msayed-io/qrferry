@@ -1,0 +1,448 @@
+{
+  "openingFrames": [
+    {
+      "ms": 3.7000000001862645,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 8.100000000558794,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 24.800000000745058,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 83.90000000037253,
+      "width": 40,
+      "contentFilter": "blur(6px)"
+    },
+    {
+      "ms": 98,
+      "width": 97.0625,
+      "contentFilter": "blur(3.85996px)"
+    },
+    {
+      "ms": 156.5,
+      "width": 120.46875,
+      "contentFilter": "blur(2.98189px)"
+    },
+    {
+      "ms": 198.1000000005588,
+      "width": 169.046875,
+      "contentFilter": "blur(1.16032px)"
+    },
+    {
+      "ms": 220.30000000074506,
+      "width": 190.078125,
+      "contentFilter": "blur(0.371587px)"
+    },
+    {
+      "ms": 270.80000000074506,
+      "width": 193.484375,
+      "contentFilter": "blur(0.243961px)"
+    },
+    {
+      "ms": 315.1000000005588,
+      "width": 198.390625,
+      "contentFilter": "blur(0.0598518px)"
+    },
+    {
+      "ms": 354.6000000005588,
+      "width": 199.71875,
+      "contentFilter": "blur(0.0101289px)"
+    },
+    {
+      "ms": 386.1000000005588,
+      "width": 199.953125,
+      "contentFilter": "blur(0.00145527px)"
+    },
+    {
+      "ms": 421.40000000037253,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 431.30000000074506,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 448.40000000037253,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 458.40000000037253,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 475,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 491.30000000074506,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 508.1000000005588,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 524.8000000007451,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 541.7000000001863,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 558.5,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 574.9000000003725,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 591.3000000007451,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 608.1000000005588,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 624.8000000007451,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 643.5,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 658.2000000001863,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 674.6000000005588,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 691.3000000007451,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 707.9000000003725,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 724.7000000001863,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 741.5,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 758.3000000007451,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 774.9000000003725,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 791.3000000007451,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 808,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 824.6000000005588,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 841.3000000007451,
+      "width": 200,
+      "contentFilter": ""
+    },
+    {
+      "ms": 858,
+      "width": 200,
+      "contentFilter": ""
+    }
+  ],
+  "drag": {
+    "beforeRelease": "/",
+    "pressed": true,
+    "scrubbing": true,
+    "scale": 1.025,
+    "translation": "0px 5.45142px",
+    "releaseDestination": "/offline"
+  },
+  "closingFrames": [
+    {
+      "ms": 1.599999999627471,
+      "width": 185.359375,
+      "contentFilter": "blur(0.548855px)"
+    },
+    {
+      "ms": 36.69999999925494,
+      "width": 127.28125,
+      "contentFilter": "blur(2.72687px)"
+    },
+    {
+      "ms": 78.3999999994412,
+      "width": 82.421875,
+      "contentFilter": "blur(4.40901px)"
+    },
+    {
+      "ms": 87.79999999981374,
+      "width": 68.125,
+      "contentFilter": "blur(4.94488px)"
+    },
+    {
+      "ms": 115.8999999994412,
+      "width": 58.203125,
+      "contentFilter": "blur(5.31723px)"
+    },
+    {
+      "ms": 137,
+      "width": 47.046875,
+      "contentFilter": "blur(5.73531px)"
+    },
+    {
+      "ms": 169.79999999981374,
+      "width": 42.46875,
+      "contentFilter": "blur(5.90728px)"
+    },
+    {
+      "ms": 206.8999999994412,
+      "width": 41.390625,
+      "contentFilter": "blur(5.94758px)"
+    },
+    {
+      "ms": 239.8999999994412,
+      "width": 40.1875,
+      "contentFilter": "blur(5.99281px)"
+    },
+    {
+      "ms": 266.79999999981374,
+      "width": 40.015625,
+      "contentFilter": "blur(5.99899px)"
+    },
+    {
+      "ms": 295.29999999981374,
+      "width": 40,
+      "contentFilter": "blur(5.99995px)"
+    },
+    {
+      "ms": 324.09999999962747,
+      "width": 40,
+      "contentFilter": "blur(6px)"
+    },
+    {
+      "ms": 338.3999999994412,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 361.5,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 383.8999999994412,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 396.69999999925494,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 400.5,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 417.09999999962747,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 434.19999999925494,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 450.59999999962747,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 467.19999999925494,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 484,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 500.69999999925494,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 517.0999999996275,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 533.8999999994412,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 550.5999999996275,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 567.2999999998137,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 583.8999999994412,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 600.3999999994412,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 617.3999999994412,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 634.1999999992549,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 651.2999999998137,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 667.5,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 684.7999999998137,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 700.5999999996275,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 717.0999999996275,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 733.7999999998137,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 750.7999999998137,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 767.5,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 783.8999999994412,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 800.5,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 817.2999999998137,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 834.1999999992549,
+      "width": null,
+      "contentFilter": null
+    },
+    {
+      "ms": 850.8999999994412,
+      "width": null,
+      "contentFilter": null
+    }
+  ],
+  "touchScrub": {
+    "releaseDestination": "/privacy",
+    "input": "CDP native touch emulation, not physical hardware"
+  },
+  "touchCancel": {
+    "didNotNavigate": true
+  },
+  "reduced": {
+    "width": 200,
+    "backdrop": "none",
+    "contentTransform": "",
+    "contentFilter": ""
+  },
+  "pass": true
+}

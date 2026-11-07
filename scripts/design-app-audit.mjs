@@ -9,21 +9,16 @@ import {unzipSync} from 'fflate';
 const require=createRequire(import.meta.url),dir=process.env.EVIDENCE_DIR||'/home/user/qrferry-redesign-evidence';
 const out={checks:[],errors:[],mockedAPIs:false,limitations:[]};
 const browser=await chromium.launch({args:['--no-sandbox']});
-const context=await browser.newContext({viewport:{width:390,height:900},acceptDownloads:true,permissions:['clipboard-read','clipboard-write']});
+const context=await browser.newContext({viewport:{width:390,height:900},acceptDownloads:true,permissions:['clipboard-read','clipboard-write'],locale:'ar-EG'});
 const page=await context.newPage();page.on('pageerror',e=>out.errors.push(e.message));
 const check=(name,data)=>{out.checks.push({name,...data});console.log(name,data);};
 try{
  await page.goto('http://localhost:3000');
  check('real initial navigation timing',await page.evaluate(()=>{const n=performance.getEntriesByType('navigation')[0];return {domContentLoadedMs:n.domContentLoadedEventEnd,loadMs:n.loadEventEnd,transferBytes:n.transferSize,scriptTransferBytes:performance.getEntriesByType('resource').filter(r=>r.initiatorType==='script').reduce((sum,r)=>sum+r.transferSize,0)};}));
- await page.getByRole('button',{name:'المظهر',exact:true}).click();
- const theme=await page.evaluate(()=>({stored:localStorage.getItem('qrferry-theme'),active:document.documentElement.dataset.theme}));
- await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme',theme.stored);check('theme persisted',theme);
- await page.getByRole('button',{name:'English',exact:true}).click();
- await expect(page.locator('html')).toHaveAttribute('dir','ltr');await page.reload();await expect(page.locator('html')).toHaveAttribute('lang','en');
- const ltr=await page.locator('.qf-tab-bar').evaluate(el=>({direction:getComputedStyle(el).direction,physicalOrder:[...el.querySelectorAll('.lg-tab')].map(b=>b.id)}));
- await page.getByRole('button',{name:'العربية',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('dir','rtl');
- const rtl=await page.locator('.qf-tab-bar').evaluate(el=>({direction:getComputedStyle(el).direction,physicalOrder:[...el.querySelectorAll('.lg-tab')].map(b=>b.id)}));
- check('language persistence and native lens coordinate adaptation',{ltr,rtl,arabicSendRightmost:rtl.physicalOrder.at(-1)==='nav-send',englishSendLeftmost:ltr.physicalOrder[0]==='nav-send'});
+ await page.emulateMedia({colorScheme:'dark'});await expect(page.locator('html')).not.toHaveAttribute('data-theme',/.+/);
+ check('automatic device appearance',{colorScheme:'dark',tint:await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--tint').trim())});
+ await expect(page.locator('html')).toHaveAttribute('lang','ar');await expect(page.locator('html')).toHaveAttribute('dir','rtl');
+ check('automatic browser language',{locale:'ar-EG',lang:'ar',dir:'rtl'});
  // Actual files, selected through the real native browser file input.
  const folder=`${dir}/input-folder`;await fs.mkdir(folder,{recursive:true});
  const files=[];for(let i=1;i<=4;i++){const f=`${folder}/file-${i}.txt`;await fs.writeFile(f,`QRFerry real browser selection ${i}\n`);files.push(f);}
@@ -41,7 +36,7 @@ try{
  await prepareZXingModule({overrides:{wasmBinary:readFileSync(require.resolve('zxing-wasm/reader/zxing_reader.wasm'))},fireImmediately:true});
  await page.locator('.qr-stage canvas').evaluate(el=>el.scrollIntoView({block:'center'}));
  for(const theme of ['light','dark']) {
- await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+ await page.emulateMedia({colorScheme:theme});
  const canvasPng=await page.locator('.qr-stage canvas').screenshot();await fs.writeFile(`${dir}/actual-optical-frame-${theme}.png`,canvasPng);
  const image=PNG.sync.read(canvasPng);const codes=await readBarcodes({data:new Uint8ClampedArray(image.data),width:image.width,height:image.height},{formats:['QRCode'],tryHarder:true});
  const code=codes.find(c=>c.isValid);if(!code)throw new Error('Real optical canvas did not decode');
@@ -65,7 +60,7 @@ try{
  await page.locator('#bridge-paste-input').fill('');await page.getByRole('button',{name:'افتح الكاميرا للمسح',exact:true}).click();await expect(page.locator('.bridge-error').first()).toContainText('الكاميرا',{timeout:15000});check('pair camera unavailable handling',{message:await page.locator('.bridge-error').first().textContent()});
  for(const route of ['/history','/offline','/privacy']){
   const response=await page.goto(`http://localhost:3000${route}`);await expect(page.locator('.support-page')).toBeVisible();
-  for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await page.screenshot({path:`${dir}/secondary-${route.slice(1)}-${theme}.png`,fullPage:true});}
+  for(const theme of ['light','dark']){await page.emulateMedia({colorScheme:theme});await page.screenshot({path:`${dir}/secondary-${route.slice(1)}-${theme}.png`,fullPage:true});}
   check('secondary route rendered',{route,status:response.status(),overflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)});
  }
  await page.goto('http://localhost:3000/offline');const promise=page.waitForEvent('download',{timeout:60000});await page.locator('.offline-download').click();const download=await promise;const zip=await fs.readFile(await download.path());const names=Object.keys(unzipSync(zip));check('real offline ZIP generated and downloaded',{bytes:zip.length,files:names.length,containsIndex:names.includes('index.html'),isolatedExecution:'NOT TESTED'});

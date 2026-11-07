@@ -24,14 +24,8 @@ export default function GlobalError({
   reset: () => void;
 }) {
   void _error;
-  useEffect(() => {
-    try {
-      const theme = localStorage.getItem("qrferry-theme");
-      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
-    } catch { /* System appearance still applies when storage is unavailable. */ }
-    return observeRims();
-  }, []);
-  return <html lang="ar" dir="rtl"><body>
+  useEffect(observeRims, []);
+  return <html lang="en" dir="ltr"><body>
     <LangProvider><ErrorContent reset={reset} /></LangProvider>
   </body></html>;
 }

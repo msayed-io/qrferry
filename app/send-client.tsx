@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { useI18n } from "./lang-provider";
+import { NetworkIndicator } from "./network-indicator";
 import { NetworkStatus } from "./design-system";
 import { DesignIcon, EmptyQrIcon } from "./design-icons";
 import { WorkspaceDisclosure, WorkspaceDialog } from "./workspace-ui";
@@ -1849,6 +1850,7 @@ export function SendClient() {
                 : t("send.status.cameraNeverNeeds")}
             </span>
             <p>{t("send.keyboardHint")}</p>
+            <NetworkIndicator />
           </WorkspaceDisclosure>
         </div>
       </section>

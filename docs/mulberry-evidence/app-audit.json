@@ -1,0 +1,165 @@
+{
+  "checks": [
+    {
+      "name": "real initial navigation timing",
+      "domContentLoadedMs": 291.09999999962747,
+      "loadMs": 469.59999999962747,
+      "transferBytes": 7920,
+      "scriptTransferBytes": 219468
+    },
+    {
+      "name": "automatic device appearance",
+      "colorScheme": "dark",
+      "tint": "#e792b9"
+    },
+    {
+      "name": "automatic browser language",
+      "locale": "ar-EG",
+      "lang": "ar",
+      "dir": "rtl"
+    },
+    {
+      "name": "four actual files rejected",
+      "message": "يمكن إرسال 3 ملفات بحد أقصى في المرة الواحدة. لم تتغير قائمتك؛ أزل ملفًا أو اختر عددًا أقل."
+    },
+    {
+      "name": "real directory selection",
+      "rows": 2
+    },
+    {
+      "name": "three actual files selected",
+      "rows": 3
+    },
+    {
+      "name": "remove file",
+      "rows": 2
+    },
+    {
+      "name": "actual text converted to readable optical QF4 frame",
+      "theme": "light",
+      "bytes": 412,
+      "header": "QF4",
+      "sha256": "dccaf1cec611af0bb5557f6d10dffefec3ffe1ab8b66d7e8d0004b28ce6d6b15",
+      "physicalCamera": false
+    },
+    {
+      "name": "actual text converted to readable optical QF4 frame",
+      "theme": "dark",
+      "bytes": 412,
+      "header": "QF4",
+      "sha256": "dccaf1cec611af0bb5557f6d10dffefec3ffe1ab8b66d7e8d0004b28ce6d6b15",
+      "physicalCamera": false
+    },
+    {
+      "name": "QR stream starts and pauses",
+      "result": "real playing state and canvas"
+    },
+    {
+      "name": "real clipboard scanner URL",
+      "copied": "http://localhost:3000/scan"
+    },
+    {
+      "name": "fullscreen API",
+      "entered": true,
+      "exited": true
+    },
+    {
+      "name": "real fast-transfer dialog keyboard and focus restoration",
+      "result": "opened, Tab focused close, Escape closed, trigger restored"
+    },
+    {
+      "name": "real existing options",
+      "count": 4,
+      "labels": [
+        "تشفير الملف بكلمة مرور (اختياري)",
+        "حذف بعد القراءة",
+        "التوقيع الرقمي (وضع متقدم)",
+        "بث جماعي"
+      ]
+    },
+    {
+      "name": "existing password QR modal actual encode/decode",
+      "prefix": "QFPW",
+      "exactTestPayload": true
+    },
+    {
+      "name": "encryption setting UI preserved",
+      "result": "real existing handler, no claim of end-to-end encrypted camera transfer"
+    },
+    {
+      "name": "real presets",
+      "presets": [
+        "Robust",
+        "Balanced",
+        "Turbo 15",
+        "Turbo 30",
+        "Turbo 60 · مزدوج",
+        "1 Mbps · مزدوج (مختبري)"
+      ]
+    },
+    {
+      "name": "existing custom preset actual save/reload/delete",
+      "persisted": true,
+      "deleted": true
+    },
+    {
+      "name": "real camera unavailable handling",
+      "message": "تعذّر تشغيل الكاميرا الخلفية. المسح بالكاميرا يحتاج HTTPS أو localhost.",
+      "activeLines": 0
+    },
+    {
+      "name": "invalid pairing rejected before attempt",
+      "ariaInvalid": "true"
+    },
+    {
+      "name": "pair camera unavailable handling",
+      "message": "تعذّر تشغيل الكاميرا."
+    },
+    {
+      "name": "secondary route rendered",
+      "route": "/history",
+      "status": 200,
+      "overflow": false
+    },
+    {
+      "name": "secondary route rendered",
+      "route": "/offline",
+      "status": 200,
+      "overflow": false
+    },
+    {
+      "name": "secondary route rendered",
+      "route": "/privacy",
+      "status": 200,
+      "overflow": false
+    },
+    {
+      "name": "real offline ZIP generated and downloaded",
+      "bytes": 418099,
+      "files": 36,
+      "containsIndex": true,
+      "isolatedExecution": "NOT TESTED"
+    },
+    {
+      "name": "pre-existing missing fast receiver route",
+      "status": 404,
+      "scope": "not added or changed"
+    },
+    {
+      "name": "real multipart share and IndexedDB pickup",
+      "selected": "file-1.txt",
+      "route": "http://localhost:3000/?shared=1"
+    },
+    {
+      "name": "headless browser scroll timing",
+      "frames": 119,
+      "p50": 16.69999999999999,
+      "p95": 16.799999999999955,
+      "over50ms": 0
+    }
+  ],
+  "errors": [],
+  "mockedAPIs": false,
+  "limitations": [],
+  "pass": true
+}

@@ -10,8 +10,8 @@ try {
  for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]) {
   const browser=await type.launch();browsers.push(browser);
   for(const width of [390,1280])for(const theme of ['light','dark'])for(const lang of ['ar','en']) {
-   const context=await browser.newContext({viewport:{width,height:900},colorScheme:theme});
-   await context.addInitScript(({lang,theme})=>{localStorage.setItem('qrferry-lang',lang);localStorage.setItem('qrferry-theme',theme);},{lang,theme});
+   const context=await browser.newContext({viewport:{width,height:900},colorScheme:theme,locale:lang==='ar'?'ar-EG':'en-US'});
+   await context.addInitScript(({lang,theme})=>{localStorage.setItem('qrferry-lang',lang==='ar'?'en':'ar');localStorage.setItem('qrferry-theme',theme==='dark'?'light':'dark');},{lang,theme});
    const page=await context.newPage();page.on('pageerror',e=>result.errors.push({engine,width,theme,lang,message:e.message}));
    await page.goto('http://localhost:3000');await expect(page.locator('html')).toHaveAttribute('lang',lang);
    const bar=page.locator('.qf-tab-bar');await expect(bar).toHaveAttribute('data-ready','');await page.waitForTimeout(650);
@@ -59,7 +59,7 @@ try {
   }
  }
  const browser=browsers[0];
- const context=await browser.newContext({viewport:{width:390,height:900},hasTouch:true,isMobile:true});const page=await context.newPage();await page.goto('http://localhost:3000');await page.locator('.qf-tab-bar[data-ready]').waitFor();await page.waitForTimeout(650);
+ const context=await browser.newContext({viewport:{width:390,height:900},hasTouch:true,isMobile:true,locale:'ar-EG'});const page=await context.newPage();await page.goto('http://localhost:3000');await page.locator('.qf-tab-bar[data-ready]').waitFor();await page.waitForTimeout(650);
  const cdp=await context.newCDPSession(page),from=await center(page.locator('#nav-send')),to=await center(page.locator('#nav-pair'));
  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:from.x,y:from.y}]});await expect(page.locator('.qf-tab-bar')).toHaveAttribute('data-lifted','');
  await page.waitForTimeout(180);
@@ -75,7 +75,7 @@ try {
  const transparency=await page.locator('.lg-glass:visible').evaluateAll(els=>els.map(e=>({class:e.className,backdrop:getComputedStyle(e).backdropFilter,background:getComputedStyle(e).backgroundColor,image:getComputedStyle(e).backgroundImage})));
  expect(transparency.every(x=>x.backdrop==='none'&&x.image==='none')).toBe(true);result.preferences.push({reducedTransparency:transparency});
  await cdp.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
- const button=page.locator('.tools .qf-circle').first(),b=await center(button);await page.mouse.move(b.x,b.y);await page.mouse.down();const reduced=await button.evaluate(e=>({scale:getComputedStyle(e).scale,translate:getComputedStyle(e).translate,animation:getComputedStyle(e).animationName}));await page.mouse.move(0,0);await page.mouse.up();expect(reduced.scale).toBe('1');expect(reduced.translate).toBe('none');result.preferences.push({reducedMotion:reduced});
+ const button=page.locator('.app-menu>.lg-button'),b=await center(button);await page.mouse.move(b.x,b.y);await page.mouse.down();const reduced=await button.evaluate(e=>({scale:getComputedStyle(e).scale,translate:getComputedStyle(e).translate,animation:getComputedStyle(e).animationName}));await page.mouse.move(0,0);await page.mouse.up();expect(reduced.scale).toBe('1');expect(reduced.translate).toBe('none');result.preferences.push({reducedMotion:reduced});
  await context.close();expect(result.errors).toEqual([]);result.pass=true;
 } catch(error){result.pass=false;result.failure=String(error.stack||error);console.error(result.failure);process.exitCode=1;}
 finally{await fs.writeFile(`${dir}/glisse-audit.json`,JSON.stringify(result,null,2));for(const b of browsers)await b.close();}

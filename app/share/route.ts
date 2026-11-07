@@ -1,4 +1,6 @@
 import type { NextRequest } from "next/server";
+import type { Lang } from "@/lib/i18n";
+import { requestLanguage } from "../device-language";
 
 /**
  * نقطة استقبال «المشاركة» (Web Share Target):
@@ -20,13 +22,14 @@ function base64FromBytes(bytes: Uint8Array): string {
 
 function buildStoreHtml(
   files: Array<{ name: string; mime: string; b64: string }>,
+  lang: Lang,
 ): string {
   const json = JSON.stringify(files);
   return `<!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="${lang}" dir="${lang === "ar" ? "rtl" : "ltr"}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>QRFerry</title><link rel="stylesheet" href="/design.css"></head>
 <body>
-  <main class="wrap card"><p id="msg" role="status">جارٍ تجهيز الملفات…</p></main>
+  <main class="wrap card"><p id="msg" role="status">${lang === "ar" ? "جارٍ تجهيز الملفات…" : "Preparing files…"}</p></main>
 <script>
 const DB = "qrferry-shared";
 const files = ${json};
@@ -54,7 +57,7 @@ function openDb() {
     await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
     window.location.href = "/?shared=1";
   } catch (e) {
-    document.getElementById("msg").textContent = "تعذّر تجهيز الملفات. افتح صفحة الإرسال مباشرة.";
+    document.getElementById("msg").textContent = ${JSON.stringify(lang === "ar" ? "تعذّر تجهيز الملفات. افتح صفحة الإرسال مباشرة." : "Could not prepare files. Open the send page directly.")};
     setTimeout(() => { window.location.href = "/"; }, 2000);
   }
 })();
@@ -63,6 +66,7 @@ function openDb() {
 }
 
 export async function POST(request: NextRequest) {
+  const lang = requestLanguage(request.headers.get("accept-language"));
   try {
     const formData = await request.formData();
     const values = formData.getAll("file");
@@ -89,12 +93,12 @@ export async function POST(request: NextRequest) {
     if (total > MAX_SHARE_BYTES) {
       // الملف كبير جداً لمسار المشاركة — نوجه لصفحة الإرسال المباشرة
       return new Response(
-        `<!doctype html><html lang="ar" dir="rtl"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><link rel="stylesheet" href="/design.css"><title>QRFerry</title></head><body><main class="wrap card"><p role="alert">الملف كبير جداً لمسار المشاركة.</p><a href="/" class="glass tinted cap" style="margin-top:16px;--o:9.94px;text-decoration:none">افتح صفحة الإرسال واختر الملف يدوياً</a></main></body></html>`,
+        `<!doctype html><html lang="${lang}" dir="${lang === "ar" ? "rtl" : "ltr"}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><link rel="stylesheet" href="/design.css"><title>QRFerry</title></head><body><main class="wrap card"><p role="alert">${lang === "ar" ? "الملف كبير جداً لمسار المشاركة." : "This file is too large for the share route."}</p><a href="/" class="glass tinted cap" style="margin-top:16px;--o:9.94px;text-decoration:none">${lang === "ar" ? "افتح صفحة الإرسال واختر الملف يدوياً" : "Open the send page and choose the file manually"}</a></main></body></html>`,
         { headers: { "content-type": "text/html; charset=utf-8" } },
       );
     }
 
-    return new Response(buildStoreHtml(serialized), {
+    return new Response(buildStoreHtml(serialized, lang), {
       headers: { "content-type": "text/html; charset=utf-8" },
     });
   } catch {

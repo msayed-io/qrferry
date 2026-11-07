@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "glisse/styles.css";
 import "./globals.css";
@@ -9,6 +9,15 @@ import "./liquid-controls.css";
 import { AppShell } from "./app-shell";
 import { PwaRegister } from "./pwa-register";
 import { LangProvider } from "./lang-provider";
+import { requestLanguage } from "./device-language";
+
+export const viewport: Viewport = {
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F7F4F6" },
+    { media: "(prefers-color-scheme: dark)", color: "#121014" },
+  ],
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -16,26 +25,27 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host?.includes("localhost") ? "http" : "https");
   const metadataBase = new URL(host ? `${protocol}://${host}` : "https://qrferry.com");
 
+  const ar = requestLanguage(requestHeaders.get("accept-language")) === "ar";
   return {
     metadataBase,
     title: {
-      default: "QRFerry · نقل الملفات عبر الكاميرا",
+      default: ar ? "QRFerry · نقل الملفات عبر الكاميرا" : "QRFerry · Files across devices",
       template: "%s",
     },
     description:
-      "نقل ملفات خاص وموثوق بين شاشة وكاميرا عبر بثّ أكواد QR متحركة، دون رفع الملف إلى أي خادم.",
+      ar ? "نقل ملفات خاص وموثوق بين شاشة وكاميرا عبر بثّ أكواد QR متحركة، دون رفع الملف إلى أي خادم." : "Private file transfers between a screen and a camera using animated QR codes, without uploading the file to a server.",
     applicationName: "QRFerry",
     manifest: "/manifest.webmanifest",
     openGraph: {
       title: "QRFerry",
-      description: "ملفات عبر الكاميرا — دون إنترنت ودون خوادم.",
+      description: ar ? "ملفات عبر الكاميرا — دون إنترنت ودون خوادم." : "Files through your camera — no internet or servers required.",
       type: "website",
-      images: [{ url: "/og.png", width: 1732, height: 908, alt: "QRFerry — نقل الملفات عبر الكاميرا" }],
+      images: [{ url: "/og.png", width: 1732, height: 908, alt: ar ? "QRFerry — نقل الملفات عبر الكاميرا" : "QRFerry — files through your camera" }],
     },
     twitter: {
       card: "summary_large_image",
       title: "QRFerry",
-      description: "ملفات عبر الكاميرا — دون إنترنت ودون خوادم.",
+      description: ar ? "ملفات عبر الكاميرا — دون إنترنت ودون خوادم." : "Files through your camera — no internet or servers required.",
       images: ["/og.png"],
     },
     appleWebApp: {
@@ -58,16 +68,16 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const lang = requestLanguage((await headers()).get("accept-language"));
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} suppressHydrationWarning>
       <body>
-        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem("qrferry-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}` }} />
-        <LangProvider>
+        <LangProvider initialLang={lang}>
           <PwaRegister />
           <AppShell>{children}</AppShell>
         </LangProvider>

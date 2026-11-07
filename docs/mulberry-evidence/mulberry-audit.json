@@ -1,0 +1,777 @@
+{
+  "cases": [
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "light",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "dark",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "light",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "light",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "light",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "dark",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "light",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "light",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#9A315E",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "ar",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "en",
+      "ssrLanguage": true,
+      "storedOverridesIgnored": true,
+      "tint": "#E792B9",
+      "menuKeyboard": true,
+      "outsideDismiss": true,
+      "menuInViewport": true,
+      "itemHeights": [
+        44,
+        44,
+        44
+      ],
+      "pages": [
+        {
+          "route": "history",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "privacy",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        },
+        {
+          "route": "offline",
+          "capsules": 2,
+          "iconOnlyExit": true,
+          "noSharedChrome": true,
+          "overflow": false,
+          "bottomPadding": 28
+        }
+      ],
+      "directLinkExit": true,
+      "liveColorScheme": true
+    }
+  ],
+  "errors": [],
+  "contrast": [
+    {
+      "theme": "light",
+      "name": "on-accent / accent",
+      "ratio": 7.058917371248928
+    },
+    {
+      "theme": "light",
+      "name": "secondary / card",
+      "ratio": 6.168163961322604
+    },
+    {
+      "theme": "light",
+      "name": "error / card",
+      "ratio": 5.876363900413968
+    },
+    {
+      "theme": "light",
+      "name": "actual filled control",
+      "ratio": 7.058917371248928
+    },
+    {
+      "theme": "dark",
+      "name": "on-accent / accent",
+      "ratio": 7.417131649631152
+    },
+    {
+      "theme": "dark",
+      "name": "secondary / card",
+      "ratio": 8.640611301541513
+    },
+    {
+      "theme": "dark",
+      "name": "error / card",
+      "ratio": 6.928892517209182
+    },
+    {
+      "theme": "dark",
+      "name": "actual filled control",
+      "ratio": 7.417131649631152
+    }
+  ],
+  "livePreferences": {
+    "emulatedLanguageChange": true,
+    "firstSupported": "ar",
+    "unsupportedFallback": "en"
+  },
+  "limitations": [
+    "Browser device preferences are configured by Playwright, not tested on a physical phone.",
+    "Only Arabic and English translations exist; first supported preference wins, with English fallback."
+  ],
+  "pass": true
+}

@@ -1,0 +1,973 @@
+{
+  "package": "glisse@0.5.0",
+  "cases": [
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "light",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.33344,
+        "scaleY": 1.30779,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-18\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.33347,
+        "scaleY": 1.30782,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-16\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "dark",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.33344,
+        "scaleY": 1.30779,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-13\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.32061,
+        "scaleY": 1.29595,
+        "lift": 0.9618369204767696,
+        "labelFilter": "url(\"#glisse-lens-1-8\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "light",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.33347,
+        "scaleY": 1.30782,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-9\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "light",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.3335,
+        "scaleY": 1.30784,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-11\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.33341,
+        "scaleY": 1.30776,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-13\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "chromium",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) url(\"#glisse-backdrop-7\") saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.33341,
+        "scaleY": 1.30776,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-13\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "light",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.333525,
+        "scaleY": 1.307869,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-6\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "light",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.333531,
+        "scaleY": 1.307874,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-6\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "dark",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.333533,
+        "scaleY": 1.307876,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-6\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "theme": "dark",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.33352,
+        "scaleY": 1.307865,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-6\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "light",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.333358,
+        "scaleY": 1.307715,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-4\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "light",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.333527,
+        "scaleY": 1.307871,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-5\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "ar",
+      "at": {
+        "physicalOrder": [
+          "nav-pair",
+          "nav-scan",
+          "nav-send"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.333503,
+        "scaleY": 1.307849,
+        "lift": 1,
+        "labelFilter": "url(\"#glisse-lens-1-5\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    },
+    {
+      "engine": "webkit",
+      "width": 1280,
+      "theme": "dark",
+      "lang": "en",
+      "at": {
+        "physicalOrder": [
+          "nav-send",
+          "nav-scan",
+          "nav-pair"
+        ],
+        "selected": "nav-send",
+        "growX": "24px",
+        "growY": "16px",
+        "slot": "72px",
+        "height": "52px",
+        "backdrop": "blur(3px) saturate(1.5)",
+        "oldMaterialLayers": 0,
+        "accessibleTabs": 3
+      },
+      "held": {
+        "scaleX": 1.333281,
+        "scaleY": 1.307644,
+        "lift": 0.9998434498965308,
+        "labelFilter": "url(\"#glisse-lens-1-4\")",
+        "lensing": true,
+        "selected": "nav-send"
+      },
+      "overflow": false,
+      "solid": [
+        {
+          "class": "control-panel ",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-panel",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        },
+        {
+          "class": "qr-stage   lanes-1",
+          "filter": "none",
+          "backdrop": "none",
+          "glisse": false
+        }
+      ],
+      "dragSelectsOnRelease": true,
+      "homeEnd": true,
+      "realContentSelection": true,
+      "cancelPreservesSelection": true,
+      "smallTargets": []
+    }
+  ],
+  "errors": [],
+  "preferences": [
+    {
+      "reducedTransparency": [
+        {
+          "class": "lg-glass lg-button",
+          "backdrop": "none",
+          "background": "rgba(255, 253, 255, 0.74)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-tab-bar-glass",
+          "backdrop": "none",
+          "background": "rgb(238, 231, 236)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-button qf-liquid-button qf-capsule  file-button",
+          "backdrop": "none",
+          "background": "rgb(154, 49, 94)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-button qf-liquid-button qf-capsule  file-button folder-button",
+          "backdrop": "none",
+          "background": "rgba(255, 253, 255, 0.74)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-button qf-liquid-button qf-capsule qf-large fast-action",
+          "backdrop": "none",
+          "background": "rgb(154, 49, 94)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-button qf-liquid-button qf-circle  fullscreen-button",
+          "backdrop": "none",
+          "background": "rgba(255, 253, 255, 0.74)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-button qf-liquid-button qf-capsule  primary-action",
+          "backdrop": "none",
+          "background": "rgb(154, 49, 94)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-button qf-liquid-button qf-capsule  link-action",
+          "backdrop": "none",
+          "background": "rgba(255, 253, 255, 0.74)",
+          "image": "none"
+        },
+        {
+          "class": "lg-glass lg-tab-bar-glass",
+          "backdrop": "none",
+          "background": "rgb(238, 231, 236)",
+          "image": "none"
+        }
+      ]
+    },
+    {
+      "reducedMotion": {
+        "scale": "1",
+        "translate": "none",
+        "animation": "none"
+      }
+    }
+  ],
+  "touch": {
+    "nativeCDPTouch": true,
+    "dragSelected": "pair",
+    "physicalDevice": false
+  },
+  "performance": {
+    "frames": 120,
+    "p50": 16.699999999999818,
+    "p95": 33.299999999999955,
+    "over50ms": 0,
+    "idle": {
+      "stable": true,
+      "lift": "0"
+    }
+  },
+  "limitations": [
+    "Desktop Chromium and WebKit automation, not a physical phone or Safari installation.",
+    "Native SVG backdrop refraction is Chromium-only; WebKit retains frost/rim and the label lens."
+  ],
+  "pass": true
+}

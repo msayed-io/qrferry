@@ -1,17 +1,21 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
+import { requestLanguage } from "./device-language";
 
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const lang = requestLanguage((await headers()).get("accept-language"));
+  const ar = lang === "ar";
   return {
-    name: "QRFerry · نقل الملفات عبر الكاميرا",
+    name: ar ? "QRFerry · نقل الملفات عبر الكاميرا" : "QRFerry · Files through your camera",
     short_name: "QRFerry",
     description:
-      "أرسل واستقبل الملفات كبثّ أكواد QR متحرك متسامح مع الفقد.",
-    lang: "ar",
-    dir: "rtl",
+      ar ? "أرسل واستقبل الملفات كبثّ أكواد QR متحرك متسامح مع الفقد." : "Send and receive files using resilient animated QR streams.",
+    lang,
+    dir: ar ? "rtl" : "ltr",
     start_url: "/scan",
     display: "standalone",
-    background_color: "#F2F2F7",
-    theme_color: "#F2F2F7",
+    background_color: "#F7F4F6",
+    theme_color: "#F7F4F6",
     orientation: "portrait",
     categories: ["utilities", "productivity"],
     icons: [

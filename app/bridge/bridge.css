@@ -4,13 +4,13 @@
 .bridge-qr-canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background:#fff}
 .bridge-link-row{display:grid;gap:12px;justify-items:center;margin:12px 0}.bridge-link-row code{display:block;font-size:12px;overflow-wrap:anywhere;text-align:start;background:var(--fill);padding:12px;border-radius:16px;width:100%}
 .bridge-camera{overflow:hidden}.bridge-camera video{width:100%;height:100%;position:absolute;object-fit:cover}.bridge-camera .ln{z-index:1}.bridge-camera b{z-index:2;pointer-events:none}
-.dot.error{background:#FF3B30}.dot.connected{background:var(--ok)}
-.bridge-error{font-size:14px;color:#FF3B30!important;line-height:1.6;overflow-wrap:anywhere;margin:12px 0;display:flex;gap:8px;align-items:center}.bridge-error .dot{flex:none}
+.dot.error{background:var(--danger)}.dot.connected{background:var(--ok)}
+.bridge-error{font-size:14px;color:var(--danger-ink)!important;line-height:1.6;overflow-wrap:anywhere;margin:12px 0;display:flex;gap:8px;align-items:center}.bridge-error .dot{flex:none}
 .bridge-page[data-chat=true]{padding:0}.bridge-session{position:relative;min-width:0}
 .chatbar .x{width:44px;height:44px;flex:none}.chatbar small{display:block}.chatbar:active{transform:none}
 .bridge-drop{min-height:220px}.bridge-drop.dragging{outline:2px dashed var(--tint);outline-offset:8px;border-radius:16px}.bridge-drop>.sys{width:max-content;max-width:100%;margin:6px auto 12px}
 .bridge-timeline{list-style:none;margin:0;padding:0 0 170px;min-width:0}.bridge-bubble p{white-space:pre-wrap}.bridge-bubble time,.bridge-file time{display:block;font-size:11px;text-align:end;margin-top:4px;opacity:.8;font-variant-numeric:tabular-nums}
-.bridge-file{align-items:flex-start!important;max-width:90%}.bridge-file-main{flex:1;min-width:0}.bridge-file b{overflow-wrap:anywhere}.bridge-file small{display:block}.bridge-file-error{color:#FF3B30;opacity:1!important;background:var(--card);padding:4px;border-radius:6px}
+.bridge-file{align-items:flex-start!important;max-width:90%}.bridge-file-main{flex:1;min-width:0}.bridge-file b{overflow-wrap:anywhere}.bridge-file small{display:block}.bridge-file-error{color:var(--danger-ink);opacity:1!important;background:var(--card);padding:4px;border-radius:6px}
 .bridge-file progress{display:block;width:100%;height:4px;margin-top:6px;accent-color:currentColor;border:0;border-radius:9px;overflow:hidden}.bridge-file progress::-webkit-progress-bar{background:rgba(255,255,255,.3)}.bridge-file progress::-webkit-progress-value{background:currentColor}
 .file-download{display:grid;place-items:center;width:44px;height:44px;flex:none;color:inherit}.bridge-media-image,.bridge-media-video{display:block;max-width:100%;max-height:320px;object-fit:contain;border-radius:12px;margin-top:10px}.bridge-media-audio{display:block;max-width:100%;width:260px;margin-top:10px}
 .bridge-composer{display:flex;position:fixed;left:50%;transform:translateX(-50%);width:min(100%,560px);padding:0 16px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:9;gap:8px;align-items:center}

@@ -1,0 +1,2 @@
+> qrferry@1.2.3 lint
+> eslint . --ignore-pattern dist --ignore-pattern .next

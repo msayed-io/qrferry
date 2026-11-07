@@ -1,67 +1,42 @@
 "use client";
 
-import Link from "next/link";
+import { Button, Glass } from "glisse";
+import { X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import {
-  ArrowRight,
-  ArrowLeft,
-  History,
-  Download,
-  ShieldCheck,
-} from "lucide-react";
 import { useI18n } from "./lang-provider";
+import { useSupportReturn } from "./support-navigation";
 import "./support.css";
 
 type SupportRoute = "history" | "offline" | "privacy";
-const routes = [
-  { id: "history", ar: "السجل", en: "History", Icon: History },
-  { id: "offline", ar: "أوفلاين", en: "Offline", Icon: Download },
-  { id: "privacy", ar: "الخصوصية", en: "Privacy", Icon: ShieldCheck },
-] as const;
+const names = {
+  history: { ar: "السجل", en: "History" },
+  offline: { ar: "أوفلاين", en: "Offline" },
+  privacy: { ar: "الخصوصية", en: "Privacy" },
+};
 
-export function SupportShell({
-  active,
-  title,
-  description,
-  children,
-}: {
+export function SupportShell({ active, title, description, children }: {
   active: SupportRoute;
   title: string;
   description: string;
   children: ReactNode;
 }) {
   const { lang } = useI18n();
-  const Back = lang === "ar" ? ArrowRight : ArrowLeft;
-  return (
-    <>
-      <main className="support-page" data-page={active}>
-        <div className="support-toolbar">
-          <Link href="/" className="support-home glass cap">
-            <Back size={20} aria-hidden="true" />
-            {lang === "ar" ? "الرجوع للرئيسية" : "Back to home"}
-          </Link>
-          <nav
-            className="support-nav glass"
-            aria-label={lang === "ar" ? "صفحات التطبيق" : "App pages"}
-          >
-            {routes.map(({ id, ar, en, Icon }) => (
-              <Link
-                key={id}
-                href={`/${id}`}
-                aria-current={active === id ? "page" : undefined}
-              >
-                <Icon size={18} aria-hidden="true" />
-                <span>{lang === "ar" ? ar : en}</span>
-              </Link>
-            ))}
-          </nav>
-        </div>
-        <header className="support-intro">
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </header>
-        {children}
-      </main>
-    </>
-  );
+  const router = useRouter();
+  const returnPath = useSupportReturn();
+  return <main className="support-page" data-page={active}>
+    <header className="support-toolbar">
+      <Button
+        className="support-exit"
+        icon={<X aria-hidden />}
+        aria-label={lang === "ar" ? "الرجوع إلى التطبيق" : "Back to app"}
+        onClick={() => router.push(returnPath)}
+      />
+      <Glass className="support-title">
+        <h1 aria-label={title}>{names[active][lang]}</h1>
+      </Glass>
+    </header>
+    <p className="support-description">{description}</p>
+    {children}
+  </main>;
 }

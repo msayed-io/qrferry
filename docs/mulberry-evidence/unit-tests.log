@@ -1,0 +1,470 @@
+TAP version 13
+# Subtest: handshake: matching secret authenticates both devices
+ok 1 - handshake: matching secret authenticates both devices
+  ---
+  duration_ms: 15.876553
+  type: 'test'
+  ...
+# Subtest: handshake: a wrong secret is denied on both sides
+ok 2 - handshake: a wrong secret is denied on both sides
+  ---
+  duration_ms: 5.75028
+  type: 'test'
+  ...
+# Subtest: handshake: a signaling MITM that changes DTLS fingerprints is detected
+ok 3 - handshake: a signaling MITM that changes DTLS fingerprints is detected
+  ---
+  duration_ms: 0.889551
+  type: 'test'
+  ...
+# Subtest: handshake: missing DTLS fingerprints fail closed
+ok 4 - handshake: missing DTLS fingerprints fail closed
+  ---
+  duration_ms: 5.748849
+  type: 'test'
+  ...
+# Subtest: chat flows in both directions
+ok 5 - chat flows in both directions
+  ---
+  duration_ms: 11.707236
+  type: 'test'
+  ...
+# Subtest: chat rejects empty and oversized text
+ok 6 - chat rejects empty and oversized text
+  ---
+  duration_ms: 8.48955
+  type: 'test'
+  ...
+# Subtest: typing notifications flow without entering the chat transcript
+ok 7 - typing notifications flow without entering the chat transcript
+  ---
+  duration_ms: 11.145002
+  type: 'test'
+  ...
+# Subtest: files flow in both directions across many chunks, byte-exact
+ok 8 - files flow in both directions across many chunks, byte-exact
+  ---
+  duration_ms: 20.530939
+  type: 'test'
+  ...
+# Subtest: a corrupted chunk is caught by the end-to-end CRC and reported
+ok 9 - a corrupted chunk is caught by the end-to-end CRC and reported
+  ---
+  duration_ms: 10.833229
+  type: 'test'
+  ...
+# Subtest: a tampered file-end checksum is rejected without accepting the file
+ok 10 - a tampered file-end checksum is rejected without accepting the file
+  ---
+  duration_ms: 11.082186
+  type: 'test'
+  ...
+# Subtest: zero-byte files transfer successfully
+ok 11 - zero-byte files transfer successfully
+  ---
+  duration_ms: 11.930156
+  type: 'test'
+  ...
+# Subtest: messages before authentication are refused and close the channel
+ok 12 - messages before authentication are refused and close the channel
+  ---
+  duration_ms: 6.216446
+  type: 'test'
+  ...
+# Subtest: malformed control JSON closes an authenticated channel
+ok 13 - malformed control JSON closes an authenticated channel
+  ---
+  duration_ms: 10.134128
+  type: 'test'
+  ...
+# Subtest: unknown control types and bogus file metadata are protocol violations
+ok 14 - unknown control types and bogus file metadata are protocol violations
+  ---
+  duration_ms: 21.65695
+  type: 'test'
+  ...
+# Subtest: a chunk that exceeds the announced size closes the channel
+ok 15 - a chunk that exceeds the announced size closes the channel
+  ---
+  duration_ms: 20.055096
+  type: 'test'
+  ...
+# Subtest: incremental CRC-32 matches the optical protocol CRC-32 for any split
+ok 16 - incremental CRC-32 matches the optical protocol CRC-32 for any split
+  ---
+  duration_ms: 2.310602
+  type: 'test'
+  ...
+# Subtest: DTLS fingerprints are parsed from SDP and rejected when absent
+ok 17 - DTLS fingerprints are parsed from SDP and rejected when absent
+  ---
+  duration_ms: 0.210616
+  type: 'test'
+  ...
+# Subtest: proofs are bound to role and transcript
+ok 18 - proofs are bound to role and transcript
+  ---
+  duration_ms: 1.490195
+  type: 'test'
+  ...
+# Subtest: pairing payload round-trips and carries the signaling server
+ok 19 - pairing payload round-trips and carries the signaling server
+  ---
+  duration_ms: 0.776427
+  type: 'test'
+  ...
+# Subtest: pairing decoder rejects malformed or hostile input
+ok 20 - pairing decoder rejects malformed or hostile input
+  ---
+  duration_ms: 0.404201
+  type: 'test'
+  ...
+# Subtest: encodeBridgePairing refuses invalid pairings
+ok 21 - encodeBridgePairing refuses invalid pairings
+  ---
+  duration_ms: 0.12178
+  type: 'test'
+  ...
+# (node:19875) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: empty browser error messages preserve the actual exception name
+ok 22 - empty browser error messages preserve the actual exception name
+  ---
+  duration_ms: 0.589261
+  type: 'test'
+  ...
+# Subtest: a missing completion signal rejects once at the deadline and performs cleanup
+ok 23 - a missing completion signal rejects once at the deadline and performs cleanup
+  ---
+  duration_ms: 0.768558
+  type: 'test'
+  ...
+# Subtest: completion before deadline clears the watchdog
+ok 24 - completion before deadline clears the watchdog
+  ---
+  duration_ms: 0.142714
+  type: 'test'
+  ...
+# Subtest: original failures are preserved rather than replaced by timeout
+ok 25 - original failures are preserved rather than replaced by timeout
+  ---
+  duration_ms: 0.318322
+  type: 'test'
+  ...
+# Subtest: late completion cannot turn a timeout into success; cleanup exceptions are isolated
+ok 26 - late completion cannot turn a timeout into success; cleanup exceptions are isolated
+  ---
+  duration_ms: 0.17324
+  type: 'test'
+  ...
+# Subtest: file container preserves metadata, compression, and both checksums
+ok 27 - file container preserves metadata, compression, and both checksums
+  ---
+  duration_ms: 108.914275
+  type: 'test'
+  ...
+# Subtest: raw binary optical frames round-trip and reject corruption
+ok 28 - raw binary optical frames round-trip and reject corruption
+  ---
+  duration_ms: 11.428513
+  type: 'test'
+  ...
+# Subtest: RaptorQ reconstructs after unordered camera-frame erasures
+ok 29 - RaptorQ reconstructs after unordered camera-frame erasures
+  ---
+  duration_ms: 38.11342
+  type: 'test'
+  ...
+# Subtest: the actual Turbo and 1 Mbps QR profiles survive the ZXing scanner
+ok 30 - the actual Turbo and 1 Mbps QR profiles survive the ZXing scanner
+  ---
+  duration_ms: 118.832232
+  type: 'test'
+  ...
+# Subtest: ZXing recovers two noisy side-by-side Turbo lanes in one exposure
+ok 31 - ZXing recovers two noisy side-by-side Turbo lanes in one exposure
+  ---
+  duration_ms: 66.115146
+  type: 'test'
+  ...
+# Subtest: all profiles fit exactly and expose increasing high-speed channels
+ok 32 - all profiles fit exactly and expose increasing high-speed channels
+  ---
+  duration_ms: 0.225808
+  type: 'test'
+  ...
+# Subtest: encrypted payloads round-trip and reject wrong passwords or tampering
+ok 33 - encrypted payloads round-trip and reject wrong passwords or tampering
+  ---
+  duration_ms: 181.535771
+  type: 'test'
+  ...
+# Subtest: encrypted container flows through the optical protocol end to end
+ok 34 - encrypted container flows through the optical protocol end to end
+  ---
+  duration_ms: 158.696376
+  type: 'test'
+  ...
+# Subtest: device locale ar-EG,en-US
+ok 35 - device locale ar-EG,en-US
+  ---
+  duration_ms: 1.544951
+  type: 'test'
+  ...
+# Subtest: device locale en-GB,ar
+ok 36 - device locale en-GB,ar
+  ---
+  duration_ms: 0.134781
+  type: 'test'
+  ...
+# Subtest: device locale fr-FR,ar-SA
+ok 37 - device locale fr-FR,ar-SA
+  ---
+  duration_ms: 0.061769
+  type: 'test'
+  ...
+# Subtest: device locale de-DE,fr
+ok 38 - device locale de-DE,fr
+  ---
+  duration_ms: 0.060351
+  type: 'test'
+  ...
+# Subtest: device locale AR_eg
+ok 39 - device locale AR_eg
+  ---
+  duration_ms: 0.103562
+  type: 'test'
+  ...
+# Subtest: device locale empty
+ok 40 - device locale empty
+  ---
+  duration_ms: 0.054662
+  type: 'test'
+  ...
+# Subtest: HTTP locale en-US;q=.3,ar-EG;q=.9
+ok 41 - HTTP locale en-US;q=.3,ar-EG;q=.9
+  ---
+  duration_ms: 0.223238
+  type: 'test'
+  ...
+# Subtest: HTTP locale ar;q=0,en;q=.5
+ok 42 - HTTP locale ar;q=0,en;q=.5
+  ---
+  duration_ms: 0.066451
+  type: 'test'
+  ...
+# Subtest: HTTP locale fr,ar;q=.8
+ok 43 - HTTP locale fr,ar;q=.8
+  ---
+  duration_ms: 0.186301
+  type: 'test'
+  ...
+# Subtest: HTTP locale ar;q=NaN,en
+ok 44 - HTTP locale ar;q=NaN,en
+  ---
+  duration_ms: 0.281811
+  type: 'test'
+  ...
+# Subtest: HTTP locale en;q=.8,ar;q=.8
+ok 45 - HTTP locale en;q=.8,ar;q=.8
+  ---
+  duration_ms: 0.119729
+  type: 'test'
+  ...
+# Subtest: HTTP locale null
+ok 46 - HTTP locale null
+  ---
+  duration_ms: 0.047515
+  type: 'test'
+  ...
+# Subtest: pairing payload round-trips
+ok 47 - pairing payload round-trips
+  ---
+  duration_ms: 1.247707
+  type: 'test'
+  ...
+# Subtest: decodePairing rejects invalid payloads
+ok 48 - decodePairing rejects invalid payloads
+  ---
+  duration_ms: 0.139334
+  type: 'test'
+  ...
+# Subtest: makePasscode produces 6 digits by default
+ok 49 - makePasscode produces 6 digits by default
+  ---
+  duration_ms: 1.26374
+  type: 'test'
+  ...
+# Subtest: peer server config defaults to the public cloud
+ok 50 - peer server config defaults to the public cloud
+  ---
+  duration_ms: 0.184749
+  type: 'test'
+  ...
+# Subtest: peer server config respects saved overrides when localStorage exists
+ok 51 - peer server config respects saved overrides when localStorage exists
+  ---
+  duration_ms: 0.270722
+  type: 'test'
+  ...
+# Subtest: idle guard: continuous activity prevents firing regardless of duration
+ok 52 - idle guard: continuous activity prevents firing regardless of duration
+  ---
+  duration_ms: 507.821119
+  type: 'test'
+  ...
+# Subtest: idle guard: real inactivity fires after the timeout
+ok 53 - idle guard: real inactivity fires after the timeout
+  ---
+  duration_ms: 121.763683
+  type: 'test'
+  ...
+# Subtest: idle guard: stop prevents firing afterwards
+ok 54 - idle guard: stop prevents firing afterwards
+  ---
+  duration_ms: 121.78882
+  type: 'test'
+  ...
+# Subtest: transfer package round-trips a single file with metadata
+ok 55 - transfer package round-trips a single file with metadata
+  ---
+  duration_ms: 4.008523
+  type: 'test'
+  ...
+# Subtest: transfer package bundles multiple files with Arabic names
+ok 56 - transfer package bundles multiple files with Arabic names
+  ---
+  duration_ms: 1.577117
+  type: 'test'
+  ...
+# Subtest: transfer package rejects empty file lists and oversized counts
+ok 57 - transfer package rejects empty file lists and oversized counts
+  ---
+  duration_ms: 0.325659
+  type: 'test'
+  ...
+# Subtest: tampering with package content is rejected by per-file CRC
+ok 58 - tampering with package content is rejected by per-file CRC
+  ---
+  duration_ms: 1.08938
+  type: 'test'
+  ...
+# Subtest: signing: valid signature verifies, wrong key or tampered data rejected
+ok 59 - signing: valid signature verifies, wrong key or tampered data rejected
+  ---
+  duration_ms: 15.62061
+  type: 'test'
+  ...
+# Subtest: public key encode/decode round-trips
+ok 60 - public key encode/decode round-trips
+  ---
+  duration_ms: 0.928733
+  type: 'test'
+  ...
+# Subtest: signed package round-trips with signer identity, public key, and verifiable signature
+ok 61 - signed package round-trips with signer identity, public key, and verifiable signature
+  ---
+  duration_ms: 2.589918
+  type: 'test'
+  ...
+# Subtest: package without signing has null signer fields
+ok 62 - package without signing has null signer fields
+  ---
+  duration_ms: 0.222795
+  type: 'test'
+  ...
+# Subtest: tv compatibility: peer server URL parsing
+ok 63 - tv compatibility: peer server URL parsing
+  ---
+  duration_ms: 1.276221
+  type: 'test'
+  ...
+# Subtest: batch accepts one, two and three files without changing order or identity
+ok 64 - batch accepts one, two and three files without changing order or identity
+  ---
+  duration_ms: 1.107038
+  type: 'test'
+  ...
+# Subtest: adding files retains existing references and replacement does not append
+ok 65 - adding files retains existing references and replacement does not append
+  ---
+  duration_ms: 0.171621
+  type: 'test'
+  ...
+# Subtest: four-file selections reject atomically, both on initial choice and append
+ok 66 - four-file selections reject atomically, both on initial choice and append
+  ---
+  duration_ms: 0.538243
+  type: 'test'
+  ...
+# Subtest: total size is enforced including previously selected files, with inclusive boundary
+ok 67 - total size is enforced including previously selected files, with inclusive boundary
+  ---
+  duration_ms: 0.184649
+  type: 'test'
+  ...
+# Subtest: empty replacement clears the batch; zero-byte files and same names are retained
+ok 68 - empty replacement clears the batch; zero-byte files and same names are retained
+  ---
+  duration_ms: 0.202258
+  type: 'test'
+  ...
+# Subtest: StabilityTracker stays unstable below minimum attempts
+ok 69 - StabilityTracker stays unstable below minimum attempts
+  ---
+  duration_ms: 0.697934
+  type: 'test'
+  ...
+# Subtest: StabilityTracker becomes stable at high success rate
+ok 70 - StabilityTracker becomes stable at high success rate
+  ---
+  duration_ms: 0.120762
+  type: 'test'
+  ...
+# Subtest: StabilityTracker stays unstable when failures dominate
+ok 71 - StabilityTracker stays unstable when failures dominate
+  ---
+  duration_ms: 0.147041
+  type: 'test'
+  ...
+# Subtest: StabilityTracker rolls over window (old samples forgotten)
+ok 72 - StabilityTracker rolls over window (old samples forgotten)
+  ---
+  duration_ms: 0.101325
+  type: 'test'
+  ...
+# Subtest: isStableFromRate helper matches threshold
+ok 73 - isStableFromRate helper matches threshold
+  ---
+  duration_ms: 0.162505
+  type: 'test'
+  ...
+# Subtest: wakelock returns a safe no-op release even without browser support
+ok 74 - wakelock returns a safe no-op release even without browser support
+  ---
+  duration_ms: 0.240177
+  type: 'test'
+  ...
+# Subtest: notification helpers never throw in non-browser environment
+ok 75 - notification helpers never throw in non-browser environment
+  ---
+  duration_ms: 0.409129
+  type: 'test'
+  ...
+# (node:19936) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: direct downloads use exact bytes and clean up URLs on timeout, disposal, unsupported and failure paths
+ok 76 - direct downloads use exact bytes and clean up URLs on timeout, disposal, unsupported and failure paths
+  ---
+  duration_ms: 4.105053
+  type: 'test'
+  ...
+1..76
+# tests 76
+# suites 0
+# pass 76
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2727.557411
