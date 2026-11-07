@@ -121,8 +121,12 @@ jobs:
         run: |
           set -euo pipefail
           expected='com.msayed.qrferry'
-          actual="$(apkanalyzer manifest application-id android/app/build/outputs/apk/release/app-release.apk)"
+          aapt2="$(find "$ANDROID_HOME/build-tools" -type f -name aapt2 | sort -V | tail -1)"
+          test -x "$aapt2"
+          actual="$("$aapt2" dump badging android/app/build/outputs/apk/release/app-release.apk | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
           test "$actual" = "$expected"
+          jarsigner -verify -strict android/app/build/outputs/apk/release/app-release.apk >/dev/null
+          unzip -t android/app/build/outputs/bundle/release/app-release.aab >/dev/null
           sha256sum android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/bundle/release/app-release.aab
       - name: Upload signed artifacts
         uses: actions/upload-artifact@v4
