@@ -263,7 +263,6 @@ export function SendClient() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // البروفايلات المخصصة من localStorage (بعد أول رسم)
@@ -1083,7 +1082,6 @@ export function SendClient() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transfer, processing]);
 
   const submitPreset = (event: React.FormEvent<HTMLFormElement>) => {

@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Glass } from "glisse";
-import { usePathname } from "next/navigation";
+import { usePathname } from "../router";
 import { DesignIcon } from "../design-icons";
 import { Capsule, Card, CircleButton, CameraCorners, useBridgeView } from "../design-system";
 import { createPortal, flushSync } from "react-dom";
@@ -143,7 +143,6 @@ function BridgeMediaPreview({
   if (!url) return null;
   if (item.mime.toLowerCase().startsWith("image/")) {
     // Blob URLs are local peer-to-peer media and cannot use next/image optimization.
-    // eslint-disable-next-line @next/next/no-img-element
     return <img className="bridge-media-image" src={url} alt={alt} />;
   }
   if (item.mime.toLowerCase().startsWith("video/")) {
@@ -690,7 +689,6 @@ export function BridgeClient() {
       if (remoteTypingTimerRef.current) clearTimeout(remoteTypingTimerRef.current);
     };
     // The ref-backed resource owner is mounted once by AppShell.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -713,7 +711,6 @@ export function BridgeClient() {
     }
     return () => window.removeEventListener("hashchange", tryJoin);
     // Only navigation/hash changes should consume a pairing URL, not chat renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   useEffect(() => {

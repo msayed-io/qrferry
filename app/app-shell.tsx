@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+
+import { usePathname, useRouter } from "./router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "./lang-provider";
 import { LiquidChoices } from "./liquid-controls";
@@ -51,10 +51,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   return <BridgeViewContext.Provider value={context}><SupportReturnContext.Provider value={returnPath}>
     <div className={`wrap app-wrap ${standalone ? "standalone-wrap" : ""} ${active === "chat" ? "chat-wrap" : ""}`}>
       {!standalone && <header className="app-header">
-        <Link className="brand" href="/" aria-label="QRFerry">
+        <a className="brand" href="/" aria-label="QRFerry">
           <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3"/><rect x="17" y="3" width="10" height="10" rx="3"/><rect x="3" y="17" width="10" height="10" rx="3"/><rect x="17" y="17" width="10" height="10" rx="3" fill="var(--tint)" stroke="none"/></svg>
           QRFerry
-        </Link>
+        </a>
         <AppMenu onNavigate={href => { setReturnPath(path); router.push(href); }} />
       </header>}
       <div id="route-content" hidden={bridgeRoute}>{children}</div>

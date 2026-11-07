@@ -2,7 +2,7 @@
 
 import { Button, Glass } from "glisse";
 import { X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "./router";
 import type { ReactNode } from "react";
 import { useI18n } from "./lang-provider";
 import { useSupportReturn } from "./support-navigation";

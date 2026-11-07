@@ -2,7 +2,7 @@
 
 import { LiquidButton } from "../liquid-controls";
 
-import Link from "next/link";
+
 import { useEffect, useState } from "react";
 import {
   Check,
@@ -95,10 +95,10 @@ export function HistoryClient() {
                   ? "ستظهر هنا تفاصيل النقولات المستلمة."
                   : "Details of received transfers will appear here."}
               </p>
-              <Link className="support-button support-signal glass cap tinted" href="/scan">
+              <a className="support-button support-signal glass cap tinted" href="/scan">
                 <ScanLine size={19} aria-hidden="true" />
                 {ar ? "استقبال ملفات" : "Receive files"}
-              </Link>
+              </a>
             </div>
           ) : (
             <>

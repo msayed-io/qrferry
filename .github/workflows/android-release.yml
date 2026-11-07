@@ -15,7 +15,6 @@ concurrency:
 
 env:
   NODE_VERSION: '22.13.0'
-  CAPACITOR_SERVER_URL: 'https://qrferry-phi.vercel.app'
 
 jobs:
   version:
@@ -86,11 +85,16 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Verify web source and sync Capacitor
+      - name: Build local React web assets and sync Capacitor
         run: |
           set -euo pipefail
+          npm run build
           test -s www/index.html
+          test -s www/assets/index-*.js
+          test -s www/icons/icon-512.png
           npx cap sync android
+          test -s android/app/src/main/assets/public/index.html
+          test -s android/app/src/main/assets/public/assets/index-*.js
       - name: Materialize signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
