@@ -10,7 +10,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useI18n } from "./lang-provider";
-import { WorkspaceHeader } from "./workspace-ui";
 import "./support.css";
 
 type SupportRoute = "history" | "offline" | "privacy";
@@ -35,15 +34,14 @@ export function SupportShell({
   const Back = lang === "ar" ? ArrowRight : ArrowLeft;
   return (
     <>
-      <WorkspaceHeader active={active} />
       <main className="support-page" data-page={active}>
         <div className="support-toolbar">
-          <Link href="/" className="support-home">
+          <Link href="/" className="support-home glass cap">
             <Back size={20} aria-hidden="true" />
             {lang === "ar" ? "الرجوع للرئيسية" : "Back to home"}
           </Link>
           <nav
-            className="support-nav"
+            className="support-nav glass"
             aria-label={lang === "ar" ? "صفحات التطبيق" : "App pages"}
           >
             {routes.map(({ id, ar, en, Icon }) => (

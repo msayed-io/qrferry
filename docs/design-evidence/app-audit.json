@@ -1,0 +1,171 @@
+{
+  "checks": [
+    {
+      "name": "real initial navigation timing",
+      "domContentLoadedMs": 215.4000000001397,
+      "loadMs": 448,
+      "transferBytes": 7725,
+      "scriptTransferBytes": 203026
+    },
+    {
+      "name": "theme persisted",
+      "stored": "dark",
+      "active": "dark"
+    },
+    {
+      "name": "language persistence and fixed light direction",
+      "ltr": {
+        "direction": "ltr",
+        "rim": "linear-gradient(135deg, rgba(255, 255, 255, 0.6) 12.84px, rgba(255, 255, 255, 0.29) calc(12.84px + min(12px, 8%)), rgba(255, 255, 255, 0.13) calc(12.84px + min(24px, 16%)), rgba(255, 255, 255, 0.07) calc(12.84px + min(36px, 24%)), rgba(255, 255, 255, 0.06) calc(12.84px + min(48px, 32%)), rgba(255, 255, 255, 0.06) calc(100% - 12.84px - min(36px, 30%)), rgba(255, 255, 255, 0.067) calc(100% - 12.84px - min(27px, 22.5%)), rgba(255, 255, 255, 0.094) calc(100% - 12.84px - min(18px, 15%)), rgba(255, 255, 255, 0.176) calc(100% - 12.84px - min(9px, 7.5%)), rgba(255, 255, 255, 0.34) calc(100% - 12.84px))"
+      },
+      "rtl": {
+        "direction": "rtl",
+        "rim": "linear-gradient(135deg, rgba(255, 255, 255, 0.6) 12.84px, rgba(255, 255, 255, 0.29) calc(12.84px + min(12px, 8%)), rgba(255, 255, 255, 0.13) calc(12.84px + min(24px, 16%)), rgba(255, 255, 255, 0.07) calc(12.84px + min(36px, 24%)), rgba(255, 255, 255, 0.06) calc(12.84px + min(48px, 32%)), rgba(255, 255, 255, 0.06) calc(100% - 12.84px - min(36px, 30%)), rgba(255, 255, 255, 0.067) calc(100% - 12.84px - min(27px, 22.5%)), rgba(255, 255, 255, 0.094) calc(100% - 12.84px - min(18px, 15%)), rgba(255, 255, 255, 0.176) calc(100% - 12.84px - min(9px, 7.5%)), rgba(255, 255, 255, 0.34) calc(100% - 12.84px))"
+      },
+      "sameRim": true
+    },
+    {
+      "name": "four actual files rejected",
+      "message": "يمكن إرسال 3 ملفات بحد أقصى في المرة الواحدة. لم تتغير قائمتك؛ أزل ملفًا أو اختر عددًا أقل."
+    },
+    {
+      "name": "real directory selection",
+      "rows": 2
+    },
+    {
+      "name": "three actual files selected",
+      "rows": 3
+    },
+    {
+      "name": "remove file",
+      "rows": 2
+    },
+    {
+      "name": "actual text converted to readable optical QF4 frame",
+      "theme": "light",
+      "bytes": 412,
+      "header": "QF4",
+      "sha256": "dccaf1cec611af0bb5557f6d10dffefec3ffe1ab8b66d7e8d0004b28ce6d6b15",
+      "physicalCamera": false
+    },
+    {
+      "name": "actual text converted to readable optical QF4 frame",
+      "theme": "dark",
+      "bytes": 412,
+      "header": "QF4",
+      "sha256": "dccaf1cec611af0bb5557f6d10dffefec3ffe1ab8b66d7e8d0004b28ce6d6b15",
+      "physicalCamera": false
+    },
+    {
+      "name": "QR stream starts and pauses",
+      "result": "real playing state and canvas"
+    },
+    {
+      "name": "real clipboard scanner URL",
+      "copied": "http://localhost:3000/scan"
+    },
+    {
+      "name": "fullscreen API",
+      "entered": true,
+      "exited": true
+    },
+    {
+      "name": "real fast-transfer dialog keyboard and focus restoration",
+      "result": "opened, Tab focused close, Escape closed, trigger restored"
+    },
+    {
+      "name": "real existing options",
+      "count": 4,
+      "labels": [
+        "تشفير الملف بكلمة مرور (اختياري)",
+        "حذف بعد القراءة",
+        "التوقيع الرقمي (وضع متقدم)",
+        "بث جماعي"
+      ]
+    },
+    {
+      "name": "existing password QR modal actual encode/decode",
+      "prefix": "QFPW",
+      "exactTestPayload": true
+    },
+    {
+      "name": "encryption setting UI preserved",
+      "result": "real existing handler, no claim of end-to-end encrypted camera transfer"
+    },
+    {
+      "name": "real presets",
+      "presets": [
+        "Robust",
+        "Balanced",
+        "Turbo 15",
+        "Turbo 30",
+        "Turbo 60 · مزدوج",
+        "1 Mbps · مزدوج (مختبري)"
+      ]
+    },
+    {
+      "name": "existing custom preset actual save/reload/delete",
+      "persisted": true,
+      "deleted": true
+    },
+    {
+      "name": "real camera unavailable handling",
+      "message": "تعذّر تشغيل الكاميرا الخلفية. المسح بالكاميرا يحتاج HTTPS أو localhost.",
+      "activeLines": 0
+    },
+    {
+      "name": "invalid pairing rejected before attempt",
+      "ariaInvalid": "true"
+    },
+    {
+      "name": "pair camera unavailable handling",
+      "message": "تعذّر تشغيل الكاميرا."
+    },
+    {
+      "name": "secondary route rendered",
+      "route": "/history",
+      "status": 200,
+      "overflow": false
+    },
+    {
+      "name": "secondary route rendered",
+      "route": "/offline",
+      "status": 200,
+      "overflow": false
+    },
+    {
+      "name": "secondary route rendered",
+      "route": "/privacy",
+      "status": 200,
+      "overflow": false
+    },
+    {
+      "name": "real offline ZIP generated and downloaded",
+      "bytes": 411969,
+      "files": 37,
+      "containsIndex": true,
+      "isolatedExecution": "NOT TESTED"
+    },
+    {
+      "name": "pre-existing missing fast receiver route",
+      "status": 404,
+      "scope": "not added or changed"
+    },
+    {
+      "name": "real multipart share and IndexedDB pickup",
+      "selected": "file-1.txt",
+      "route": "http://localhost:3000/?shared=1"
+    },
+    {
+      "name": "headless browser scroll timing",
+      "frames": 119,
+      "p50": 16.700000000000045,
+      "p95": 33.299999999999955,
+      "over50ms": 2
+    }
+  ],
+  "errors": [],
+  "mockedAPIs": false,
+  "limitations": [],
+  "pass": true
+}

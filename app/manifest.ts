@@ -10,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "rtl",
     start_url: "/scan",
     display: "standalone",
-    background_color: "#f4f1ea",
-    theme_color: "#111820",
+    background_color: "#F2F2F7",
+    theme_color: "#F2F2F7",
     orientation: "portrait",
     categories: ["utilities", "productivity"],
     icons: [

@@ -1,78 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowLeftRight,
-  ArrowUpRight,
-  ScanLine,
   ChevronDown,
   X,
 } from "lucide-react";
 import { useI18n } from "./lang-provider";
-import "./workspace.css";
-
-export const WORKSPACE_VERSION = "QRFERRY-UI-7";
-
-export function WorkspaceHeader({
-  active,
-}: {
-  active: "send" | "scan" | "bridge" | "pc" | "history" | "offline" | "privacy";
-}) {
-  const { t, lang, setLang } = useI18n();
-  useEffect(() => {
-    document.documentElement.classList.add("qrferry-workspace");
-    return () => document.documentElement.classList.remove("qrferry-workspace");
-  }, []);
-  return (
-    <header className="workspace-header">
-      <Link className="workspace-brand" href="/" aria-label="QRFerry">
-        <span className="brand-mark" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <i />
-        </span>
-        <span>
-          <strong>QRFerry</strong>
-          <small dir="ltr">{WORKSPACE_VERSION}</small>
-        </span>
-      </Link>
-      <nav
-        className="workspace-nav"
-        aria-label={lang === "ar" ? "طريقة النقل" : "Transfer mode"}
-      >
-        <Link href="/" aria-current={active === "send" ? "page" : undefined}>
-          <ArrowUpRight size={18} />
-          {t("nav.send")}
-        </Link>
-        <Link
-          href="/scan"
-          aria-current={active === "scan" ? "page" : undefined}
-        >
-          <ScanLine size={18} />
-          {t("nav.scan")}
-        </Link>
-        <Link
-          href="/bridge"
-          className="workspace-nav-bridge"
-          aria-current={active === "bridge" ? "page" : undefined}
-        >
-          <ArrowLeftRight size={18} />
-          {lang === "ar" ? "جسر النقل الذكي" : "Smart Bridge"}
-        </Link>
-      </nav>
-      <button
-        type="button"
-        className="workspace-language"
-        onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-        aria-label="Switch language / تبديل اللغة"
-      >
-        {lang === "ar" ? "EN" : "ع"}
-      </button>
-    </header>
-  );
-}
 
 /** Children stay mounted: expanding a panel must not recreate canvases or reset inputs. */
 export function WorkspaceDisclosure({
@@ -200,7 +133,7 @@ export function WorkspaceDialog({
       >
         <button
           type="button"
-          className="dialog-dismiss"
+          className="dialog-dismiss glass circle"
           aria-label={lang === "ar" ? "إغلاق النافذة" : "Close dialog"}
           onClick={onClose}
         >

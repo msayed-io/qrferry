@@ -9,19 +9,10 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import {
-  Camera,
-  Check,
-  Copy,
-  Download,
-  Monitor,
-  Paperclip,
-  QrCode,
-  ScanLine,
-  Send,
-  Unplug,
-} from "lucide-react";
-import { flushSync } from "react-dom";
+import { usePathname } from "next/navigation";
+import { DesignIcon } from "../design-icons";
+import { Capsule, Card, CircleButton, CameraCorners, useBridgeView } from "../design-system";
+import { createPortal, flushSync } from "react-dom";
 import { useI18n } from "../lang-provider";
 import {
   BRIDGE_MAX_CHAT_CHARS,
@@ -50,7 +41,6 @@ import {
   playBridgeNotificationTone,
   requestBridgeNotificationPermission,
 } from "@/lib/bridge-notifications";
-import "./bridge.css";
 
 declare global {
   interface Window {
@@ -97,7 +87,7 @@ function upsertItem(list: Item[], item: Item): Item[] {
     (existing) =>
       existing.kind === item.kind &&
       existing.direction === item.direction &&
-      (item.kind === "chat" || existing.id === item.id),
+      existing.id === item.id,
   );
   if (index === -1) return [...list, item];
   const next = list.slice();
@@ -163,6 +153,8 @@ function BridgeMediaPreview({
 
 export function BridgeClient() {
   const { lang } = useI18n();
+  const pathname = usePathname();
+  const { view, setView, connectionChanged } = useBridgeView();
   const tx: Tx = (ar, en) => (lang === "ar" ? ar : en);
 
   const [phase, setPhase] = useState<Phase>("home");
@@ -180,13 +172,16 @@ export function BridgeClient() {
   const [draft, setDraft] = useState("");
   const [dragging, setDragging] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState(false);
+  const [cameraRunning, setCameraRunning] = useState(false);
 
   const hostRef = useRef<BridgeHostHandle | null>(null);
   const activeRef = useRef<BridgeHandle | null>(null);
   /** يزداد مع كل جلسة جديدة؛ أي حدث من جلسة قديمة يُتجاهل. */
   const generationRef = useRef(0);
   const mountedRef = useRef(false);
-  const autoJoinedRef = useRef(false);
+  const lastPairingRef = useRef<BridgePairing | null>(null);
+  const lastActionRef = useRef<"host" | "camera" | "join">("host");
+  const timelineRef = useRef<HTMLOListElement>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scanCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -212,6 +207,7 @@ export function BridgeClient() {
   const stopCamera = () => {
     cameraTokenRef.current += 1;
     scanningRef.current = false;
+    setCameraRunning(false);
     if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
     scanTimerRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -239,6 +235,7 @@ export function BridgeClient() {
   /** يبطل أحداث الجلسة الحالية ثم يفكّ مواردها. */
   const endSession = () => {
     generationRef.current += 1;
+    connectionChanged(false);
     releaseHandles();
   };
 
@@ -249,6 +246,7 @@ export function BridgeClient() {
       onStatus(status: BridgeStatus, detail?: string) {
         if (!live()) return;
         if (status === "connected") {
+          connectionChanged(true);
           setPhase("connected");
           setNotice("");
           setJoinError("");
@@ -256,6 +254,7 @@ export function BridgeClient() {
           return;
         }
         if (status === "authenticating") return;
+        connectionChanged(false);
         if (hostRef.current) {
           // المضيف يبقى مستمعاً؛ onHostState يعيده إلى الانتظار.
           setNotice(detail ?? tx("انقطع الاتصال.", "The connection closed."));
@@ -276,7 +275,7 @@ export function BridgeClient() {
       onChat(message: BridgeChatMessage) {
         if (!live()) return;
         setItems((list) => upsertItem(list, message));
-        announceIncoming(
+        if (message.direction === "in") announceIncoming(
           "message",
           tx("رسالة جديدة · QRFerry", "New message · QRFerry"),
           message.text,
@@ -314,6 +313,7 @@ export function BridgeClient() {
         setHostState(state);
         setHostDetail(detail ?? "");
         if (state === "connected") {
+          connectionChanged(true);
           setPhase("connected");
           setNotice("");
         } else if (state === "waiting") {
@@ -325,6 +325,7 @@ export function BridgeClient() {
   };
 
   const startHosting = async () => {
+    lastActionRef.current = "host";
     endSession();
     setRole("host");
     setPhase("hosting");
@@ -381,6 +382,8 @@ export function BridgeClient() {
   };
 
   const connectWith = async (pairing: BridgePairing) => {
+    lastPairingRef.current = pairing;
+    lastActionRef.current = "join";
     endSession();
     setRole("joiner");
     setPhase("connecting");
@@ -490,6 +493,7 @@ export function BridgeClient() {
       video.srcObject = stream;
       await video.play().catch(() => undefined);
       scanningRef.current = true;
+      setCameraRunning(true);
       void scanFrame();
     } catch (error) {
       setPhase("home");
@@ -503,6 +507,7 @@ export function BridgeClient() {
 
   /** يفتح وضع المسح: يركّب عنصر الفيديو أولاً ثم يشغّل الكاميرا. */
   const openScanner = () => {
+    lastActionRef.current = "camera";
     setJoinError("");
     stopCamera();
     flushSync(() => setPhase("scanning"));
@@ -611,7 +616,7 @@ export function BridgeClient() {
   };
 
   const onComposerKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       sendChat();
     }
@@ -674,375 +679,144 @@ export function BridgeClient() {
     window.__qrferryBridge = { ...(window.__qrferryBridge ?? {}), chats, received };
   }, [items]);
 
-  // الاتصال التلقائي عند فتح الرابط المرفق بالرمز (#QFB1.…)، مرة واحدة فقط.
+  // Retain the real session across tabs, but release it on shell unmount.
   useEffect(() => {
     mountedRef.current = true;
-    if (!autoJoinedRef.current) {
-      autoJoinedRef.current = true;
-      const pairing = decodeBridgePairing(window.location.href);
-      if (pairing) {
-        window.history.replaceState(null, "", BRIDGE_PATH);
-        // نؤجل بدء الاتصال إلى microtask خارج جسم الـ effect؛ لا يُضبط الحالة متزامناً داخله.
-        queueMicrotask(() => void connectWith(pairing));
-      }
-    }
     return () => {
-      // لا نغيّر رقم الجلسة هنا: في StrictMode يعاد التركيب فوراً ويجب أن يبقى الاتصال التلقائي صالحاً.
       mountedRef.current = false;
       releaseHandles();
       if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
       if (remoteTypingTimerRef.current) clearTimeout(remoteTypingTimerRef.current);
     };
-    // يعمل مرة عند التركيب والتفكيك فقط.
+    // The ref-backed resource owner is mounted once by AppShell.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---------- العرض ----------
+  useEffect(() => {
+    const tryJoin = () => {
+      if (pathname !== "/pc" && pathname !== "/bridge") return;
+      const pairing = decodeBridgePairing(window.location.href);
+      if (!pairing) return;
+      window.history.replaceState(null, "", BRIDGE_PATH);
+      void connectWith(pairing);
+    };
+    queueMicrotask(tryJoin);
+    window.addEventListener("hashchange", tryJoin);
+    if (pathname !== "/pc" && pathname !== "/bridge") {
+      // Navigating away never leaves a hidden camera running.
+      queueMicrotask(() => {
+        if (!mountedRef.current) return;
+        stopCamera();
+        if (phase === "scanning") setPhase("home");
+      });
+    }
+    return () => window.removeEventListener("hashchange", tryJoin);
+    // Only navigation/hash changes should consume a pairing URL, not chat renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
+  useEffect(() => {
+    if (phase !== "connected" || view !== "chat") return;
+    if (pathname !== "/pc" && pathname !== "/bridge") return;
+    timelineRef.current?.lastElementChild?.scrollIntoView({ block: "end", behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "instant" : "smooth" });
+  }, [items.length, remoteTyping, phase, view, pathname]);
+
+  // ---------- Presentation: every state below is derived from the real session ----------
+  const chatVisible = ready && view === "chat";
   const hasItems = items.length > 0;
+  const validPaste = decodeBridgePairing(pasteValue) !== null;
+  const retry = () => {
+    if (lastActionRef.current === "camera") openScanner();
+    else if (lastActionRef.current === "join" && lastPairingRef.current) void connectWith(lastPairingRef.current);
+    else void startHosting();
+  };
+  const failure = joinError || scanError || (hostState === "error" || hostState === "locked" ? hostDetail || tx("تعذّر الاتصال.", "Could not connect.") : "");
+  const timeline = <ol ref={timelineRef} className="msgs bridge-timeline" aria-label={tx("سجل الجلسة", "Session log")} aria-live="polite" aria-relevant="additions">
+    {items.map(item => item.kind === "chat" ? (
+      <li key={`chat-${item.direction}-${item.id}`} className={`m bridge-bubble ${item.direction} ${item.direction === "out" ? "me" : "pc"}`}>
+        <p dir="auto">{item.text}</p>
+        <time dateTime={new Date(item.at).toISOString()}>{new Date(item.at).toLocaleTimeString(lang === "ar" ? "ar-EG" : "en-US", { hour: "2-digit", minute: "2-digit" })}</time>
+      </li>
+    ) : (
+      <li key={`file-${item.direction}-${item.id}`} className={`m file bridge-file ${item.direction} ${item.direction === "out" ? "me" : "pc"}`}>
+        <span className="fi"><DesignIcon name="doc" /></span>
+        <div className="bridge-file-main">
+          <b dir="auto">{item.name}</b>
+          <small>{formatBytes(item.size)} · {fileStatusText(item, tx)}</small>
+          {(item.status === "sending" || item.status === "receiving") && <progress aria-label={tx(`تقدم ${item.name}`, `${item.name} progress`)} max={item.size || 1} value={Math.min(item.progress, item.size || 1)} />}
+          {item.status === "done" && item.bytes && <BridgeMediaPreview item={item} alt={item.name} />}
+          {item.error && <small className="bridge-file-error" role="alert">{item.error}</small>}
+          <time dateTime={new Date(item.at).toISOString()}>{new Date(item.at).toLocaleTimeString(lang === "ar" ? "ar-EG" : "en-US", { hour: "2-digit", minute: "2-digit" })}</time>
+        </div>
+        {item.status === "done" && item.bytes && <button type="button" className="file-download" onClick={() => downloadItem(item)} aria-label={tx(`تنزيل ${item.name}`, `Download ${item.name}`)}><DesignIcon name="up" style={{transform:"rotate(180deg)"}} /></button>}
+      </li>
+    ))}
+    {ready && remoteTyping && <li className="m pc typing" role="status" aria-label={tx("يكتب الآن…", "typing…")}><s/><s/><s/></li>}
+  </ol>;
 
-  const timeline = (
-    <ol className="bridge-timeline" aria-label={tx("سجل الجلسة", "Session log")}>
-      {items.map((item) =>
-        item.kind === "chat" ? (
-          <li key={`chat-${item.direction}-${item.id}`} className={`bridge-bubble ${item.direction}`}>
-            <p>{item.text}</p>
-            <time dateTime={new Date(item.at).toISOString()}>
-              {new Date(item.at).toLocaleTimeString(lang === "ar" ? "ar-EG" : "en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </time>
-          </li>
-        ) : (
-          <li key={`file-${item.direction}-${item.id}`} className={`bridge-file ${item.direction}`}>
-            <div className="bridge-file-main">
-              <span className="bridge-file-name" title={item.name}>
-                {item.name}
-              </span>
-              <small>
-                {formatBytes(item.size)} · {item.direction === "out" ? tx("أُرسل", "Sent") : tx("استُقبل", "Received")}{" "}
-                · {fileStatusText(item, tx)}
-              </small>
-              {(item.status === "sending" || item.status === "receiving") && (
-                <progress
-                  className="bridge-progress"
-                  max={item.size || 1}
-                  value={Math.min(item.progress, item.size || 1)}
-                />
-              )}
-              {item.status === "done" && item.bytes && (
-                <BridgeMediaPreview item={item} alt={item.name} />
-              )}
-              {item.error && <small className="bridge-file-error">{item.error}</small>}
-            </div>
-            {item.status === "done" && item.bytes && (
-              <button
-                type="button"
-                className="bridge-icon-button"
-                onClick={() => downloadItem(item)}
-                aria-label={tx(`تنزيل ${item.name}`, `Download ${item.name}`)}
-                title={tx("تنزيل", "Download")}
-              >
-                <Download size={18} aria-hidden="true" />
-              </button>
-            )}
-          </li>
-        ),
-      )}
-    </ol>
-  );
-
-  return (
-    <main className="transfer-page bridge-page" data-page="bridge" data-phase={phase}>
-      <section className="workspace-intro bridge-intro">
+  return <main className="transfer-page bridge-page" data-page={pathname === "/pc" ? "pc" : "bridge"} data-phase={phase} data-chat={chatVisible}>
+    {!chatVisible && <>
+      <section className="workspace-intro">
         <h1>{tx("اربط هاتفك بالكمبيوتر", "Link your phone and computer")}</h1>
-        <p>
-          {tx(
-            "امسح رمز أحد الجهازين من الآخر، ثم أرسل رسائل وملفات في الاتجاهين. لا تمر البيانات بأي خادم.",
-            "Scan one device's code from the other, then send messages and files both ways. Data never touches a server.",
-          )}
-        </p>
+        <p>{tx("امسح رمز أحد الجهازين من الآخر. لا تمر البيانات بأي خادم.", "Scan one device’s code from the other. Files are transferred peer to peer.")}</p>
       </section>
-
-      {phase === "home" && (
-        <>
-          <div className="bridge-grid">
-            <article className="bridge-card">
-              <Monitor size={28} aria-hidden="true" />
-              <h2>{tx("اعرض رمز الربط من هنا", "Show the pairing code here")}</h2>
-              <p>
-                {tx(
-                  "استخدم هذا على الكمبيوتر، ثم امسح الرمز بالهاتف.",
-                  "Use this on the computer, then scan the code with your phone.",
-                )}
-              </p>
-              <button type="button" className="primary-action" onClick={() => void startHosting()}>
-                <QrCode size={18} aria-hidden="true" />
-                <span>{tx("أنشئ رمز الربط", "Create pairing code")}</span>
-              </button>
-            </article>
-
-            <article className="bridge-card">
-              <ScanLine size={28} aria-hidden="true" />
-              <h2>{tx("امسح رمز الكمبيوتر", "Scan the computer's code")}</h2>
-              <p>
-                {tx(
-                  "استخدم هذا على الهاتف لمسح الرمز المعروض على الشاشة.",
-                  "Use this on the phone to scan the code shown on the screen.",
-                )}
-              </p>
-              <button
-                type="button"
-                className="primary-action"
-                onClick={openScanner}
-              >
-                <Camera size={18} aria-hidden="true" />
-                <span>{tx("افتح الكاميرا للمسح", "Open camera to scan")}</span>
-              </button>
-            </article>
-          </div>
-
-          <form className="bridge-paste" onSubmit={onPasteSubmit}>
-            <label htmlFor="bridge-paste-input">
-              {tx("أو الصق الرابط الذي يعرضه الكمبيوتر", "Or paste the link shown on the computer")}
-            </label>
-            <div className="bridge-paste-row">
-              <input
-                id="bridge-paste-input"
-                type="text"
-                dir="ltr"
-                inputMode="url"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="https://…/pc#QFB1."
-                value={pasteValue}
-                onChange={(event) => setPasteValue(event.target.value)}
-              />
-              <button type="submit" className="bridge-button" disabled={!pasteValue.trim()}>
-                {tx("اتصل", "Connect")}
-              </button>
-            </div>
-          </form>
-
-          {(joinError || scanError) && (
-            <p role="alert" className="bridge-error">
-              {joinError || scanError}
-            </p>
-          )}
-
-          {hasItems && (
-            <section className="bridge-history" aria-label={tx("سجل الجلسة السابقة", "Previous session")}>
-              <div className="bridge-section-head">
-                <h2>{tx("آخر الرسائل والملفات", "Latest messages and files")}</h2>
-                <button type="button" className="bridge-button ghost" onClick={() => setItems([])}>
-                  {tx("مسح السجل", "Clear log")}
-                </button>
-              </div>
-              {timeline}
-            </section>
-          )}
-
-          <ol className="bridge-steps">
-            <li>{tx("اعرض الرمز على أحد الجهازين.", "Show the code on one device.")}</li>
-            <li>
-              {tx(
-                "امسحه من الجهاز الآخر، أو الصق الرابط.",
-                "Scan it from the other device, or paste the link.",
-              )}
-            </li>
-            <li>{tx("بعد الاتصال، أرسل في الاتجاهين.", "Once connected, send in both directions.")}</li>
-          </ol>
-        </>
-      )}
-
-      {phase === "hosting" && (
-        <section className="bridge-panel" aria-live="polite">
-          {qrImage && (
-            <canvas
-              ref={qrCanvasRef}
-              className="bridge-qr-canvas"
-              role="img"
-              aria-label={tx("رمز ربط QRFerry", "QRFerry pairing code")}
-            />
-          )}
-          {hostState === "starting" && <p>{tx("جارٍ تجهيز الرمز…", "Preparing the code…")}</p>}
-          {hostState === "waiting" && (
-            <>
-              <p className="bridge-strong">{tx("امسح هذا الرمز بالهاتف", "Scan this code with your phone")}</p>
-              <p className="bridge-muted">{tx("بانتظار الجهاز الآخر…", "Waiting for the other device…")}</p>
-              {notice && <p className="bridge-muted">{notice}</p>}
-            </>
-          )}
-          {hostState === "locked" && (
-            <p role="alert" className="bridge-error">
-              {tx(
-                "أُوقف الاستماع بعد محاولات فاشلة متكررة. أنشئ رمزاً جديداً.",
-                "Listening stopped after repeated failed attempts. Create a new code.",
-              )}
-            </p>
-          )}
-          {hostState === "error" && (
-            <p role="alert" className="bridge-error">
-              {hostDetail || tx("حدث خطأ.", "Something went wrong.")}
-            </p>
-          )}
-          {shareUrl && hostState !== "error" && (
-            <div className="bridge-link-row">
-              <code dir="ltr">{shareUrl}</code>
-              <button type="button" className="bridge-button" onClick={() => void copyShareUrl()}>
-                {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-                <span>{copied ? tx("تم النسخ", "Copied") : tx("انسخ الرابط", "Copy link")}</span>
-              </button>
-            </div>
-          )}
-          <button type="button" className="bridge-button ghost" onClick={disconnect}>
-            {tx("إلغاء", "Cancel")}
-          </button>
-        </section>
-      )}
-
-      {phase === "scanning" && (
-        <section className="bridge-panel">
-          <div className="bridge-camera">
-            <video ref={videoRef} muted playsInline aria-label={tx("معاينة الكاميرا", "Camera preview")} />
-            <div className="bridge-camera-frame" aria-hidden="true" />
-            <canvas ref={scanCanvasRef} width={SCAN_SIZE} height={SCAN_SIZE} hidden />
-          </div>
-          <p className="bridge-muted">
-            {tx("وجّه الكاميرا نحو رمز الكمبيوتر", "Point the camera at the computer's code")}
-          </p>
-          {scanError && (
-            <p role="alert" className="bridge-error">
-              {scanError}
-            </p>
-          )}
-          <button type="button" className="bridge-button ghost" onClick={cancelScanner}>
-            {tx("إلغاء", "Cancel")}
-          </button>
-        </section>
-      )}
-
-      {phase === "connecting" && (
-        <section className="bridge-panel" aria-live="polite">
-          <p className="bridge-strong">{tx("جارٍ الاتصال والتحقق…", "Connecting and verifying…")}</p>
-          <p className="bridge-muted">
-            {tx(
-              "لن يتم قبول أي بيانات قبل اكتمال التحقق.",
-              "No data is accepted until verification completes.",
-            )}
-          </p>
-          <button type="button" className="bridge-button ghost" onClick={disconnect}>
-            {tx("إلغاء", "Cancel")}
-          </button>
-        </section>
-      )}
-
-      {phase === "connected" && (
-        <section className="bridge-session" aria-label={tx("جلسة الاتصال", "Session")}>
-          <div className="bridge-session-bar">
-            <span className="bridge-status" role="status">
-              <span className="bridge-dot" aria-hidden="true" />
-              {tx("متصل", "Connected")}
-              {role && (
-                <small>
-                  {" · "}
-                  {role === "host"
-                    ? tx("هذا الجهاز: الكمبيوتر", "This device: computer")
-                    : tx("هذا الجهاز: الهاتف", "This device: phone")}
-                </small>
-              )}
-              {remoteTyping && (
-                <span className="bridge-typing-indicator" role="status" aria-live="polite">
-                  <span className="bridge-typing-dots" aria-hidden="true">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                  {tx("يكتب الآن…", "typing…")}
-                </span>
-              )}
-            </span>
-            <button type="button" className="bridge-button ghost" onClick={disconnect}>
-              <Unplug size={16} aria-hidden="true" />
-              <span>{tx("قطع الاتصال", "Disconnect")}</span>
-            </button>
-          </div>
-
-          {notice && (
-            <p role="alert" className="bridge-error">
-              {notice}
-            </p>
-          )}
-
-          <div
-            className={`bridge-drop${dragging ? " dragging" : ""}`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-          >
-            {hasItems ? (
-              timeline
-            ) : (
-              <p className="bridge-muted bridge-empty">
-                {tx(
-                  "ابدأ بإرسال رسالة أو ملف. الملفات المستلمة تظهر هنا.",
-                  "Start by sending a message or a file. Received files appear here.",
-                )}
-              </p>
-            )}
-          </div>
-
-          <form
-            className="bridge-composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              sendChat();
-            }}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,audio/*,video/*,*/*"
-              hidden
-              onChange={onPickFiles}
-              tabIndex={-1}
-            />
-            <button
-              type="button"
-              className="bridge-icon-button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label={tx("إرفاق ملف", "Attach file")}
-              title={tx("إرفاق ملف", "Attach file")}
-            >
-              <Paperclip size={18} aria-hidden="true" />
-            </button>
-            <textarea
-              rows={1}
-              value={draft}
-              maxLength={BRIDGE_MAX_CHAT_CHARS}
-              onChange={(event) => onDraftChange(event.target.value)}
-              onKeyDown={onComposerKey}
-              placeholder={tx("اكتب رسالة…", "Type a message…")}
-              aria-label={tx("اكتب رسالة", "Type a message")}
-            />
-            <button type="submit" className="bridge-button" disabled={!draft.trim()} aria-label={tx("إرسال", "Send")}>
-              <Send size={16} aria-hidden="true" />
-              <span>{tx("إرسال", "Send")}</span>
-            </button>
-          </form>
-          <p className="bridge-muted bridge-hint">
-            {tx(
-              `حد الملف ${formatBytes(MAX_FILE_BYTES)}. يمكنك أيضاً سحب الملفات وإفلاتها هنا.`,
-              `File limit ${formatBytes(MAX_FILE_BYTES)}. You can also drag and drop files here.`,
-            )}
-          </p>
-        </section>
-      )}
-    </main>
-  );
+      <div className="grid bridge-grid">
+        {phase === "home" && <>
+          <Card className="act2"><div className="ico"><DesignIcon name="monitor" /></div>
+            <h2>{tx("اعرض رمز الربط من هنا", "Show the pairing code here")}</h2>
+            <p>{tx("استخدم هذا على الكمبيوتر، ثم امسح الرمز بالهاتف.", "Use this on the computer, then scan the code with your phone.")}</p>
+            <Capsule tinted large onClick={() => void startHosting()}><DesignIcon name="qr" />{tx("أنشئ رمز الربط", "Create pairing code")}</Capsule>
+          </Card>
+          <Card className="act2"><div className="ico"><DesignIcon name="scan" /></div>
+            <h2>{tx("امسح رمز الكمبيوتر", "Scan the computer’s code")}</h2>
+            <p>{tx("استخدم هذا على الهاتف لمسح الرمز المعروض على الشاشة.", "Use this on the phone to scan the code shown on the screen.")}</p>
+            <Capsule large onClick={openScanner}><DesignIcon name="cam" />{tx("افتح الكاميرا للمسح", "Open camera to scan")}</Capsule>
+          </Card>
+          <Card className="act2">
+            <form onSubmit={onPasteSubmit}>
+              <h2 className="s"><label htmlFor="bridge-paste-input">{tx("أو الصق الرابط الذي يعرضه الكمبيوتر", "Or paste the link shown on the computer")}</label></h2>
+              <input id="bridge-paste-input" className="field" type="text" dir="ltr" inputMode="url" autoComplete="off" spellCheck={false} placeholder="https://…/pc#QFB1…" value={pasteValue} aria-invalid={!!pasteValue.trim() && !validPaste} aria-describedby={pasteValue.trim() && !validPaste ? "pair-invalid" : undefined} onChange={e => setPasteValue(e.target.value)} />
+              {pasteValue.trim() && !validPaste && <p id="pair-invalid" className="bridge-error">{tx("الرابط أو الرمز غير صالح. انسخ الرابط كاملاً من الكمبيوتر.", "Invalid link. Copy the full link from the computer.")}</p>}
+              <Capsule type="submit" tinted large disabled={!validPaste}>{tx("اتصل", "Connect")}</Capsule>
+            </form>
+          </Card>
+        </>}
+        {phase === "hosting" && <Card className="act2 pair-stage">
+          <h2>{tx("رمز الربط", "Pairing code")}</h2>
+          <p>{tx("امسحه بالهاتف من تبويب «ربط».", "Scan it from the Pair tab on your phone.")}</p>
+          {qrImage && hostState !== "error" && <div className="qrt"><canvas ref={qrCanvasRef} className="bridge-qr-canvas" role="img" aria-label={tx("رمز ربط QRFerry", "QRFerry pairing code")} /></div>}
+          <div className="status" role="status"><span className={`dot ${hostState === "waiting" || hostState === "starting" ? "live" : "error"}`} />{hostState === "starting" ? tx("جارٍ تجهيز الرمز…", "Preparing the code…") : hostState === "waiting" ? tx("بانتظار المسح…", "Waiting for a scan…") : hostDetail}</div>
+          {notice && <p role="status">{notice}</p>}
+          {shareUrl && hostState !== "error" && <div className="bridge-link-row"><code dir="ltr">{shareUrl}</code><Capsule onClick={() => void copyShareUrl()}><DesignIcon name={copied ? "ok" : "copy"} />{copied ? tx("تم النسخ", "Copied") : tx("انسخ الرابط", "Copy link")}</Capsule></div>}
+          <Capsule large onClick={disconnect}>{tx("إلغاء", "Cancel")}</Capsule>
+        </Card>}
+        {phase === "scanning" && <Card className="act2 pair-stage">
+          <h2>{tx("الكاميرا", "Camera")}</h2><p>{tx("وجّهها إلى الرمز المعروض على الكمبيوتر.", "Point it at the code on your computer.")}</p>
+          <div className="cam bridge-camera"><video ref={videoRef} muted playsInline aria-label={tx("معاينة الكاميرا", "Camera preview")} /><CameraCorners />{cameraRunning && <i className="ln" aria-hidden="true" />}<canvas ref={scanCanvasRef} width={SCAN_SIZE} height={SCAN_SIZE} hidden /></div>
+          {scanError && <p className="bridge-error" role="alert">{scanError}</p>}
+          <Capsule large onClick={cancelScanner}>{tx("إلغاء", "Cancel")}</Capsule>
+        </Card>}
+        {phase === "connecting" && <Card className="act2 pair-stage"><h2>{tx("جارٍ الاتصال والتحقق…", "Connecting and verifying…")}</h2><div className="status" role="status"><span className="dot live"/>{tx("لن يتم قبول أي بيانات قبل اكتمال التحقق.", "No data is accepted until verification completes.")}</div><Capsule large onClick={disconnect}>{tx("إلغاء", "Cancel")}</Capsule></Card>}
+        {ready && <Card className="act2"><h2>{tx("متصل", "Connected")}</h2><div className="status"><span className="dot connected" />{tx("جلسة الاتصال", "Session")}</div><Capsule tinted large onClick={() => setView("chat")}><DesignIcon name="chat" />{tx("محادثة", "Chat")}</Capsule><Capsule large onClick={disconnect}>{tx("قطع الاتصال", "Disconnect")}</Capsule></Card>}
+        {failure && <Card className="act2 pair-stage"><p className="bridge-error" role="alert"><span className="dot error" />{failure}</p><Capsule large onClick={retry}>{tx("إعادة المحاولة", "Try again")}</Capsule></Card>}
+      </div>
+      {!ready && <p className="steps">{tx("اعرض الرمز على جهاز · امسحه من الآخر · ابدأ المحادثة", "Show the code on one device · scan it from the other · start chatting")}</p>}
+      {phase === "home" && hasItems && <section className="card bridge-history"><div className="bridge-section-head"><h2>{tx("آخر الرسائل والملفات", "Latest messages and files")}</h2><Capsule onClick={() => setItems([])}>{tx("مسح السجل", "Clear log")}</Capsule></div>{timeline}</section>}
+    </>}
+    {chatVisible && <section className="bridge-session" aria-label={tx("جلسة الاتصال", "Session")}>
+      <div className="glass chatbar"><span className="av"><DesignIcon name="monitor" /></span><div><b>{role === "host" ? tx("الهاتف", "Phone") : tx("الكمبيوتر", "Computer")}</b><small className="bridge-status" role="status">{tx("متصل الآن", "Connected now")}</small></div><button className="x" type="button" onClick={disconnect} aria-label={tx("قطع الاتصال", "Disconnect")}><DesignIcon name="x" /></button></div>
+      {notice && <p className="bridge-error" role="alert">{notice}</p>}
+      <div className={`bridge-drop ${dragging ? "dragging" : ""}`} onDragOver={e => {e.preventDefault();setDragging(true);}} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+        <div className="sys"><DesignIcon name="ok" />{tx("تم الاتصال", "Connected")}</div>
+        {timeline}
+      </div>
+      {/* Outside the animated page: fixed controls must stay anchored to the viewport. */}
+      {(["/pc", "/bridge"].includes(pathname)) && createPortal(<form className="bridge-composer" onSubmit={e => {e.preventDefault();sendChat();}}>
+        <input ref={fileInputRef} type="file" multiple accept="image/*,audio/*,video/*,*/*" hidden onChange={onPickFiles} tabIndex={-1} />
+        <CircleButton onClick={() => fileInputRef.current?.click()} aria-label={tx("إرفاق", "Attach file")}><DesignIcon name="plus" /></CircleButton>
+        <label className="glass inp"><textarea rows={1} value={draft} maxLength={BRIDGE_MAX_CHAT_CHARS} onChange={e => onDraftChange(e.target.value)} onKeyDown={onComposerKey} placeholder={tx("رسالة", "Message")} aria-label={tx("اكتب رسالة", "Type a message")} /></label>
+        <CircleButton type="submit" tinted disabled={!draft.trim()} aria-label={tx("إرسال", "Send")}><DesignIcon name="sendup" /></CircleButton>
+      </form>, document.body)}
+    </section>}
+  </main>;
 }

@@ -1,76 +1,38 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// Actual HTTP against the running Next production server, not the removed Worker API.
+const origin = process.env.QRFERRY_TEST_ORIGIN || "http://localhost:3000";
 async function render(pathname) {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set(
-    "test",
-    `${process.pid}-${Date.now()}-${pathname}`,
-  );
-  const { default: worker } = await import(workerUrl.href);
-
-  return worker.fetch(
-    new Request(`http://localhost${pathname}`, {
-      headers: { accept: "text/html" },
-    }),
-    {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
-      },
-    },
-    {
-      waitUntil() {},
-      passThroughOnException() {},
-    },
-  );
+  return fetch(new URL(pathname, origin), {headers:{accept:"text/html"}});
 }
 
-test("server-renders the sender product surface (Arabic RTL)", async () => {
-  const response = await render("/");
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-
-  const html = await response.text();
-  assert.match(html, /<title>إرسال ملف · QRFerry<\/title>/i);
-  assert.match(html, /أرسل ملفاتك/);
-  assert.match(html, /ملفات الإرسال/);
-  assert.match(html, /ابدأ بثّ QR/);
-  assert.match(html, /الخصوصية وخيارات إضافية/);
-  assert.match(html, /QRFERRY-UI-7/);
-  assert.match(html, /إعدادات بثّ QR/);
-  assert.match(html, /Turbo 30/);
-  assert.match(html, /1 Mbps/);
-  assert.match(html, /تشفير الملف بكلمة مرور/);
-  assert.doesNotMatch(html, /codex-preview|loading skeleton/i);
-});
-
-test("server-renders the mobile scanner surface (Arabic RTL)", async () => {
-  const response = await render("/scan");
-  assert.equal(response.status, 200);
-
-  const html = await response.text();
-  assert.match(html, /<title>مسح نقل · QRFerry<\/title>/i);
-  assert.match(html, /استقبل ملفاتك/);
-  assert.match(html, /تشغيل الكاميرا/);
-  assert.match(html, /تقدّم استرداد الملف/);
-  assert.match(html, /حالة الاستقبال/);
-  assert.match(html, /مسار مزدوج/);
-  assert.match(html, /فك p50 \/ p95/i);
-  assert.match(html, /التفاصيل التقنية/);
-});
-
-for (const [path, title] of [
-  ["/history", "سجل النقل المحلي"],
-  ["/offline", "حزمة النشر الأوفلاين"],
-  ["/privacy", "سياسة الخصوصية"],
+for (const [route, title, content] of [
+  ["/", "إرسال ملف · QRFerry", "الخصوصية وخيارات إضافية"],
+  ["/scan", "مسح نقل · QRFerry", "حالة الاستقبال"],
+  ["/bridge", "جسر النقل الذكي · QRFerry", "أنشئ رمز الربط"],
+  ["/pc", "جسر الكمبيوتر · QRFerry", "أنشئ رمز الربط"],
+  ["/history", "سجل النقل · QRFerry", "الرجوع للرئيسية"],
+  ["/offline", "حزمة أوفلاين · QRFerry", "حزمة التطبيق"],
+  ["/privacy", "سياسة الخصوصية · QRFerry", "كيف تنتقل الملفات؟"],
 ]) {
-  test(`server-renders ${path} with shared identity and an explicit home link`, async () => {
-    const response = await render(path);
+  test(`real HTTP SSR: ${route} retains its route, metadata, identity and functional surface`, async () => {
+    const response = await render(route);
     assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /^text\/html/);
     const html = await response.text();
-    assert.match(html, /QRFERRY-UI-7/);
-    assert.match(html, /class="support-page"/);
-    assert.match(html, /الرجوع للرئيسية/);
-    assert.ok(html.includes(title));
+    assert.ok(html.includes(`<title>${title}</title>`));
+    assert.ok(html.includes(content));
+    assert.ok(html.includes('class="app-header"'));
+    assert.ok(html.includes('class="bottom-nav"'));
+    assert.ok(html.includes('dir="rtl"'));
+    assert.ok(!html.includes('class="workspace-brand"'));
+    assert.ok(!html.includes('id="nav-chat"'), "Chat is not advertised before a real connection");
   });
 }
+
+test("real HTTP 404 uses the shared surface without inventing the missing receiver route", async () => {
+  const response = await render("/tv");
+  assert.equal(response.status, 404);
+  assert.ok((await response.text()).includes("هذه الصفحة غير موجودة."));
+});

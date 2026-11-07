@@ -1,7 +1,4 @@
 import type { Metadata } from "next";
-import { WorkspaceHeader } from "../workspace-ui";
-import { BridgeClient } from "./bridge-client";
-import "./bridge.css";
 
 export const metadata: Metadata = {
   title: "جسر النقل الذكي · QRFerry",
@@ -9,11 +6,7 @@ export const metadata: Metadata = {
     "اربط هاتفك بالكمبيوتر بمسح رمز واحد، ثم أرسل رسائل وملفات في الاتجاهين مباشرةً بينهما دون رفعها إلى أي خادم.",
 };
 
+// The persistent AppShell owns the real bridge session across tab navigation.
 export default function BridgePage() {
-  return (
-    <>
-      <WorkspaceHeader active="bridge" />
-      <BridgeClient />
-    </>
-  );
+  return null;
 }

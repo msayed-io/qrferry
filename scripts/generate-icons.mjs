@@ -26,7 +26,7 @@ for (const { name, size } of SIZES) {
 // أيقونة maskable: الخلفية ممتلئة حتى الحواف (بدون زوايا دائرية) لأن
 // النظام قد يقصّها في أشكال مختلفة، ويُحفظ الشعار داخل منطقة الأمان 80%.
 const maskable = await sharp({
-  create: { width: 512, height: 512, channels: 4, background: "#111820" },
+  create: { width: 512, height: 512, channels: 4, background: "#F2F2F7" },
 })
   .composite([
     {

@@ -74,7 +74,7 @@ export function OfflineClient() {
           </div>
           <button
             type="button"
-            className="support-button support-signal offline-download"
+            className="support-button support-signal offline-download glass cap tinted"
             disabled={state === "building"}
             aria-busy={state === "building"}
             onClick={() => void build()}

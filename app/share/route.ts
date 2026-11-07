@@ -24,9 +24,9 @@ function buildStoreHtml(
   const json = JSON.stringify(files);
   return `<!doctype html>
 <html lang="ar" dir="rtl">
-<head><meta charset="utf-8"><title>QRFerry</title></head>
-<body style="font-family:system-ui;background:#111820;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0">
-  <p id="msg">جارٍ تجهيز الملفات…</p>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>QRFerry</title><link rel="stylesheet" href="/design.css"></head>
+<body>
+  <main class="wrap card"><p id="msg" role="status">جارٍ تجهيز الملفات…</p></main>
 <script>
 const DB = "qrferry-shared";
 const files = ${json};
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     if (total > MAX_SHARE_BYTES) {
       // الملف كبير جداً لمسار المشاركة — نوجه لصفحة الإرسال المباشرة
       return new Response(
-        `<!doctype html><html lang="ar"><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#111820;color:#fff;text-align:center"><div><p>الملف كبير جداً لمسار المشاركة.</p><a href="/" style="color:#e7ff54">افتح صفحة الإرسال واختر الملف يدوياً</a></div></body></html>`,
+        `<!doctype html><html lang="ar" dir="rtl"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><link rel="stylesheet" href="/design.css"><title>QRFerry</title></head><body><main class="wrap card"><p role="alert">الملف كبير جداً لمسار المشاركة.</p><a href="/" class="glass tinted cap" style="margin-top:16px;--o:9.94px;text-decoration:none">افتح صفحة الإرسال واختر الملف يدوياً</a></main></body></html>`,
         { headers: { "content-type": "text/html; charset=utf-8" } },
       );
     }

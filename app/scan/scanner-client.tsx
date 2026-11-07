@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../lang-provider";
+import { DesignIcon } from "../design-icons";
 import { WorkspaceDisclosure } from "../workspace-ui";
 import { Bird, Check, Download, Camera } from "lucide-react";
 import { decompressTransfer } from "@/lib/compression";
@@ -1174,20 +1175,14 @@ export function ScannerClient() {
       className={`transfer-page scanner-page ws-state-${state} ${complete ? "is-complete" : ""} ${state === "password" || state === "signature-review" ? "needs-review" : ""}`}
     >
       <section className="workspace-intro">
-        <h1>{complete ? t("scan.h1.complete") : t("scan.h1.ready")}</h1>
-        <p>
-          {complete
-            ? t("scan.intro.complete")
-            : scanMode === "dual"
-              ? t("scan.intro.dual")
-              : t("scan.intro.single")}
-        </p>
+        <h1>{lang === "ar" ? "استقبال" : "Receive"}</h1>
+        <p>{lang === "ar" ? "وجّه الكاميرا إلى بثّ QR على الجهاز الآخر." : "Point the camera at the QR stream on the other device."}</p>
       </section>
 
       <section className="scanner-shell">
         <div className="camera-card">
           <div className="step-heading">
-            <span>01</span>
+
             <h2>{lang === "ar" ? "الكاميرا" : "Camera"}</h2>
           </div>
           <div
@@ -1197,9 +1192,10 @@ export function ScannerClient() {
               ref={videoRef}
               playsInline
               muted
-              aria-label="معاينة الكاميرا"
+              aria-label={lang === "ar" ? "معاينة الكاميرا" : "Camera preview"}
             />
             <canvas ref={canvasRef} hidden />
+            {active && <i className="ln" aria-hidden="true" />}
             <div className="scan-reticle" aria-hidden="true">
               <i />
               <i />
@@ -1230,7 +1226,7 @@ export function ScannerClient() {
             ) : null}
             {torchAvailable && active ? (
               <button
-                className="torch-button"
+                className="torch-button glass cap"
                 type="button"
                 onClick={toggleTorch}
               >
@@ -1243,7 +1239,7 @@ export function ScannerClient() {
             <div className="camera-actions">
               {" "}
               <button
-                className="primary-action"
+                className="primary-action glass tinted cap"
                 type="button"
                 disabled={
                   state === "starting" ||
@@ -1260,12 +1256,12 @@ export function ScannerClient() {
                     : () => void startCamera("qr")
                 }
               >
-                <span aria-hidden="true">{active ? "■" : "◎"}</span>
+                <DesignIcon name="cam" />
                 {state === "starting"
                   ? t("scan.loadingBtn")
                   : active
                     ? t("scan.stop")
-                    : t("scan.start")}
+                    : lang === "ar" ? "تشغيل الكاميرا" : "Start camera"}
               </button>
             </div>
           ) : null}
@@ -1276,7 +1272,7 @@ export function ScannerClient() {
             <div
               className="scan-mode-picker"
               role="radiogroup"
-              aria-label="تخطيط الماسح"
+              aria-label={lang === "ar" ? "تخطيط الماسح" : "Scanner layout"}
             >
               <button
                 type="button"
@@ -1324,7 +1320,7 @@ export function ScannerClient() {
 
         <div className="receive-card">
           <div className="step-heading">
-            <span>02</span>
+
             <h2>
               {complete
                 ? lang === "ar"
@@ -1364,7 +1360,7 @@ export function ScannerClient() {
           <div
             className="progress-track"
             role="progressbar"
-            aria-label="تقدّم استرداد الملف"
+            aria-label={lang === "ar" ? "تقدّم استرداد الملف" : "File recovery progress"}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(progress * 100)}
@@ -1424,16 +1420,16 @@ export function ScannerClient() {
                 </p>
               ) : null}
               <div className="prompt-actions">
-                <button type="button" onClick={() => void submitPassword()}>
+                <button type="button" className="glass tinted cap" onClick={() => void submitPassword()}>
                   {t("scan.passwordDecrypt")}
                 </button>
-                <button type="button" onClick={cancelPassword}>
+                <button type="button" className="glass cap" onClick={cancelPassword}>
                   {t("scan.passwordCancel")}
                 </button>
               </div>
               <button
                 type="button"
-                className="mini-btn"
+                className="mini-btn glass cap"
                 onClick={() => void startCamera("password")}
               >
                 {t("scan.passwordScanQr")}
@@ -1453,13 +1449,13 @@ export function ScannerClient() {
               </p>
               <p>{t("scan.signBody")}</p>
               <div className="trust-actions">
-                <button
+                <button className="glass cap"
                   type="button"
                   onClick={() => signatureReview.proceed(true)}
                 >
                   {t("scan.signTrust")}
                 </button>
-                <button
+                <button className="glass cap"
                   type="button"
                   onClick={() => signatureReview.proceed(false)}
                 >
@@ -1467,7 +1463,7 @@ export function ScannerClient() {
                 </button>
                 <button
                   type="button"
-                  className="mini-btn"
+                  className="mini-btn glass cap"
                   onClick={cancelSignatureReview}
                 >
                   {t("scan.passwordCancel")}
@@ -1487,16 +1483,15 @@ export function ScannerClient() {
             </p>
           ) : null}
 
-          {!complete ? transferStats : null}
 
           <WorkspaceDisclosure
             className="scanner-details"
             title={lang === "ar" ? "التفاصيل التقنية" : "Technical details"}
           >
-            {complete ? transferStats : null}
+            {transferStats}
             <div
               className="scan-diagnostics channel-diagnostics"
-              aria-label="أداء الكاميرا والمفكك لحظياً"
+              aria-label={lang === "ar" ? "أداء الكاميرا والمفكك لحظياً" : "Live camera and decoder performance"}
             >
               <span>
                 <b>
@@ -1562,7 +1557,7 @@ export function ScannerClient() {
               </p>
               <button
                 type="button"
-                className="primary-action camera-retry"
+                className="primary-action camera-retry glass tinted cap"
                 onClick={() => void startCamera("qr")}
               >
                 {lang === "ar" ? "إعادة المحاولة" : "Try again"}
@@ -1598,7 +1593,7 @@ export function ScannerClient() {
               {recoveredFiles.length > 1 ? (
                 <button
                   type="button"
-                  className="primary-action"
+                  className="primary-action glass tinted cap"
                   onClick={() => void downloadAllZip()}
                 >
                   <Download size={18} aria-hidden="true" />
@@ -1606,7 +1601,7 @@ export function ScannerClient() {
                 </button>
               ) : null}
               <button
-                className="link-action"
+                className="link-action glass cap"
                 type="button"
                 onClick={() => void startCamera()}
               >

@@ -348,9 +348,14 @@ test("files flow in both directions across many chunks, byte-exact", async () =>
 
   await until(
     () =>
-      [...session.joinerEvents.files.values()].some((item) => item.status === "done") &&
-      [...session.hostEvents.files.values()].some(
-        (item) => item.direction === "in" && item.status === "done",
+      // A received file may be complete before the peer's acknowledgement arrives.
+      // Wait for both directions on both endpoints before asserting sender completion.
+      [session.joinerEvents, session.hostEvents].every((events) =>
+        (["in", "out"] as const).every((direction) =>
+          [...events.files.values()].some(
+            (item) => item.direction === direction && item.status === "done",
+          ),
+        ),
       ),
     "اكتمال الملفين",
     15_000,

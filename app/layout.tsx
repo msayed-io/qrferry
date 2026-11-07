@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import Link from "next/link";
-import "@fontsource/ibm-plex-sans-arabic/300.css";
-import "@fontsource/ibm-plex-sans-arabic/400.css";
-import "@fontsource/ibm-plex-sans-arabic/500.css";
-import "@fontsource/ibm-plex-sans-arabic/600.css";
-import "@fontsource/ibm-plex-sans-arabic/700.css";
-import "@fontsource-variable/geist-mono";
 import "./globals.css";
+import "./workspace.css";
+import "./support.css";
+import "./bridge/bridge.css";
+import { AppShell } from "./app-shell";
 import { PwaRegister } from "./pwa-register";
 import { LangProvider } from "./lang-provider";
-import { NetworkIndicator } from "./network-indicator";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -66,21 +62,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="rtl">
-      <body className="antialiased">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem("qrferry-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}` }} />
         <LangProvider>
           <PwaRegister />
-          {children}
-          <footer className="site-footer">
-            <span>QRFerry · ملفاتك لا تغادر أجهزتك أبداً</span>
-            <nav aria-label="روابط الموقع">
-              <Link href="/bridge">جسر النقل الذكي</Link>
-              <Link href="/history">السجل</Link>
-              <Link href="/offline">أوفلاين</Link>
-              <Link href="/privacy">الخصوصية</Link>
-            </nav>
-          </footer>
-          <NetworkIndicator />
+          <AppShell>{children}</AppShell>
         </LangProvider>
       </body>
     </html>

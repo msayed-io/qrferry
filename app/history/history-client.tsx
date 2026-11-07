@@ -93,7 +93,7 @@ export function HistoryClient() {
                   ? "ستظهر هنا تفاصيل النقولات المستلمة."
                   : "Details of received transfers will appear here."}
               </p>
-              <Link className="support-button support-signal" href="/scan">
+              <Link className="support-button support-signal glass cap tinted" href="/scan">
                 <ScanLine size={19} aria-hidden="true" />
                 {ar ? "استقبال ملفات" : "Receive files"}
               </Link>
@@ -153,7 +153,7 @@ export function HistoryClient() {
               </ol>
               <div className="support-card-footer">
                 <button
-                  className="support-button support-danger"
+                  className="support-button support-danger glass cap"
                   onClick={() => setConfirm(true)}
                 >
                   <Trash2 size={18} aria-hidden="true" />
@@ -193,14 +193,14 @@ export function HistoryClient() {
           </p>
           <div className="support-dialog-actions">
             <button
-              className="support-button"
+              className="support-button glass cap"
               disabled={clearing}
               onClick={() => setConfirm(false)}
             >
               {ar ? "إلغاء" : "Cancel"}
             </button>
             <button
-              className="support-button support-danger"
+              className="support-button support-danger glass cap"
               disabled={clearing}
               onClick={() => void onClear()}
             >

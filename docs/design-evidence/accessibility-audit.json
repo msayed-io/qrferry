@@ -1,0 +1,152 @@
+{
+  "contrast": [
+    {
+      "theme": "light",
+      "name": "body label on card",
+      "ratio": 21,
+      "passes4_5": true
+    },
+    {
+      "theme": "light",
+      "name": "secondary label on card",
+      "ratio": 3.6144769974292625,
+      "passes4_5": false
+    },
+    {
+      "theme": "light",
+      "name": "white on tint",
+      "ratio": 4.016975780478911,
+      "passes4_5": false
+    },
+    {
+      "theme": "light",
+      "name": "white on actual tinted control",
+      "ratio": 3.527566219759006,
+      "passes4_5": false
+    },
+    {
+      "theme": "light",
+      "name": "error on card",
+      "ratio": 3.547137959249039,
+      "passes4_5": false
+    },
+    {
+      "theme": "dark",
+      "name": "body label on card",
+      "ratio": 17.014735210873155,
+      "passes4_5": true
+    },
+    {
+      "theme": "dark",
+      "name": "secondary label on card",
+      "ratio": 6.300440278676909,
+      "passes4_5": true
+    },
+    {
+      "theme": "dark",
+      "name": "white on tint",
+      "ratio": 3.6474724026721494,
+      "passes4_5": false
+    },
+    {
+      "theme": "dark",
+      "name": "white on actual tinted control",
+      "ratio": 4.2292206021641565,
+      "passes4_5": false
+    },
+    {
+      "theme": "dark",
+      "name": "error on card",
+      "ratio": 4.796750339666892,
+      "passes4_5": true
+    }
+  ],
+  "targets": [
+    {
+      "theme": "light",
+      "route": "/",
+      "small": []
+    },
+    {
+      "theme": "light",
+      "route": "/scan",
+      "small": []
+    },
+    {
+      "theme": "light",
+      "route": "/bridge",
+      "small": []
+    },
+    {
+      "theme": "light",
+      "route": "/history",
+      "small": []
+    },
+    {
+      "theme": "light",
+      "route": "/offline",
+      "small": []
+    },
+    {
+      "theme": "light",
+      "route": "/privacy",
+      "small": []
+    },
+    {
+      "theme": "dark",
+      "route": "/",
+      "small": []
+    },
+    {
+      "theme": "dark",
+      "route": "/scan",
+      "small": []
+    },
+    {
+      "theme": "dark",
+      "route": "/bridge",
+      "small": []
+    },
+    {
+      "theme": "dark",
+      "route": "/history",
+      "small": []
+    },
+    {
+      "theme": "dark",
+      "route": "/offline",
+      "small": []
+    },
+    {
+      "theme": "dark",
+      "route": "/privacy",
+      "small": []
+    }
+  ],
+  "keyboard": [
+    {
+      "theme": "light",
+      "segmentArrow": true,
+      "navigationEnd": true,
+      "outline": {
+        "outline": "solid",
+        "width": "2px",
+        "focused": true
+      }
+    },
+    {
+      "theme": "dark",
+      "segmentArrow": true,
+      "navigationEnd": true,
+      "outline": {
+        "outline": "solid",
+        "width": "2px",
+        "focused": true
+      }
+    }
+  ],
+  "limitations": [
+    "Computed contrast checks are token-pair checks, not a full WCAG certification.",
+    "Native media controls and physical touch hardware were not tested."
+  ]
+}

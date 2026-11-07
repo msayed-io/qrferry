@@ -10,20 +10,19 @@ import {
   useState,
 } from "react";
 import { useI18n } from "./lang-provider";
+import { NetworkStatus } from "./design-system";
+import { DesignIcon, EmptyQrIcon } from "./design-icons";
 import { WorkspaceDisclosure, WorkspaceDialog } from "./workspace-ui";
 import {
   Camera,
   Flame,
-  Folder,
   Lock,
   LockOpen,
-  Maximize,
   PenLine,
   Radio,
   RefreshCw,
   Zap,
   X,
-  QrCode,
 } from "lucide-react";
 import { compressForTransferViaWorker } from "@/lib/compression-worker";
 import { encryptPayload } from "@/lib/encryption";
@@ -1139,15 +1138,15 @@ export function SendClient() {
       className={`transfer-page sender-page ${broadcastEnabled ? "broadcast-active" : ""}`}
     >
       <section className="workspace-intro">
-        <h1>{t("send.hero")}</h1>
+        <h1>{lang === "ar" ? "إرسال" : "Send"}</h1>
         <p>
           {lang === "ar"
-            ? "اختر ملفاتك، ثم أرسلها عبر الشبكة أو بثّ QR."
+            ? "اختر ملفاتك ثم ابثّها عبر QR أو الشبكة."
             : "Choose your files. Send over Wi-Fi or a QR stream."}
         </p>
       </section>
 
-      <section className="sender-grid" aria-label="إنشاء نقل عبر QR">
+      <section className="sender-grid" aria-label={lang === "ar" ? "إنشاء نقل عبر QR" : "Create a QR transfer"}>
         <div
           className={`control-panel ${dragging ? "dragging" : ""}`}
           onDragEnter={(event) => {
@@ -1159,13 +1158,13 @@ export function SendClient() {
           onDrop={dropFiles}
         >
           <div className="step-heading">
-            <span>01</span>
+
             <div>
-              <h2>{t("send.step1.title")}</h2>
+              <h2>{lang === "ar" ? "الملفات" : "Files"}</h2>
               <p>
                 {lang === "ar"
-                  ? "حتى 3 ملفات · 512 MB إجمالًا"
-                  : "Up to 3 files · 512 MB total"}
+                  ? `حتى ${MAX_BATCH_FILES} ملفات · ${formatBytes(MAX_FILE_BYTES)} إجمالًا`
+                  : `Up to ${MAX_BATCH_FILES} files · ${formatBytes(MAX_FILE_BYTES)} total`}
               </p>
             </div>
           </div>
@@ -1178,8 +1177,8 @@ export function SendClient() {
               onChange={selectFiles}
               aria-label={
                 lang === "ar"
-                  ? "اختر حتى 3 ملفات للنقل"
-                  : "Choose up to 3 files to send"
+                  ? `اختر حتى ${MAX_BATCH_FILES} ملفات للنقل`
+                  : `Choose up to ${MAX_BATCH_FILES} files to send`
               }
             />
             <input
@@ -1188,16 +1187,24 @@ export function SendClient() {
               multiple
               style={{ display: "none" }}
               onChange={selectFolder}
-              aria-label="اختر مجلداً كاملاً للنقل"
+              aria-label={lang === "ar" ? "اختر مجلداً كاملاً للنقل" : "Choose a folder to send"}
               {...({ webkitdirectory: "" } as Record<string, string>)}
             />
           </div>
 
-          <div className="send-tabs" role="tablist">
+          <div className="send-tabs seg" aria-label={lang === "ar" ? "نوع المحتوى" : "Content type"} role="tablist"
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const next = event.key === "Home" ? "file" : event.key === "End" ? "text" : tab === "file" ? "text" : "file";
+              setTab(next);
+              event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next === "file" ? 0 : 1]?.focus();
+            }}>
             <button
               type="button"
               role="tab"
               aria-selected={tab === "file"}
+              aria-controls="send-input-panel" tabIndex={tab === "file" ? 0 : -1}
               className={tab === "file" ? "selected" : ""}
               onClick={() => setTab("file")}
             >
@@ -1207,6 +1214,7 @@ export function SendClient() {
               type="button"
               role="tab"
               aria-selected={tab === "text"}
+              aria-controls="send-input-panel" tabIndex={tab === "text" ? 0 : -1}
               className={tab === "text" ? "selected" : ""}
               onClick={() => setTab("text")}
             >
@@ -1214,13 +1222,17 @@ export function SendClient() {
             </button>
           </div>
 
+          <div id="send-input-panel" role="tabpanel" aria-label={tab === "file" ? t("send.fileTab") : t("send.textTab")}>
           {tab === "file" ? (
             <div
-              className={`drop-zone ${dragging ? "dragging" : ""}`}
+              className={`drop-zone drop ${dragging ? "dragging" : ""}`}
               hidden={!!fileData}
             >
+              <div className="ico"><DesignIcon name="doc" /></div>
+              <p className="batch-hint">{lang === "ar" ? "اسحب الملفات إلى هنا" : "Drop files here"}</p>
+              <div className="drop-row">
               <button
-                className="file-button"
+                className="file-button glass tinted cap"
                 type="button"
                 disabled={processing}
                 onClick={() => {
@@ -1228,23 +1240,19 @@ export function SendClient() {
                   inputRef.current?.click();
                 }}
               >
-                <span aria-hidden="true">{processing ? "…" : "＋"}</span>
-                {processing ? t("send.processing") : t("send.browse")}
+                <DesignIcon name="doc" />
+                {processing ? t("send.processing") : lang === "ar" ? "تصفّح الملفات" : "Browse files"}
               </button>
               <button
-                className="file-button folder-button"
+                className="file-button folder-button glass cap"
                 type="button"
                 disabled={processing}
                 onClick={() => folderInputRef.current?.click()}
               >
-                <Folder size={16} aria-hidden="true" />
+                <DesignIcon name="folder" />
                 {lang === "ar" ? "اختيار مجلد" : "Pick a folder"}
               </button>
-              <p className="batch-hint">
-                {lang === "ar"
-                  ? "أو اسحب الملفات إلى هنا"
-                  : "Or drop files here"}
-              </p>
+              </div>
             </div>
           ) : (
             <div className="text-entry">
@@ -1256,7 +1264,7 @@ export function SendClient() {
               />
               <button
                 type="button"
-                className="file-button"
+                className="file-button glass tinted cap"
                 disabled={processing || textValue.trim().length === 0}
                 onClick={() => void prepareText()}
               >
@@ -1290,7 +1298,7 @@ export function SendClient() {
                   </span>
                   <button
                     type="button"
-                    className="remove-file"
+                    className="remove-file glass circle"
                     disabled={processing || fastOpen}
                     aria-label={
                       lang === "ar"
@@ -1323,7 +1331,7 @@ export function SendClient() {
                     </span>
                   ) : null}
                 </span>
-                <button
+                <button className="glass cap"
                   type="button"
                   disabled={processing || fastOpen}
                   onClick={() => {
@@ -1336,7 +1344,7 @@ export function SendClient() {
               </div>
               <button
                 type="button"
-                className="batch-add"
+                className="batch-add glass cap"
                 hidden={fileData.items.length >= MAX_BATCH_FILES}
                 disabled={
                   processing ||
@@ -1350,8 +1358,8 @@ export function SendClient() {
               >
                 {fileData.items.length >= MAX_BATCH_FILES
                   ? lang === "ar"
-                    ? "اكتملت الدفعة: 3 ملفات"
-                    : "Batch full: 3 files"
+                    ? `اكتملت الدفعة: ${MAX_BATCH_FILES} ملفات`
+                    : `Batch full: ${MAX_BATCH_FILES} files`
                   : lang === "ar"
                     ? "＋ إضافة ملف للدفعة"
                     : "＋ Add a file to this batch"}
@@ -1359,9 +1367,10 @@ export function SendClient() {
             </div>
           ) : null}
 
+          </div>
           <div className="quick-send">
             <button
-              className="fast-action"
+              className="fast-action glass tinted cap lg"
               type="button"
               disabled={!fileData}
               onClick={() => {
@@ -1371,12 +1380,12 @@ export function SendClient() {
                 setFastProgress(null);
               }}
             >
-              <Zap size={20} aria-hidden="true" />
+              <DesignIcon name="bolt" />
               <span>
-                <strong>{t("send.fast")}</strong>
+                <strong>{lang === "ar" ? "نقل سريع" : "Quick transfer"}</strong>
               </span>
             </button>
-            <p className="workspace-note">{t("send.fastSameNetwork")}</p>
+            <p className="workspace-note"><NetworkStatus /></p>
           </div>
           <WorkspaceDisclosure
             className="privacy-settings"
@@ -1399,7 +1408,7 @@ export function SendClient() {
                 <button
                   type="button"
                   className="adv-toggle"
-                  aria-pressed={encryptEnabled}
+                  role="switch" aria-checked={encryptEnabled}
                   onClick={() => changeEncryption(!encryptEnabled)}
                 >
                   <span className="adv-glyph" aria-hidden="true">
@@ -1414,6 +1423,7 @@ export function SendClient() {
                       ? t("send.encryptPanel.on")
                       : t("send.encryptPanel.off")}
                   </span>
+                  <span className="adv-switch" aria-hidden="true" />
                 </button>
                 {encryptEnabled ? (
                   <div className="adv-body">
@@ -1435,7 +1445,7 @@ export function SendClient() {
                       <div className="adv-inline">
                         <button
                           type="button"
-                          className="mini-btn"
+                          className="mini-btn glass cap"
                           disabled={passwordTooShort}
                           onClick={() => setShowPasswordQr(true)}
                         >
@@ -1452,13 +1462,14 @@ export function SendClient() {
                 <button
                   type="button"
                   className="adv-toggle"
-                  aria-pressed={burnEnabled}
+                  role="switch" aria-checked={burnEnabled}
                   onClick={() => toggleBurn(!burnEnabled)}
                 >
                   <span className="adv-glyph" aria-hidden="true">
                     <Flame size={15} />
                   </span>
                   <span>{t("send.burnLabel")}</span>
+                  <span className="adv-switch" aria-hidden="true" />
                 </button>
                 {burnEnabled ? (
                   <p className="adv-hint">{t("send.burnHint")}</p>
@@ -1470,13 +1481,14 @@ export function SendClient() {
                 <button
                   type="button"
                   className="adv-toggle"
-                  aria-pressed={signEnabled}
+                  role="switch" aria-checked={signEnabled}
                   onClick={() => toggleSign(!signEnabled)}
                 >
                   <span className="adv-glyph" aria-hidden="true">
                     <PenLine size={15} />
                   </span>
                   <span>{t("send.signLabel")}</span>
+                  <span className="adv-switch" aria-hidden="true" />
                 </button>
                 {signEnabled ? (
                   <div className="adv-body">
@@ -1489,7 +1501,7 @@ export function SendClient() {
                     <div className="adv-inline">
                       <button
                         type="button"
-                        className="mini-btn"
+                        className="mini-btn glass cap"
                         disabled={!identity}
                         onClick={() => setShowPubKeyQr(true)}
                       >
@@ -1506,13 +1518,14 @@ export function SendClient() {
                 <button
                   type="button"
                   className="adv-toggle"
-                  aria-pressed={broadcastEnabled}
+                  role="switch" aria-checked={broadcastEnabled}
                   onClick={() => setBroadcastEnabled((current) => !current)}
                 >
                   <span className="adv-glyph" aria-hidden="true">
                     <Radio size={15} />
                   </span>
                   <span>{t("send.broadcastLabel")}</span>
+                  <span className="adv-switch" aria-hidden="true" />
                 </button>
                 {broadcastEnabled ? (
                   <p className="adv-hint">{t("send.broadcastHint")}</p>
@@ -1520,6 +1533,162 @@ export function SendClient() {
               </div>
             </div>
           </WorkspaceDisclosure>
+
+
+          {passwordTooShort ? (
+            <p className="error-message" role="alert">
+              {t("send.error.passwordShort")}
+            </p>
+          ) : null}
+
+          {error ? (
+            <p className="error-message" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="qr-panel">
+          <div className="step-heading">
+
+            <div>
+              <h2>{lang === "ar" ? "بثّ QR" : "QR broadcast"}</h2>
+              <p>
+                {preset.lanes === 2
+                  ? t("send.step3.descDual")
+                  : lang === "ar"
+                    ? "دون شبكة · افتح «مسح» على الجهاز الآخر"
+                    : "No network · open Scan on the other device"}
+              </p>
+            </div>
+          </div>
+
+          <div
+            ref={qrStageRef}
+            className={`qr-stage ${transfer ? "ready" : ""} ${playing ? "playing" : ""} lanes-${preset.lanes}`}
+          >
+            {transfer ? (
+              <div className={`qr-canvas-grid lanes-${preset.lanes}`}>
+                {Array.from({ length: preset.lanes }, (_, laneIndex) => (
+                  <canvas
+                    key={laneIndex}
+                    ref={(canvas) => {
+                      canvasRefs.current[laneIndex] = canvas;
+                    }}
+                    aria-label={
+                      preset.lanes === 1
+                        ? "بثّ نقل ملفات RaptorQ متحرك"
+                        : `بثّ نقل ملفات RaptorQ متحرك — المسار ${laneIndex + 1}`
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="workspace-qr-empty">
+                <EmptyQrIcon />
+                <span>
+                  {processing
+                    ? t("send.qr.placeholderEncoding")
+                    : lang === "ar" ? "سيظهر بثّ QR هنا" : "QR stream will appear here"}
+                </span>
+              </div>
+            )}
+            <button
+              className="fullscreen-button glass circle"
+              type="button"
+              onClick={toggleFullscreen}
+              disabled={!transfer}
+              aria-label={t("send.qr.fullscreen")}
+            >
+              <DesignIcon name="full" />
+            </button>
+          </div>
+
+          <div className="stream-status" aria-live="polite">
+            <div>
+              <span
+                className={`pulse-dot ${playing ? "live" : ""}`}
+                aria-hidden="true"
+              />
+              <strong>
+                {playing
+                  ? t("send.status.broadcasting")
+                  : transfer
+                    ? t("send.status.ready")
+                    : processing
+                      ? t("send.status.encoding")
+                      : t("send.status.waiting")}
+              </strong>
+            </div>
+            <span className="pct" title={lang === "ar" ? "تقدم دورة البث، وليس تأكيد الاستلام" : "Broadcast cycle, not delivery confirmation"}>{Math.round(cycleProgress * 100)}%</span>
+          </div>
+          {!transfer && <div className="broadcast-track" role="progressbar" aria-label={lang === "ar" ? "تقدم دورة البث" : "Broadcast cycle progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(cycleProgress * 100)}><span style={{width: `${cycleProgress * 100}%`}} /></div>}
+
+          {transfer ? (
+            <div className="broadcast-progress">
+              <div>
+                <strong>
+                  {t("send.progress.cycle")} {cycleNumber}
+                </strong>
+                <span>
+                  {t("send.progress.frame")} {cycleFrame.toLocaleString()} /{" "}
+                  {orderLength.toLocaleString()} ·{" "}
+                  {transfer.sourcePacketCount.toLocaleString()}{" "}
+                  {t("send.progress.source")} +{" "}
+                  {transfer.repairPacketIndices.length.toLocaleString()}{" "}
+                  {t("send.progress.repair")}
+                </span>
+              </div>
+              <div
+                className="broadcast-track"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(cycleProgress * 100)}
+              >
+                <span style={{ width: `${cycleProgress * 100}%` }} />
+              </div>
+            </div>
+          ) : null}
+
+          <button
+            className="primary-action glass tinted cap"
+            type="button"
+            disabled={!fileData || processing || passwordTooShort}
+            onClick={() => {
+              if (!transfer) {
+                // الملف كبير ولم يُجهَّز بعد — نجهّز البث البصري عند الطلب
+                if (fileData) void encodePrepared(fileData, presetKey);
+                return;
+              }
+              if (!playing) setActualFps(0);
+              setPlaying((current) => !current);
+            }}
+          >
+            <span aria-hidden="true">
+              {playing ? "Ⅱ" : transfer ? "▶" : processing ? "…" : "▶"}
+            </span>
+            {playing
+              ? t("send.pause")
+              : transfer
+                ? t("send.start")
+                : processing
+                  ? t("send.preparing")
+                  : t("send.start")}
+          </button>
+
+          {/* توصية النقل السريع للملفات الكبيرة (لم يُجهَّز البث تلقائياً) */}
+          {fileData && !transfer && !processing ? (
+            <p className="fast-recommend" role="status">
+              <Zap size={14} aria-hidden="true" /> {t("send.fastRecommend")}
+            </p>
+          ) : null}
+
+          <button className="link-action glass cap" type="button" onClick={copyScanLink}>
+            <DesignIcon name="copy" />
+            {copied ? t("send.copied") : lang === "ar" ? "نسخ رابط الماسح للموبايل" : "Copy mobile scanner link"}
+          </button>
+
           <WorkspaceDisclosure
             className="broadcast-settings"
             title={lang === "ar" ? "إعدادات بثّ QR" : "QR stream settings"}
@@ -1528,7 +1697,7 @@ export function SendClient() {
             <div
               className="preset-list"
               role="radiogroup"
-              aria-label="ملف ضبط الإشارة"
+              aria-label={lang === "ar" ? "ملف ضبط الإشارة" : "Transmission profile"}
             >
               {allPresets.entries.map(([key, option]) => (
                 <button
@@ -1589,7 +1758,7 @@ export function SendClient() {
                           removePreset(key);
                         }
                       }}
-                      aria-label="حذف البروفايل"
+                      aria-label={lang === "ar" ? "حذف البروفايل" : "Delete profile"}
                     >
                       ✕
                     </span>
@@ -1598,7 +1767,7 @@ export function SendClient() {
               ))}
               <button
                 type="button"
-                className="preset-add"
+                className="preset-add glass cap"
                 onClick={() => setShowPresetForm((current) => !current)}
               >
                 {t("send.addPreset")}
@@ -1662,8 +1831,8 @@ export function SendClient() {
                   />
                 </label>
                 <div className="form-actions">
-                  <button type="submit">{t("send.presetSave")}</button>
-                  <button
+                  <button type="submit" className="glass tinted cap">{t("send.presetSave")}</button>
+                  <button className="glass cap"
                     type="button"
                     onClick={() => setShowPresetForm(false)}
                   >
@@ -1681,158 +1850,6 @@ export function SendClient() {
               </p>
             ) : null}
           </WorkspaceDisclosure>
-
-          {passwordTooShort ? (
-            <p className="error-message" role="alert">
-              {t("send.error.passwordShort")}
-            </p>
-          ) : null}
-
-          {error ? (
-            <p className="error-message" role="alert">
-              {error}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="qr-panel">
-          <div className="step-heading">
-            <span>02</span>
-            <div>
-              <h2>{t("send.step3.title")}</h2>
-              <p>
-                {preset.lanes === 2
-                  ? t("send.step3.descDual")
-                  : lang === "ar"
-                    ? "دون شبكة · افتح «المسح» على الجهاز الآخر"
-                    : "No network · open Scan on the other device"}
-              </p>
-            </div>
-          </div>
-
-          <div
-            ref={qrStageRef}
-            className={`qr-stage ${transfer ? "ready" : ""} ${playing ? "playing" : ""} lanes-${preset.lanes}`}
-          >
-            {transfer ? (
-              <div className={`qr-canvas-grid lanes-${preset.lanes}`}>
-                {Array.from({ length: preset.lanes }, (_, laneIndex) => (
-                  <canvas
-                    key={laneIndex}
-                    ref={(canvas) => {
-                      canvasRefs.current[laneIndex] = canvas;
-                    }}
-                    aria-label={
-                      preset.lanes === 1
-                        ? "بثّ نقل ملفات RaptorQ متحرك"
-                        : `بثّ نقل ملفات RaptorQ متحرك — المسار ${laneIndex + 1}`
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="workspace-qr-empty">
-                <QrCode size={54} strokeWidth={1.5} aria-hidden="true" />
-                <span>
-                  {processing
-                    ? t("send.qr.placeholderEncoding")
-                    : t("send.qr.placeholderIdle")}
-                </span>
-              </div>
-            )}
-            <button
-              className="fullscreen-button"
-              type="button"
-              onClick={toggleFullscreen}
-              disabled={!transfer}
-              aria-label={t("send.qr.fullscreen")}
-            >
-              <Maximize size={18} aria-hidden="true" />
-            </button>
-          </div>
-
-          <div className="stream-status" aria-live="polite">
-            <div>
-              <span
-                className={`pulse-dot ${playing ? "live" : ""}`}
-                aria-hidden="true"
-              />
-              <strong>
-                {playing
-                  ? t("send.status.broadcasting")
-                  : transfer
-                    ? t("send.status.ready")
-                    : processing
-                      ? t("send.status.encoding")
-                      : t("send.status.waiting")}
-              </strong>
-            </div>
-          </div>
-
-          {transfer ? (
-            <div className="broadcast-progress">
-              <div>
-                <strong>
-                  {t("send.progress.cycle")} {cycleNumber}
-                </strong>
-                <span>
-                  {t("send.progress.frame")} {cycleFrame.toLocaleString()} /{" "}
-                  {orderLength.toLocaleString()} ·{" "}
-                  {transfer.sourcePacketCount.toLocaleString()}{" "}
-                  {t("send.progress.source")} +{" "}
-                  {transfer.repairPacketIndices.length.toLocaleString()}{" "}
-                  {t("send.progress.repair")}
-                </span>
-              </div>
-              <div
-                className="broadcast-track"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(cycleProgress * 100)}
-              >
-                <span style={{ width: `${cycleProgress * 100}%` }} />
-              </div>
-            </div>
-          ) : null}
-
-          <button
-            className="primary-action"
-            type="button"
-            disabled={!fileData || processing || passwordTooShort}
-            onClick={() => {
-              if (!transfer) {
-                // الملف كبير ولم يُجهَّز بعد — نجهّز البث البصري عند الطلب
-                if (fileData) void encodePrepared(fileData, presetKey);
-                return;
-              }
-              if (!playing) setActualFps(0);
-              setPlaying((current) => !current);
-            }}
-          >
-            <span aria-hidden="true">
-              {playing ? "Ⅱ" : transfer ? "▶" : processing ? "…" : "▶"}
-            </span>
-            {playing
-              ? t("send.pause")
-              : transfer
-                ? t("send.start")
-                : processing
-                  ? t("send.preparing")
-                  : t("send.start")}
-          </button>
-
-          {/* توصية النقل السريع للملفات الكبيرة (لم يُجهَّز البث تلقائياً) */}
-          {fileData && !transfer && !processing ? (
-            <p className="fast-recommend" role="status">
-              <Zap size={14} aria-hidden="true" /> {t("send.fastRecommend")}
-            </p>
-          ) : null}
-
-          <button className="link-action" type="button" onClick={copyScanLink}>
-            <span aria-hidden="true">⌁</span>
-            {copied ? t("send.copied") : t("send.copyScanLink")}
-          </button>
 
           <WorkspaceDisclosure
             className="stream-details"
@@ -1865,7 +1882,7 @@ export function SendClient() {
           </div>
           <button
             type="button"
-            className="modal-close"
+            className="modal-close glass cap"
             onClick={() => setShowPasswordQr(false)}
           >
             {t("send.close")}
@@ -1902,7 +1919,7 @@ export function SendClient() {
                   {t("send.fastStep1")}{" "}
                   <button
                     type="button"
-                    className="fast-url-copy"
+                    className="fast-url-copy glass cap"
                     onClick={() => {
                       void navigator.clipboard.writeText(tvUrl).then(() => {
                         setFastUrlCopied(true);
@@ -1916,18 +1933,18 @@ export function SendClient() {
                 </li>
                 <li>{t("send.fastStep2")}</li>
               </ol>
-              <p className="fast-hint">{t("send.fastSameNetwork")}</p>
+              <p className="fast-hint"><NetworkStatus /></p>
               <div className="fast-actions">
                 <button
                   type="button"
-                  className="primary-action fast-start"
+                  className="primary-action fast-start glass tinted cap lg"
                   onClick={() => void startFastScan()}
                 >
                   <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
                 </button>
                 <button
                   type="button"
-                  className="modal-close"
+                  className="modal-close glass cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastCancel")}
@@ -1947,7 +1964,7 @@ export function SendClient() {
               <div className="fast-actions">
                 <button
                   type="button"
-                  className="fast-switch-cam"
+                  className="fast-switch-cam glass cap"
                   onClick={switchFastCamera}
                 >
                   <RefreshCw size={16} aria-hidden="true" />{" "}
@@ -1955,7 +1972,7 @@ export function SendClient() {
                 </button>
                 <button
                   type="button"
-                  className="modal-close"
+                  className="modal-close glass cap"
                   onClick={() => {
                     stopFastScanning();
                     setFastState("idle");
@@ -1974,7 +1991,7 @@ export function SendClient() {
                   style={{
                     width: fastProgress
                       ? `${Math.min(100, (fastProgress.sent / fastProgress.total) * 100)}%`
-                      : "8%",
+                      : "0%",
                   }}
                 />
               </div>
@@ -1987,7 +2004,7 @@ export function SendClient() {
               <div className="fast-actions">
                 <button
                   type="button"
-                  className="modal-close"
+                  className="modal-close glass cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastCancel")}
@@ -2002,7 +2019,7 @@ export function SendClient() {
               <div className="fast-actions">
                 <button
                   type="button"
-                  className="primary-action"
+                  className="primary-action glass tinted cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastClose")}
@@ -2018,14 +2035,14 @@ export function SendClient() {
               <div className="fast-actions">
                 <button
                   type="button"
-                  className="primary-action"
+                  className="primary-action glass tinted cap"
                   onClick={() => void startFastScan()}
                 >
                   <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
                 </button>
                 <button
                   type="button"
-                  className="modal-close"
+                  className="modal-close glass cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastCancel")}
@@ -2051,7 +2068,7 @@ export function SendClient() {
           <div ref={pubKeyQrHostRef}>{!pubKeyQrCanvas ? <p>…</p> : null}</div>
           <button
             type="button"
-            className="modal-close"
+            className="modal-close glass cap"
             onClick={() => setShowPubKeyQr(false)}
           >
             {t("send.close")}

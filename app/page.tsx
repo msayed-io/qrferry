@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { WorkspaceHeader } from "./workspace-ui";
 import { SendClient } from "./send-client";
 
 export const metadata: Metadata = {
@@ -11,7 +10,6 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <>
-      <WorkspaceHeader active="send" />
       <SendClient />
     </>
   );
