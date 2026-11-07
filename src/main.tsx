@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import 'glisse/styles.css';
 import '../app/globals.css';
@@ -9,11 +9,11 @@ import '../app/liquid-controls.css';
 import { AppShell } from '../app/app-shell';
 import { LangProvider } from '../app/lang-provider';
 import { PwaRegister } from '../app/pwa-register';
-import { SendClient } from '../app/send-client';
-import { ScannerClient } from '../app/scan/scanner-client';
-import { HistoryClient } from '../app/history/history-client';
-import { OfflineClient } from '../app/offline/offline-client';
-import { PrivacyClient } from '../app/privacy/privacy-client';
+const SendClient = lazy(() => import('../app/send-client').then(({ SendClient }) => ({ default: SendClient })));
+const ScannerClient = lazy(() => import('../app/scan/scanner-client').then(({ ScannerClient }) => ({ default: ScannerClient })));
+const HistoryClient = lazy(() => import('../app/history/history-client').then(({ HistoryClient }) => ({ default: HistoryClient })));
+const OfflineClient = lazy(() => import('../app/offline/offline-client').then(({ OfflineClient }) => ({ default: OfflineClient })));
+const PrivacyClient = lazy(() => import('../app/privacy/privacy-client').then(({ PrivacyClient }) => ({ default: PrivacyClient })));
 import { usePathname } from '../app/router';
 
 function RouteContent() {
@@ -27,7 +27,7 @@ function RouteContent() {
 }
 
 function App() {
-  return <LangProvider initialLang="ar"><PwaRegister /><AppShell><RouteContent /></AppShell></LangProvider>;
+  return <LangProvider initialLang="ar"><PwaRegister /><AppShell><Suspense fallback={<div className="route-loading" role="status" aria-live="polite">…</div>}><RouteContent /></Suspense></AppShell></LangProvider>;
 }
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);

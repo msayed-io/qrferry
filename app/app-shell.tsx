@@ -2,12 +2,12 @@
 
 
 import { usePathname, useRouter } from "./router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "./lang-provider";
 import { LiquidChoices } from "./liquid-controls";
 import { DesignIcon } from "./design-icons";
 import { BridgeViewContext, type BridgeView } from "./design-system";
-import { BridgeClient } from "./bridge/bridge-client";
+const BridgeClient = lazy(() => import("./bridge/bridge-client").then(({ BridgeClient }) => ({ default: BridgeClient })));
 import { AppMenu } from "./app-menu";
 import { SupportReturnContext, SUPPORT_ROUTES } from "./support-navigation";
 import { observeRims } from "./rim";
@@ -22,6 +22,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
   const [view, setView] = useState<BridgeView>("pair");
   const bridgeRoute = path === "/bridge" || path === "/pc";
+  const [bridgeMounted, setBridgeMounted] = useState(bridgeRoute);
+  useEffect(() => {
+    if (bridgeRoute) setBridgeMounted(true);
+  }, [bridgeRoute]);
   const connectedRef = useRef(false);
   const connectionChanged = useCallback((next: boolean) => {
     const changed = connectedRef.current !== next;
@@ -58,7 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AppMenu onNavigate={href => { setReturnPath(path); router.push(href); }} />
       </header>}
       <div id="route-content" hidden={bridgeRoute}>{children}</div>
-      <div id="bridge-content" hidden={!bridgeRoute}><BridgeClient /></div>
+      {bridgeMounted && <div id="bridge-content" hidden={!bridgeRoute}><Suspense fallback={null}><BridgeClient /></Suspense></div>}
     </div>
     {!standalone && <nav className="bottom-nav" aria-label={lang === "ar" ? "التنقل الرئيسي" : "Main navigation"}>
       <LiquidChoices
