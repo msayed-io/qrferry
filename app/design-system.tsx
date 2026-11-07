@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { useI18n } from "./lang-provider";
+import { LiquidButton } from "./liquid-controls";
 import { DesignIcon } from "./design-icons";
 
 export type BridgeView = "pair" | "chat";
@@ -14,10 +15,10 @@ export const BridgeViewContext = createContext({
 export const useBridgeView = () => useContext(BridgeViewContext);
 
 export function Capsule({ tinted = false, large = false, className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tinted?: boolean; large?: boolean }) {
-  return <button type="button" className={`glass cap ${tinted ? "tinted" : ""} ${large ? "lg" : ""} ${className}`} {...props} />;
+  return <LiquidButton type="button" className={`glass cap ${tinted ? "tinted" : ""} ${large ? "lg" : ""} ${className}`} {...props} />;
 }
 export function CircleButton({ tinted = false, className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tinted?: boolean }) {
-  return <button type="button" className={`glass circle ${tinted ? "tinted" : ""} ${className}`} {...props} />;
+  return <LiquidButton type="button" className={`glass circle ${tinted ? "tinted" : ""} ${className}`} {...props} />;
 }
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <section className={`card ${className}`}>{children}</section>;

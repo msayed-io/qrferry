@@ -20,10 +20,10 @@ try{
  await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme',theme.stored);check('theme persisted',theme);
  await page.getByRole('button',{name:'English',exact:true}).click();
  await expect(page.locator('html')).toHaveAttribute('dir','ltr');await page.reload();await expect(page.locator('html')).toHaveAttribute('lang','en');
- const ltr=await page.locator('.tabs').evaluate(el=>({direction:getComputedStyle(el).direction,rim:getComputedStyle(el,'::after').backgroundImage}));
+ const ltr=await page.locator('.qf-tab-bar').evaluate(el=>({direction:getComputedStyle(el).direction,physicalOrder:[...el.querySelectorAll('.lg-tab')].map(b=>b.id)}));
  await page.getByRole('button',{name:'العربية',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('dir','rtl');
- const rtl=await page.locator('.tabs').evaluate(el=>({direction:getComputedStyle(el).direction,rim:getComputedStyle(el,'::after').backgroundImage}));
- check('language persistence and fixed light direction',{ltr,rtl,sameRim:ltr.rim===rtl.rim});
+ const rtl=await page.locator('.qf-tab-bar').evaluate(el=>({direction:getComputedStyle(el).direction,physicalOrder:[...el.querySelectorAll('.lg-tab')].map(b=>b.id)}));
+ check('language persistence and native lens coordinate adaptation',{ltr,rtl,arabicSendRightmost:rtl.physicalOrder.at(-1)==='nav-send',englishSendLeftmost:ltr.physicalOrder[0]==='nav-send'});
  // Actual files, selected through the real native browser file input.
  const folder=`${dir}/input-folder`;await fs.mkdir(folder,{recursive:true});
  const files=[];for(let i=1;i<=4;i++){const f=`${folder}/file-${i}.txt`;await fs.writeFile(f,`QRFerry real browser selection ${i}\n`);files.push(f);}
@@ -35,7 +35,7 @@ try{
  await expect(page.locator('.batch-file')).toHaveCount(3);check('three actual files selected',{rows:3});
  await page.getByRole('button',{name:'إزالة file-1.txt',exact:true}).click();await expect(page.locator('.batch-file')).toHaveCount(2);check('remove file',{rows:2});
  for(const name of ['file-2.txt','file-3.txt']){await expect(page.getByRole('button',{name:`إزالة ${name}`,exact:true})).toBeEnabled();await page.getByRole('button',{name:`إزالة ${name}`,exact:true}).click();}
- await page.getByRole('tab',{name:'نص',exact:true}).click();
+ await page.getByRole('radio',{name:'نص',exact:true}).click();
  const text=page.locator('.text-entry textarea');await text.fill('QRFerry actual optical render / عرض حقيقي');await page.locator('.text-entry button').click();
  await expect(page.locator('.qr-stage canvas')).toBeVisible({timeout:30000});
  await prepareZXingModule({overrides:{wasmBinary:readFileSync(require.resolve('zxing-wasm/reader/zxing_reader.wasm'))},fireImmediately:true});

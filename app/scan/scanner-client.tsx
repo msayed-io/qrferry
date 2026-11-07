@@ -1,5 +1,7 @@
 "use client";
 
+import { LiquidButton } from "../liquid-controls";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../lang-provider";
 import { DesignIcon } from "../design-icons";
@@ -1225,20 +1227,20 @@ export function ScannerClient() {
               </div>
             ) : null}
             {torchAvailable && active ? (
-              <button
+              <LiquidButton
                 className="torch-button glass cap"
                 type="button"
                 onClick={toggleTorch}
               >
                 {torchOn ? t("scan.torchOn") : t("scan.torchOff")}
-              </button>
+              </LiquidButton>
             ) : null}
           </div>
 
           {!complete ? (
             <div className="camera-actions">
               {" "}
-              <button
+              <LiquidButton
                 className="primary-action glass tinted cap"
                 type="button"
                 disabled={
@@ -1262,7 +1264,7 @@ export function ScannerClient() {
                   : active
                     ? t("scan.stop")
                     : lang === "ar" ? "تشغيل الكاميرا" : "Start camera"}
-              </button>
+              </LiquidButton>
             </div>
           ) : null}
           <WorkspaceDisclosure
@@ -1420,20 +1422,20 @@ export function ScannerClient() {
                 </p>
               ) : null}
               <div className="prompt-actions">
-                <button type="button" className="glass tinted cap" onClick={() => void submitPassword()}>
+                <LiquidButton type="button" className="glass tinted cap" onClick={() => void submitPassword()}>
                   {t("scan.passwordDecrypt")}
-                </button>
-                <button type="button" className="glass cap" onClick={cancelPassword}>
+                </LiquidButton>
+                <LiquidButton type="button" className="glass cap" onClick={cancelPassword}>
                   {t("scan.passwordCancel")}
-                </button>
+                </LiquidButton>
               </div>
-              <button
+              <LiquidButton
                 type="button"
                 className="mini-btn glass cap"
                 onClick={() => void startCamera("password")}
               >
                 {t("scan.passwordScanQr")}
-              </button>
+              </LiquidButton>
             </div>
           ) : null}
 
@@ -1449,25 +1451,25 @@ export function ScannerClient() {
               </p>
               <p>{t("scan.signBody")}</p>
               <div className="trust-actions">
-                <button className="glass cap"
+                <LiquidButton className="glass cap"
                   type="button"
                   onClick={() => signatureReview.proceed(true)}
                 >
                   {t("scan.signTrust")}
-                </button>
-                <button className="glass cap"
+                </LiquidButton>
+                <LiquidButton className="glass cap"
                   type="button"
                   onClick={() => signatureReview.proceed(false)}
                 >
                   {t("scan.signReject")}
-                </button>
-                <button
+                </LiquidButton>
+                <LiquidButton
                   type="button"
                   className="mini-btn glass cap"
                   onClick={cancelSignatureReview}
                 >
                   {t("scan.passwordCancel")}
-                </button>
+                </LiquidButton>
               </div>
             </div>
           ) : null}
@@ -1555,13 +1557,13 @@ export function ScannerClient() {
               <p className="error-message" role="alert">
                 {error}
               </p>
-              <button
+              <LiquidButton
                 type="button"
                 className="primary-action camera-retry glass tinted cap"
                 onClick={() => void startCamera("qr")}
               >
                 {lang === "ar" ? "إعادة المحاولة" : "Try again"}
-              </button>
+              </LiquidButton>
             </>
           ) : null}
 
@@ -1591,22 +1593,22 @@ export function ScannerClient() {
                 ))}
               </div>
               {recoveredFiles.length > 1 ? (
-                <button
+                <LiquidButton
                   type="button"
                   className="primary-action glass tinted cap"
                   onClick={() => void downloadAllZip()}
                 >
                   <Download size={18} aria-hidden="true" />
                   {t("scan.saveAll")}
-                </button>
+                </LiquidButton>
               ) : null}
-              <button
+              <LiquidButton
                 className="link-action glass cap"
                 type="button"
                 onClick={() => void startCamera()}
               >
                 {t("scan.scanAnother")}
-              </button>
+              </LiquidButton>
             </>
           ) : null}
         </div>

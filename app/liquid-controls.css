@@ -1,0 +1,56 @@
+/* Glisse 0.5.0 owns its material, optical maps and spring animation.
+   Only product sizing, accent and accessibility adapt here. No .glass overlay. */
+:root {
+  --lg-fill: var(--tint);
+  --lg-on: var(--ok);
+  --lg-ring: var(--tint);
+}
+.qf-liquid-choices { min-width: 0; }
+.bottom-nav > .qf-liquid-choices { pointer-events: auto; }
+.qf-tab-bar { font-family: var(--font); }
+.qf-tab-bar .lg-tab-label { font-size: 11px; line-height: 1.3; }
+.qf-tab-bar .lg-tab-icon > svg { stroke-width: 1.7; }
+/* Defaults retain Glisse's 24px/16px icon-tab lift, .2 bend and 2 dispersion.
+   Slot widths stay equal: variable selected widths break the native engine. */
+.qf-tab-bar .lg-tab { touch-action: pan-y; }
+.qf-segmented {
+  --lg-tab-height: 44px;
+  --lg-tab-width: 100px;
+  width: 100%;
+  font-family: var(--font);
+}
+.qf-segmented > .lg-tab-labels:not(.lg-tab-lensed) { width: 100%; }
+.qf-segmented .lg-tab, .qf-segmented .lg-tab-copy { font-size: 15px; font-weight: 600; }
+/* Container-relative slots, including the three aligned rows used by the lens. */
+.qf-content-choices { container-type: inline-size; margin-bottom: 14px; }
+.qf-content-choices .qf-segmented { --lg-tab-width: calc(100cqw / var(--lg-tabs)); }
+.lg-button.qf-liquid-button { font-family: var(--font); font-size: 16px; font-weight: 600; }
+.lg-button.qf-capsule { height: 48px; border-radius: 999px; padding: 0 22px; }
+.lg-button.qf-large { height: 54px; font-size: 17px; }
+.lg-button.qf-circle { width: 44px; height: 44px; padding: 0; border-radius: 50%; flex: none; }
+.lg-button.qf-liquid-button:disabled { cursor: default; }
+/* Preserve the functional width/layout hooks, not the old material classes. */
+.quick-send > .qf-liquid-button, .qr-panel > .qf-liquid-button,
+.camera-actions > .qf-liquid-button, .act2 > .qf-capsule,
+.act2 form > .qf-capsule { width: 100%; }
+.act2 .qf-capsule + .qf-capsule { margin-top: 12px; }
+.bridge-composer > .qf-circle { width: 46px; height: 46px; }
+.preset-list > .preset-add.qf-liquid-button { padding: 0 22px; border: 0; margin-block: 12px; }
+@media (prefers-reduced-transparency: reduce) {
+  html .lg-glass {
+    background-color: var(--solid) !important;
+    background-image: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
+  html .lg-button[data-variant="filled"] { background-color: var(--tint) !important; }
+  html :is(.lg-tab-lens, .lg-tab-tint, .lg-tab-lensed, .lg-segmented-thumb) { visibility: hidden !important; }
+  html .lg-tab-labels { filter: none !important; }
+  html .lg-tab[data-selected] { background: var(--fill); }
+  html .lg-tab .lg-tab-face { color: var(--label) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-button { scale: 1 !important; translate: none !important; }
+  /* Glisse's createSpring also reads this media query and settles instantly. */
+}

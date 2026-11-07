@@ -109,7 +109,7 @@ try {
   await reference.screenshot({path:`${dir}/reference-chat-${width}-${theme}.png`,fullPage:true});
   const props=['backgroundColor','color','borderRadius','height','paddingTop','paddingRight','paddingBottom','paddingLeft','fontSize','fontWeight','lineHeight','boxShadow','backdropFilter'];
   const components=[];
-  for(const [name,appSel,refSel] of [['chatbar','.chatbar','.chatbar'],['composer','.bridge-composer','#composer'],['attach','.bridge-composer>.circle','#composer>.circle'],['input','.bridge-composer>.inp','#composer>.inp'],['sent','.bridge-bubble.me','.m.me'],['received','.bridge-bubble.pc','.m.pc']]){
+  for(const [name,appSel,refSel] of [['chatbar','.chatbar','.chatbar'],['composer','.bridge-composer','#composer'],['attach','.bridge-composer>.qf-circle','#composer>.circle'],['input','.bridge-composer>.inp','#composer>.inp'],['sent','.bridge-bubble.me','.m.me'],['received','.bridge-bubble.pc','.m.pc']]){
    const read=(p,sel)=>p.locator(sel).first().evaluate((el,props)=>Object.fromEntries(props.map(k=>[k,getComputedStyle(el)[k]])),props);
    const actual=await read(host,appSel),expected=await read(reference,refSel);
    components.push({name,actual,expected,differences:Object.fromEntries(props.filter(k=>actual[k]!==expected[k]).map(k=>[k,{actual:actual[k],expected:expected[k]}]))});

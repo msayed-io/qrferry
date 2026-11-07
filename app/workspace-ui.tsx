@@ -1,5 +1,7 @@
 "use client";
 
+import { LiquidButton } from "./liquid-controls";
+
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
@@ -131,14 +133,14 @@ export function WorkspaceDialog({
         className={`modal-card workspace-modal ${className}`}
         onClick={(event) => event.stopPropagation()}
       >
-        <button
+        <LiquidButton
           type="button"
           className="dialog-dismiss glass circle"
           aria-label={lang === "ar" ? "إغلاق النافذة" : "Close dialog"}
           onClick={onClose}
         >
           <X size={20} aria-hidden="true" />
-        </button>
+        </LiquidButton>
         {children}
       </div>
     </div>

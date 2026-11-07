@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "./lang-provider";
+import { LiquidChoices } from "./liquid-controls";
 import { DesignIcon } from "./design-icons";
 import { BridgeViewContext, ThemeButton, CircleButton, type BridgeView } from "./design-system";
 import { BridgeClient } from "./bridge/bridge-client";
@@ -44,15 +45,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (path !== href) router.push(href);
     window.scrollTo({ top: 0 });
   };
-  const tabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const delta = event.key === "ArrowRight" ? (lang === "ar" ? -1 : 1) : event.key === "ArrowLeft" ? (lang === "ar" ? 1 : -1) : 0;
-    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : delta ? (index + delta + tabs.length) % tabs.length : -1;
-    if (next < 0) return;
-    event.preventDefault();
-    const tab = tabs[next];
-    navigate(tab.id, tab.path);
-    document.getElementById(`nav-${tab.id}`)?.focus();
-  };
   return <BridgeViewContext.Provider value={context}>
     <div className={`wrap app-wrap ${active === "chat" ? "chat-wrap" : ""}`}>
       <header className="app-header">
@@ -74,9 +66,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       </footer>}
     </div>
     <nav className="bottom-nav" aria-label={lang === "ar" ? "التنقل الرئيسي" : "Main navigation"}>
-      <div className="glass tabs" role="tablist" aria-label={lang === "ar" ? "طريقة النقل" : "Transfer mode"}>
-        {tabs.map((tab, index) => <button key={tab.id} id={`nav-${tab.id}`} className="tab" type="button" role="tab" aria-selected={active === tab.id} aria-controls={tab.id === "pair" || tab.id === "chat" ? "bridge-content" : "route-content"} tabIndex={active === tab.id || (active === null && index === 0) ? 0 : -1} onKeyDown={e => tabKey(e, index)} onClick={() => navigate(tab.id, tab.path)}><DesignIcon name={tab.icon} /><span>{lang === "ar" ? tab.ar : tab.en}</span></button>)}
-      </div>
+      <LiquidChoices
+        kind="navigation"
+        label={lang === "ar" ? "طريقة النقل" : "Transfer mode"}
+        value={active}
+        items={tabs.map(tab => ({
+          value: tab.id,
+          label: lang === "ar" ? tab.ar : tab.en,
+          icon: <DesignIcon name={tab.icon} />,
+          controlId: `nav-${tab.id}`,
+          controls: tab.id === "pair" || tab.id === "chat" ? "bridge-content" : "route-content",
+        }))}
+        onValueChange={id => {
+          const tab = tabs.find(tab => tab.id === id);
+          if (tab) navigate(tab.id, tab.path);
+        }}
+      />
     </nav>
   </BridgeViewContext.Provider>;
 }

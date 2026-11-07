@@ -1,5 +1,7 @@
 "use client";
 
+import { LiquidButton } from "../liquid-controls";
+
 import { useState } from "react";
 import { Check, Download, Package, WifiOff, AlertCircle } from "lucide-react";
 import { useI18n } from "../lang-provider";
@@ -72,7 +74,7 @@ export function OfflineClient() {
               </span>
             ))}
           </div>
-          <button
+          <LiquidButton
             type="button"
             className="support-button support-signal offline-download glass cap tinted"
             disabled={state === "building"}
@@ -83,7 +85,7 @@ export function OfflineClient() {
             {state === "building"
               ? t("offline.preparing")
               : t("offline.download")}
-          </button>
+          </LiquidButton>
           <div role="status" aria-live="polite">
             {state === "building" ? (
               <p>

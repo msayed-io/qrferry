@@ -21,6 +21,7 @@
     "@raptorqr/raptorq-wasm": "0.1.1",
     "brotli-wasm": "3.0.1",
     "fflate": "^0.8.3",
+    "glisse": "0.5.0",
     "lucide-react": "^0.454.0",
     "next": "16.2.6",
     "peerjs": "^1.5.5",

@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: real HTTP SSR: / retains its route, metadata, identity and functional surface
+ok 1 - real HTTP SSR: / retains its route, metadata, identity and functional surface
+  ---
+  duration_ms: 45.202552
+  type: 'test'
+  ...
+# Subtest: real HTTP SSR: /scan retains its route, metadata, identity and functional surface
+ok 2 - real HTTP SSR: /scan retains its route, metadata, identity and functional surface
+  ---
+  duration_ms: 16.207545
+  type: 'test'
+  ...
+# Subtest: real HTTP SSR: /bridge retains its route, metadata, identity and functional surface
+ok 3 - real HTTP SSR: /bridge retains its route, metadata, identity and functional surface
+  ---
+  duration_ms: 12.444484
+  type: 'test'
+  ...
+# Subtest: real HTTP SSR: /pc retains its route, metadata, identity and functional surface
+ok 4 - real HTTP SSR: /pc retains its route, metadata, identity and functional surface
+  ---
+  duration_ms: 12.058937
+  type: 'test'
+  ...
+# Subtest: real HTTP SSR: /history retains its route, metadata, identity and functional surface
+ok 5 - real HTTP SSR: /history retains its route, metadata, identity and functional surface
+  ---
+  duration_ms: 11.217582
+  type: 'test'
+  ...
+# Subtest: real HTTP SSR: /offline retains its route, metadata, identity and functional surface
+ok 6 - real HTTP SSR: /offline retains its route, metadata, identity and functional surface
+  ---
+  duration_ms: 12.54612
+  type: 'test'
+  ...
+# Subtest: real HTTP SSR: /privacy retains its route, metadata, identity and functional surface
+ok 7 - real HTTP SSR: /privacy retains its route, metadata, identity and functional surface
+  ---
+  duration_ms: 10.137715
+  type: 'test'
+  ...
+# Subtest: real HTTP 404 uses the shared surface without inventing the missing receiver route
+ok 8 - real HTTP 404 uses the shared surface without inventing the missing receiver route
+  ---
+  duration_ms: 8.274816
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 170.691917

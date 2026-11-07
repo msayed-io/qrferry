@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import "glisse/styles.css";
 import "./globals.css";
 import "./workspace.css";
 import "./support.css";
 import "./bridge/bridge.css";
+import "./liquid-controls.css";
 import { AppShell } from "./app-shell";
 import { PwaRegister } from "./pwa-register";
 import { LangProvider } from "./lang-provider";

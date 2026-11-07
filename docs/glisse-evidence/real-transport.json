@@ -1,0 +1,1301 @@
+{
+  "kind": "real-browser-WebRTC",
+  "mockNetwork": false,
+  "mockCamera": false,
+  "testHooks": false,
+  "events": [
+    {
+      "name": "real pairing encoder",
+      "milliseconds": 479
+    },
+    {
+      "name": "real connection auto-opens Chat from another route",
+      "route": "http://localhost:3000/bridge"
+    },
+    {
+      "name": "pasted link real DTLS connection",
+      "milliseconds": 799
+    },
+    {
+      "name": "real bidirectional chat",
+      "direction": "host-to-guest",
+      "messages": 3,
+      "milliseconds": 657
+    },
+    {
+      "name": "real file transfer and downloaded bytes",
+      "direction": "host-to-guest",
+      "bytes": 700000,
+      "milliseconds": 615,
+      "sha256": "68c6f7572801a11f7a3d49f7c2194819c1dde83b2d0172d2061a3ad9d82c2cc4",
+      "downloadHash": "68c6f7572801a11f7a3d49f7c2194819c1dde83b2d0172d2061a3ad9d82c2cc4"
+    },
+    {
+      "name": "real bidirectional chat",
+      "direction": "guest-to-host",
+      "messages": 3,
+      "milliseconds": 418
+    },
+    {
+      "name": "real file transfer and downloaded bytes",
+      "direction": "guest-to-host",
+      "bytes": 700000,
+      "milliseconds": 577,
+      "sha256": "6896b2ffefced6ff646856b92c3cdff71ac1a9801492b1697b319142cb927349",
+      "downloadHash": "6896b2ffefced6ff646856b92c3cdff71ac1a9801492b1697b319142cb927349"
+    },
+    {
+      "name": "real typing messages",
+      "result": "received true and false"
+    },
+    {
+      "name": "tab navigation preserves real session",
+      "result": "connected, original messages retained"
+    },
+    {
+      "name": "composer above navigation",
+      "width": 390,
+      "theme": "light",
+      "composerTop": 762,
+      "composerBottom": 808,
+      "navTop": 826,
+      "gap": 18
+    },
+    {
+      "name": "composer above navigation",
+      "width": 390,
+      "theme": "dark",
+      "composerTop": 762,
+      "composerBottom": 808,
+      "navTop": 826,
+      "gap": 18
+    },
+    {
+      "name": "composer above navigation",
+      "width": 1280,
+      "theme": "light",
+      "composerTop": 762,
+      "composerBottom": 808,
+      "navTop": 826,
+      "gap": 18
+    },
+    {
+      "name": "composer above navigation",
+      "width": 1280,
+      "theme": "dark",
+      "composerTop": 762,
+      "composerBottom": 808,
+      "navTop": 826,
+      "gap": 18
+    },
+    {
+      "name": "disconnect returns to Pair from another route",
+      "route": "http://localhost:3000/bridge"
+    },
+    {
+      "name": "guest disconnect propagated",
+      "milliseconds": 142
+    },
+    {
+      "name": "real pairing encoder",
+      "milliseconds": 619
+    },
+    {
+      "name": "opening real pairing URL auto-joins",
+      "milliseconds": 259,
+      "urlFragmentRemoved": true
+    },
+    {
+      "name": "host disconnect propagated",
+      "milliseconds": 416
+    }
+  ],
+  "qr": [
+    {
+      "width": 390,
+      "theme": "light",
+      "screenshotWidth": 280,
+      "decodedExactPayload": true
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screenshotWidth": 280,
+      "decodedExactPayload": true
+    },
+    {
+      "width": 1280,
+      "theme": "light",
+      "screenshotWidth": 280,
+      "decodedExactPayload": true
+    },
+    {
+      "width": 1280,
+      "theme": "dark",
+      "screenshotWidth": 280,
+      "decodedExactPayload": true
+    }
+  ],
+  "chatStyles": [
+    {
+      "width": 390,
+      "theme": "light",
+      "components": [
+        {
+          "name": "chatbar",
+          "actual": {
+            "backgroundColor": "rgba(255, 255, 255, 0.6)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-13\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(255, 255, 255, 0.62)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(255, 255, 255, 0.6)",
+              "expected": "rgba(255, 255, 255, 0.62)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-13\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "composer",
+          "actual": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {}
+        },
+        {
+          "name": "attach",
+          "actual": {
+            "backgroundColor": "rgba(255, 255, 255, 0.6)",
+            "color": "rgba(0, 0, 0, 0.88)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "0px",
+            "paddingBottom": "0px",
+            "paddingLeft": "0px",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "22.4px",
+            "boxShadow": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(255, 255, 255, 0.62)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "1px",
+            "paddingRight": "6px",
+            "paddingBottom": "1px",
+            "paddingLeft": "6px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(255, 255, 255, 0.6)",
+              "expected": "rgba(255, 255, 255, 0.62)"
+            },
+            "color": {
+              "actual": "rgba(0, 0, 0, 0.88)",
+              "expected": "rgb(0, 0, 0)"
+            },
+            "paddingTop": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingRight": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "paddingBottom": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingLeft": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "fontSize": {
+              "actual": "16px",
+              "expected": "17px"
+            },
+            "fontWeight": {
+              "actual": "600",
+              "expected": "400"
+            },
+            "lineHeight": {
+              "actual": "22.4px",
+              "expected": "23.8px"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "input",
+          "actual": {
+            "backgroundColor": "rgba(255, 255, 255, 0.6)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-14\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(255, 255, 255, 0.62)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(255, 255, 255, 0.6)",
+              "expected": "rgba(255, 255, 255, 0.62)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-14\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "sent",
+          "actual": {
+            "backgroundColor": "rgb(0, 122, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "82.1719px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgb(0, 122, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "62.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "82.1719px",
+              "expected": "62.7812px"
+            }
+          }
+        },
+        {
+          "name": "received",
+          "actual": {
+            "backgroundColor": "color(srgb 0.91 0.91 0.91)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "20px 20px 6px",
+            "height": "82.1719px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "color(srgb 0.91 0.91 0.91)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "20px 20px 6px",
+            "height": "62.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "82.1719px",
+              "expected": "62.7812px"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "components": [
+        {
+          "name": "chatbar",
+          "actual": {
+            "backgroundColor": "rgba(40, 40, 40, 0.62)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-13\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(60, 62, 68, 0.34)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(40, 40, 40, 0.62)",
+              "expected": "rgba(60, 62, 68, 0.34)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-13\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "composer",
+          "actual": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {}
+        },
+        {
+          "name": "attach",
+          "actual": {
+            "backgroundColor": "rgba(40, 40, 40, 0.62)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "0px",
+            "paddingBottom": "0px",
+            "paddingLeft": "0px",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "22.4px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(60, 62, 68, 0.34)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "1px",
+            "paddingRight": "6px",
+            "paddingBottom": "1px",
+            "paddingLeft": "6px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(40, 40, 40, 0.62)",
+              "expected": "rgba(60, 62, 68, 0.34)"
+            },
+            "paddingTop": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingRight": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "paddingBottom": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingLeft": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "fontSize": {
+              "actual": "16px",
+              "expected": "17px"
+            },
+            "fontWeight": {
+              "actual": "600",
+              "expected": "400"
+            },
+            "lineHeight": {
+              "actual": "22.4px",
+              "expected": "23.8px"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "input",
+          "actual": {
+            "backgroundColor": "rgba(40, 40, 40, 0.62)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-14\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(60, 62, 68, 0.34)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(40, 40, 40, 0.62)",
+              "expected": "rgba(60, 62, 68, 0.34)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-14\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "sent",
+          "actual": {
+            "backgroundColor": "rgb(10, 132, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "82.1719px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgb(10, 132, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "62.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "82.1719px",
+              "expected": "62.7812px"
+            }
+          }
+        },
+        {
+          "name": "received",
+          "actual": {
+            "backgroundColor": "color(srgb 0.189922 0.189922 0.197059)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 6px",
+            "height": "82.1719px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "color(srgb 0.189922 0.189922 0.197059)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 6px",
+            "height": "62.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "82.1719px",
+              "expected": "62.7812px"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "width": 1280,
+      "theme": "light",
+      "components": [
+        {
+          "name": "chatbar",
+          "actual": {
+            "backgroundColor": "rgba(255, 255, 255, 0.6)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-10\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(255, 255, 255, 0.62)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(255, 255, 255, 0.6)",
+              "expected": "rgba(255, 255, 255, 0.62)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-10\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "composer",
+          "actual": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {}
+        },
+        {
+          "name": "attach",
+          "actual": {
+            "backgroundColor": "rgba(255, 255, 255, 0.6)",
+            "color": "rgba(0, 0, 0, 0.88)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "0px",
+            "paddingBottom": "0px",
+            "paddingLeft": "0px",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "22.4px",
+            "boxShadow": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(255, 255, 255, 0.62)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "1px",
+            "paddingRight": "6px",
+            "paddingBottom": "1px",
+            "paddingLeft": "6px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(255, 255, 255, 0.6)",
+              "expected": "rgba(255, 255, 255, 0.62)"
+            },
+            "color": {
+              "actual": "rgba(0, 0, 0, 0.88)",
+              "expected": "rgb(0, 0, 0)"
+            },
+            "paddingTop": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingRight": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "paddingBottom": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingLeft": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "fontSize": {
+              "actual": "16px",
+              "expected": "17px"
+            },
+            "fontWeight": {
+              "actual": "600",
+              "expected": "400"
+            },
+            "lineHeight": {
+              "actual": "22.4px",
+              "expected": "23.8px"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "input",
+          "actual": {
+            "backgroundColor": "rgba(255, 255, 255, 0.6)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-12\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(255, 255, 255, 0.62)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(255, 255, 255, 0.6)",
+              "expected": "rgba(255, 255, 255, 0.62)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0.06) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0.07) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.14) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-12\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "sent",
+          "actual": {
+            "backgroundColor": "rgb(0, 122, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "59.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgb(0, 122, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "40.3906px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "59.7812px",
+              "expected": "40.3906px"
+            }
+          }
+        },
+        {
+          "name": "received",
+          "actual": {
+            "backgroundColor": "color(srgb 0.91 0.91 0.91)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "20px 20px 6px",
+            "height": "59.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "color(srgb 0.91 0.91 0.91)",
+            "color": "rgb(0, 0, 0)",
+            "borderRadius": "20px 20px 6px",
+            "height": "40.3906px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "59.7812px",
+              "expected": "40.3906px"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "width": 1280,
+      "theme": "dark",
+      "components": [
+        {
+          "name": "chatbar",
+          "actual": {
+            "backgroundColor": "rgba(40, 40, 40, 0.62)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-10\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(60, 62, 68, 0.34)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "60px",
+            "paddingTop": "0px",
+            "paddingRight": "10px",
+            "paddingBottom": "0px",
+            "paddingLeft": "8px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(40, 40, 40, 0.62)",
+              "expected": "rgba(60, 62, 68, 0.34)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-10\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "composer",
+          "actual": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "0px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "16px",
+            "paddingBottom": "0px",
+            "paddingLeft": "16px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {}
+        },
+        {
+          "name": "attach",
+          "actual": {
+            "backgroundColor": "rgba(40, 40, 40, 0.62)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "0px",
+            "paddingBottom": "0px",
+            "paddingLeft": "0px",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "22.4px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(60, 62, 68, 0.34)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "50%",
+            "height": "46px",
+            "paddingTop": "1px",
+            "paddingRight": "6px",
+            "paddingBottom": "1px",
+            "paddingLeft": "6px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(40, 40, 40, 0.62)",
+              "expected": "rgba(60, 62, 68, 0.34)"
+            },
+            "paddingTop": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingRight": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "paddingBottom": {
+              "actual": "0px",
+              "expected": "1px"
+            },
+            "paddingLeft": {
+              "actual": "0px",
+              "expected": "6px"
+            },
+            "fontSize": {
+              "actual": "16px",
+              "expected": "17px"
+            },
+            "fontWeight": {
+              "actual": "600",
+              "expected": "400"
+            },
+            "lineHeight": {
+              "actual": "22.4px",
+              "expected": "23.8px"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-11\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "input",
+          "actual": {
+            "backgroundColor": "rgba(40, 40, 40, 0.62)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+            "backdropFilter": "blur(3px) url(\"#glisse-backdrop-12\") saturate(1.5)"
+          },
+          "expected": {
+            "backgroundColor": "rgba(60, 62, 68, 0.34)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "999px",
+            "height": "46px",
+            "paddingTop": "0px",
+            "paddingRight": "18px",
+            "paddingBottom": "0px",
+            "paddingLeft": "18px",
+            "fontSize": "17px",
+            "fontWeight": "400",
+            "lineHeight": "23.8px",
+            "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px",
+            "backdropFilter": "blur(22px) saturate(1.8)"
+          },
+          "differences": {
+            "backgroundColor": {
+              "actual": "rgba(40, 40, 40, 0.62)",
+              "expected": "rgba(60, 62, 68, 0.34)"
+            },
+            "boxShadow": {
+              "actual": "rgba(0, 0, 0, 0) 0px 1px 3px 0px",
+              "expected": "rgba(0, 0, 0, 0) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.6) 0px 8px 20px 0px"
+            },
+            "backdropFilter": {
+              "actual": "blur(3px) url(\"#glisse-backdrop-12\") saturate(1.5)",
+              "expected": "blur(22px) saturate(1.8)"
+            }
+          }
+        },
+        {
+          "name": "sent",
+          "actual": {
+            "backgroundColor": "rgb(10, 132, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "59.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "rgb(10, 132, 255)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 20px 6px",
+            "height": "40.3906px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "59.7812px",
+              "expected": "40.3906px"
+            }
+          }
+        },
+        {
+          "name": "received",
+          "actual": {
+            "backgroundColor": "color(srgb 0.189922 0.189922 0.197059)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 6px",
+            "height": "59.7812px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "expected": {
+            "backgroundColor": "color(srgb 0.189922 0.189922 0.197059)",
+            "color": "rgb(255, 255, 255)",
+            "borderRadius": "20px 20px 6px",
+            "height": "40.3906px",
+            "paddingTop": "9px",
+            "paddingRight": "14px",
+            "paddingBottom": "9px",
+            "paddingLeft": "14px",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "22.4px",
+            "boxShadow": "none",
+            "backdropFilter": "none"
+          },
+          "differences": {
+            "height": {
+              "actual": "59.7812px",
+              "expected": "40.3906px"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "physicalCamera": "NOT TESTED: no physical camera/display path in this sandbox",
+  "cameraDevices": [],
+  "pass": true
+}

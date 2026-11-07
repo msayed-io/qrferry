@@ -1,5 +1,7 @@
 "use client";
 
+import { LiquidButton } from "../liquid-controls";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -152,13 +154,13 @@ export function HistoryClient() {
                 ))}
               </ol>
               <div className="support-card-footer">
-                <button
+                <LiquidButton
                   className="support-button support-danger glass cap"
                   onClick={() => setConfirm(true)}
                 >
                   <Trash2 size={18} aria-hidden="true" />
                   {t("history.clear")}
-                </button>
+                </LiquidButton>
               </div>
             </>
           )}
@@ -192,14 +194,14 @@ export function HistoryClient() {
               : "Transfer history will be removed from this browser. This cannot be undone; your files will not be deleted."}
           </p>
           <div className="support-dialog-actions">
-            <button
+            <LiquidButton
               className="support-button glass cap"
               disabled={clearing}
               onClick={() => setConfirm(false)}
             >
               {ar ? "إلغاء" : "Cancel"}
-            </button>
-            <button
+            </LiquidButton>
+            <LiquidButton
               className="support-button support-danger glass cap"
               disabled={clearing}
               onClick={() => void onClear()}
@@ -211,7 +213,7 @@ export function HistoryClient() {
                 : ar
                   ? "تأكيد المسح"
                   : "Confirm clear"}
-            </button>
+            </LiquidButton>
           </div>
         </WorkspaceDialog>
       )}

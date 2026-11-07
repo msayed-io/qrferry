@@ -1,5 +1,7 @@
 "use client";
 
+import { LiquidButton, LiquidChoices } from "./liquid-controls";
+
 import {
   ChangeEvent,
   DragEvent,
@@ -1192,37 +1194,19 @@ export function SendClient() {
             />
           </div>
 
-          <div className="send-tabs seg" aria-label={lang === "ar" ? "نوع المحتوى" : "Content type"} role="tablist"
-            onKeyDown={(event) => {
-              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-              event.preventDefault();
-              const next = event.key === "Home" ? "file" : event.key === "End" ? "text" : tab === "file" ? "text" : "file";
-              setTab(next);
-              event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next === "file" ? 0 : 1]?.focus();
-            }}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "file"}
-              aria-controls="send-input-panel" tabIndex={tab === "file" ? 0 : -1}
-              className={tab === "file" ? "selected" : ""}
-              onClick={() => setTab("file")}
-            >
-              {t("send.fileTab")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "text"}
-              aria-controls="send-input-panel" tabIndex={tab === "text" ? 0 : -1}
-              className={tab === "text" ? "selected" : ""}
-              onClick={() => setTab("text")}
-            >
-              {t("send.textTab")}
-            </button>
-          </div>
+          <LiquidChoices
+            kind="content"
+            className="qf-content-choices"
+            label={lang === "ar" ? "نوع المحتوى" : "Content type"}
+            value={tab}
+            onValueChange={value => setTab(value === "text" ? "text" : "file")}
+            items={[
+              { value: "file", label: t("send.fileTab"), controls: "send-input-panel" },
+              { value: "text", label: t("send.textTab"), controls: "send-input-panel" },
+            ]}
+          />
 
-          <div id="send-input-panel" role="tabpanel" aria-label={tab === "file" ? t("send.fileTab") : t("send.textTab")}>
+          <div id="send-input-panel" role="region" aria-label={tab === "file" ? t("send.fileTab") : t("send.textTab")}>
           {tab === "file" ? (
             <div
               className={`drop-zone drop ${dragging ? "dragging" : ""}`}
@@ -1231,7 +1215,7 @@ export function SendClient() {
               <div className="ico"><DesignIcon name="doc" /></div>
               <p className="batch-hint">{lang === "ar" ? "اسحب الملفات إلى هنا" : "Drop files here"}</p>
               <div className="drop-row">
-              <button
+              <LiquidButton
                 className="file-button glass tinted cap"
                 type="button"
                 disabled={processing}
@@ -1242,8 +1226,8 @@ export function SendClient() {
               >
                 <DesignIcon name="doc" />
                 {processing ? t("send.processing") : lang === "ar" ? "تصفّح الملفات" : "Browse files"}
-              </button>
-              <button
+              </LiquidButton>
+              <LiquidButton
                 className="file-button folder-button glass cap"
                 type="button"
                 disabled={processing}
@@ -1251,7 +1235,7 @@ export function SendClient() {
               >
                 <DesignIcon name="folder" />
                 {lang === "ar" ? "اختيار مجلد" : "Pick a folder"}
-              </button>
+              </LiquidButton>
               </div>
             </div>
           ) : (
@@ -1262,14 +1246,14 @@ export function SendClient() {
                 placeholder={t("send.textPlaceholder")}
                 aria-label={t("send.textPlaceholder")}
               />
-              <button
+              <LiquidButton
                 type="button"
                 className="file-button glass tinted cap"
                 disabled={processing || textValue.trim().length === 0}
                 onClick={() => void prepareText()}
               >
                 {t("send.textConvert")}
-              </button>
+              </LiquidButton>
             </div>
           )}
 
@@ -1296,7 +1280,7 @@ export function SendClient() {
                       ? ` → ${formatBytes(item.compressedBytes.length)} · ${item.compressedMode}`
                       : ""}
                   </span>
-                  <button
+                  <LiquidButton
                     type="button"
                     className="remove-file glass circle"
                     disabled={processing || fastOpen}
@@ -1314,7 +1298,7 @@ export function SendClient() {
                     }
                   >
                     <X size={16} aria-hidden="true" />
-                  </button>
+                  </LiquidButton>
                 </div>
               ))}
               <div className="file-row batch-summary" key="total">
@@ -1331,7 +1315,7 @@ export function SendClient() {
                     </span>
                   ) : null}
                 </span>
-                <button className="glass cap"
+                <LiquidButton className="glass cap"
                   type="button"
                   disabled={processing || fastOpen}
                   onClick={() => {
@@ -1340,9 +1324,9 @@ export function SendClient() {
                   }}
                 >
                   {t("send.change")}
-                </button>
+                </LiquidButton>
               </div>
-              <button
+              <LiquidButton
                 type="button"
                 className="batch-add glass cap"
                 hidden={fileData.items.length >= MAX_BATCH_FILES}
@@ -1363,13 +1347,13 @@ export function SendClient() {
                   : lang === "ar"
                     ? "＋ إضافة ملف للدفعة"
                     : "＋ Add a file to this batch"}
-              </button>
+              </LiquidButton>
             </div>
           ) : null}
 
           </div>
           <div className="quick-send">
-            <button
+            <LiquidButton
               className="fast-action glass tinted cap lg"
               type="button"
               disabled={!fileData}
@@ -1384,7 +1368,7 @@ export function SendClient() {
               <span>
                 <strong>{lang === "ar" ? "نقل سريع" : "Quick transfer"}</strong>
               </span>
-            </button>
+            </LiquidButton>
             <p className="workspace-note"><NetworkStatus /></p>
           </div>
           <WorkspaceDisclosure
@@ -1443,14 +1427,14 @@ export function SendClient() {
                       />
                       <p className="encrypt-hint">{t("send.encryptHint.on")}</p>
                       <div className="adv-inline">
-                        <button
+                        <LiquidButton
                           type="button"
                           className="mini-btn glass cap"
                           disabled={passwordTooShort}
                           onClick={() => setShowPasswordQr(true)}
                         >
                           {t("send.showPasswordQr")}
-                        </button>
+                        </LiquidButton>
                       </div>
                     </div>
                   </div>
@@ -1499,14 +1483,14 @@ export function SendClient() {
                       </strong>
                     </p>
                     <div className="adv-inline">
-                      <button
+                      <LiquidButton
                         type="button"
                         className="mini-btn glass cap"
                         disabled={!identity}
                         onClick={() => setShowPubKeyQr(true)}
                       >
                         {t("send.signShowPub")}
-                      </button>
+                      </LiquidButton>
                     </div>
                     <p className="adv-hint">{t("send.signHint")}</p>
                   </div>
@@ -1593,7 +1577,7 @@ export function SendClient() {
                 </span>
               </div>
             )}
-            <button
+            <LiquidButton
               className="fullscreen-button glass circle"
               type="button"
               onClick={toggleFullscreen}
@@ -1601,7 +1585,7 @@ export function SendClient() {
               aria-label={t("send.qr.fullscreen")}
             >
               <DesignIcon name="full" />
-            </button>
+            </LiquidButton>
           </div>
 
           <div className="stream-status" aria-live="polite">
@@ -1651,7 +1635,7 @@ export function SendClient() {
             </div>
           ) : null}
 
-          <button
+          <LiquidButton
             className="primary-action glass tinted cap"
             type="button"
             disabled={!fileData || processing || passwordTooShort}
@@ -1675,7 +1659,7 @@ export function SendClient() {
                 : processing
                   ? t("send.preparing")
                   : t("send.start")}
-          </button>
+          </LiquidButton>
 
           {/* توصية النقل السريع للملفات الكبيرة (لم يُجهَّز البث تلقائياً) */}
           {fileData && !transfer && !processing ? (
@@ -1684,10 +1668,10 @@ export function SendClient() {
             </p>
           ) : null}
 
-          <button className="link-action glass cap" type="button" onClick={copyScanLink}>
+          <LiquidButton className="link-action glass cap" type="button" onClick={copyScanLink}>
             <DesignIcon name="copy" />
             {copied ? t("send.copied") : lang === "ar" ? "نسخ رابط الماسح للموبايل" : "Copy mobile scanner link"}
-          </button>
+          </LiquidButton>
 
           <WorkspaceDisclosure
             className="broadcast-settings"
@@ -1765,13 +1749,13 @@ export function SendClient() {
                   </b>
                 </button>
               ))}
-              <button
+              <LiquidButton
                 type="button"
                 className="preset-add glass cap"
                 onClick={() => setShowPresetForm((current) => !current)}
               >
                 {t("send.addPreset")}
-              </button>
+              </LiquidButton>
             </div>
 
             {showPresetForm ? (
@@ -1831,13 +1815,13 @@ export function SendClient() {
                   />
                 </label>
                 <div className="form-actions">
-                  <button type="submit" className="glass tinted cap">{t("send.presetSave")}</button>
-                  <button className="glass cap"
+                  <LiquidButton type="submit" className="glass tinted cap">{t("send.presetSave")}</LiquidButton>
+                  <LiquidButton className="glass cap"
                     type="button"
                     onClick={() => setShowPresetForm(false)}
                   >
                     {t("send.presetCancel")}
-                  </button>
+                  </LiquidButton>
                 </div>
               </form>
             ) : null}
@@ -1880,13 +1864,13 @@ export function SendClient() {
           <div ref={passwordQrHostRef}>
             {!passwordQrCanvas ? <p>…</p> : null}
           </div>
-          <button
+          <LiquidButton
             type="button"
             className="modal-close glass cap"
             onClick={() => setShowPasswordQr(false)}
           >
             {t("send.close")}
-          </button>
+          </LiquidButton>
         </WorkspaceDialog>
       ) : null}
 
@@ -1917,7 +1901,7 @@ export function SendClient() {
               <ol className="fast-steps">
                 <li>
                   {t("send.fastStep1")}{" "}
-                  <button
+                  <LiquidButton
                     type="button"
                     className="fast-url-copy glass cap"
                     onClick={() => {
@@ -1928,27 +1912,27 @@ export function SendClient() {
                     }}
                   >
                     {fastUrlCopied ? t("send.urlCopied") : t("send.copyUrl")}
-                  </button>
+                  </LiquidButton>
                   <code className="fast-url">{tvUrl}</code>
                 </li>
                 <li>{t("send.fastStep2")}</li>
               </ol>
               <p className="fast-hint"><NetworkStatus /></p>
               <div className="fast-actions">
-                <button
+                <LiquidButton
                   type="button"
                   className="primary-action fast-start glass tinted cap lg"
                   onClick={() => void startFastScan()}
                 >
                   <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
-                </button>
-                <button
+                </LiquidButton>
+                <LiquidButton
                   type="button"
                   className="modal-close glass cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastCancel")}
-                </button>
+                </LiquidButton>
               </div>
             </>
           ) : fastState === "scanning" ? (
@@ -1962,15 +1946,15 @@ export function SendClient() {
               ) : null}
               <p className="fast-hint">{t("send.fastHintKeepQr")}</p>
               <div className="fast-actions">
-                <button
+                <LiquidButton
                   type="button"
                   className="fast-switch-cam glass cap"
                   onClick={switchFastCamera}
                 >
                   <RefreshCw size={16} aria-hidden="true" />{" "}
                   {t("send.fastSwitchCamera")}
-                </button>
-                <button
+                </LiquidButton>
+                <LiquidButton
                   type="button"
                   className="modal-close glass cap"
                   onClick={() => {
@@ -1980,7 +1964,7 @@ export function SendClient() {
                   }}
                 >
                   {t("send.fastStop")}
-                </button>
+                </LiquidButton>
               </div>
             </>
           ) : fastState === "connecting" || fastState === "transferring" ? (
@@ -2002,13 +1986,13 @@ export function SendClient() {
                 </p>
               ) : null}
               <div className="fast-actions">
-                <button
+                <LiquidButton
                   type="button"
                   className="modal-close glass cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastCancel")}
-                </button>
+                </LiquidButton>
               </div>
             </>
           ) : fastState === "done" ? (
@@ -2017,13 +2001,13 @@ export function SendClient() {
                 {fastStatus}
               </p>
               <div className="fast-actions">
-                <button
+                <LiquidButton
                   type="button"
                   className="primary-action glass tinted cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastClose")}
-                </button>
+                </LiquidButton>
               </div>
             </>
           ) : (
@@ -2033,20 +2017,20 @@ export function SendClient() {
               </p>
               <p className="fast-hint">{t("send.fastFallback")}</p>
               <div className="fast-actions">
-                <button
+                <LiquidButton
                   type="button"
                   className="primary-action glass tinted cap"
                   onClick={() => void startFastScan()}
                 >
                   <Camera size={18} aria-hidden="true" /> {t("send.fastScan")}
-                </button>
-                <button
+                </LiquidButton>
+                <LiquidButton
                   type="button"
                   className="modal-close glass cap"
                   onClick={closeFastModal}
                 >
                   {t("send.fastCancel")}
-                </button>
+                </LiquidButton>
               </div>
             </>
           )}
@@ -2066,13 +2050,13 @@ export function SendClient() {
               : t("send.signNoIdentity")}
           </p>
           <div ref={pubKeyQrHostRef}>{!pubKeyQrCanvas ? <p>…</p> : null}</div>
-          <button
+          <LiquidButton
             type="button"
             className="modal-close glass cap"
             onClick={() => setShowPubKeyQr(false)}
           >
             {t("send.close")}
-          </button>
+          </LiquidButton>
         </WorkspaceDialog>
       ) : null}
     </main>
