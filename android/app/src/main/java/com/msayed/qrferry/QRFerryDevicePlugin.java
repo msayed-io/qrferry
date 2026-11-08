@@ -127,7 +127,20 @@ public class QRFerryDevicePlugin extends Plugin {
             String id=ids.optString(i);shared.remove(id);positions.remove(id);InputStream input=inputs.remove(id);
             if(input!=null)try{input.close();}catch(Exception ignored){}
         }
-        if(shared.isEmpty())getActivity().setIntent(new Intent());call.resolve();
+        if(shared.isEmpty()){
+            Intent current=getActivity().getIntent();
+            if(current!=null&&(Intent.ACTION_SEND.equals(current.getAction())||Intent.ACTION_SEND_MULTIPLE.equals(current.getAction()))){
+                // Consume only share data; retain component and launch/lifecycle metadata.
+                Intent consumed=new Intent(current);
+                consumed.setAction(Intent.ACTION_MAIN);
+                consumed.removeExtra(Intent.EXTRA_STREAM);
+                consumed.removeExtra(Intent.EXTRA_TEXT);
+                consumed.removeExtra(Intent.EXTRA_HTML_TEXT);
+                consumed.setClipData(null);consumed.setDataAndType(null,null);
+                getActivity().setIntent(consumed);
+            }
+        }
+        call.resolve();
     }
     @PluginMethod public void beginSave(PluginCall call){
         if(savePending||!outputs.isEmpty()){call.reject("Another save is in progress.");return;}

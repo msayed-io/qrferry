@@ -101,6 +101,10 @@ public class NativeIntegrationTest {
                 +"const file=files[0];let offset=0,sum=0,calls=0;while(true){const result=await Capacitor.nativePromise('QRFerryDevice','readSharedChunk',{id:file.id,offset,length:196608});const data=atob(result.data);calls++;if(!data.length)break;for(let i=0;i<data.length;i++)sum+=data.charCodeAt(i);offset+=data.length;if(offset>file.size)throw Error('Repeated or excess chunk');}"
                 +"await Capacitor.nativePromise('QRFerryDevice','clearSharedFiles',{ids:[file.id]});return {size:offset,sum,calls};");
             JSONObject result=new JSONObject(value);assertEquals(bytes.length,result.getLong("size"));assertEquals(expectedSum,result.getLong("sum"));assertEquals(4,result.getInt("calls"));
+            scenario.onActivity(activity->{
+                assertNotNull("Clearing a share must preserve activity launch metadata",activity.getIntent().getComponent());
+                assertEquals(MainActivity.class.getName(),activity.getIntent().getComponent().getClassName());
+            });
         }finally{file.delete();}
     }
     private static void night(String value) throws Exception {
