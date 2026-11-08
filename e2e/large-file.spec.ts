@@ -17,7 +17,7 @@ test("large file: fast transfer is available immediately without heavy preparati
   await disableTour(page);
   await page.goto("/");
   const buffer = Buffer.alloc(20 * 1024 * 1024, 7);
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('input[type="file"]:not([webkitdirectory])', {
     name: "big.bin",
     mimeType: "application/octet-stream",
     buffer,
@@ -42,7 +42,7 @@ test("large file: pressing start QR stream triggers on-demand preparation", asyn
   await disableTour(page);
   await page.goto("/");
   const buffer = Buffer.alloc(5 * 1024 * 1024, 3);
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('input[type="file"]:not([webkitdirectory])', {
     name: "medium.bin",
     mimeType: "application/octet-stream",
     buffer,
@@ -57,7 +57,7 @@ test("large file: pressing start QR stream triggers on-demand preparation", asyn
 test("small file still prepares automatically", async ({ page }) => {
   await page.goto("/");
   const buffer = Buffer.from("ملف صغير ".repeat(2000)); // ~14KB
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('input[type="file"]:not([webkitdirectory])', {
     name: "small.txt",
     mimeType: "text/plain",
     buffer,
@@ -94,7 +94,7 @@ test("fast transfer moves a 10MB file quickly without optical preparation", asyn
 
   // ملف 10MB
   const buffer = Buffer.alloc(10 * 1024 * 1024, 9);
-  await phonePage.setInputFiles('input[type="file"]', {
+  await phonePage.setInputFiles('input[type="file"]:not([webkitdirectory])', {
     name: "big10.bin",
     mimeType: "application/octet-stream",
     buffer,

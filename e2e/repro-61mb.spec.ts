@@ -35,7 +35,7 @@ test("large file: 25MB fast transfer — measure each phase and detect failure",
   const big = Buffer.alloc(25 * 1024 * 1024, 5);
   const fs = await import("node:fs");
   fs.writeFileSync("/tmp/big25.bin", big);
-  await phonePage.setInputFiles('input[type="file"]', "/tmp/big25.bin");
+  await phonePage.setInputFiles('input[type="file"]:not([webkitdirectory])', "/tmp/big25.bin");
 
   const fastButton = phonePage.locator(".fast-action");
   await expect(fastButton).toBeEnabled({ timeout: 20_000 });

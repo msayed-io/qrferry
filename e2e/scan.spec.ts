@@ -141,7 +141,7 @@ test("scanner completes a full file transfer through a simulated camera", async 
   );
 
   await page.getByRole("button", { name: "تشغيل الكاميرا" }).click();
-  await expect(page.getByText("تم استرداد الملف.")).toBeVisible({
+  await expect(page.getByRole("heading", { name: "ملفاتك جاهزة" })).toBeVisible({
     timeout: 120_000,
   });
 
@@ -175,7 +175,7 @@ test("encrypted transfer requires the password to decrypt", async ({ page }) => 
 
   await passwordInput.fill("secret-pass");
   await page.getByRole("button", { name: "فكّ التشفير" }).click();
-  await expect(page.getByText("تم استرداد الملف.")).toBeVisible({
+  await expect(page.getByRole("heading", { name: "ملفاتك جاهزة" })).toBeVisible({
     timeout: 60_000,
   });
 

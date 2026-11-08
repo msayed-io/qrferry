@@ -5,7 +5,6 @@ import { PNG } from 'pngjs';
 import { readBarcodes, prepareZXingModule } from 'zxing-wasm/reader';
 import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
-import {unzipSync} from 'fflate';
 const require=createRequire(import.meta.url),dir=process.env.EVIDENCE_DIR||'/home/user/qrferry-redesign-evidence';
 const out={checks:[],errors:[],mockedAPIs:false,limitations:[]};
 const browser=await chromium.launch({args:['--no-sandbox']});
@@ -58,16 +57,15 @@ try{
  await page.goto('http://localhost:3000/scan');await page.getByRole('button',{name:'تشغيل الكاميرا',exact:true}).click();await expect(page.locator('.error-message')).toBeVisible({timeout:15000});check('real camera unavailable handling',{message:await page.locator('.error-message').textContent(),activeLines:await page.locator('.camera-view .ln').count()});
  await page.goto('http://localhost:3000/bridge');await page.locator('#bridge-paste-input').fill('not a QRFerry link');await expect(page.getByRole('button',{name:'اتصل',exact:true})).toBeDisabled();check('invalid pairing rejected before attempt',{ariaInvalid:await page.locator('#bridge-paste-input').getAttribute('aria-invalid')});
  await page.locator('#bridge-paste-input').fill('');await page.getByRole('button',{name:'افتح الكاميرا للمسح',exact:true}).click();await expect(page.locator('.bridge-error').first()).toContainText('الكاميرا',{timeout:15000});check('pair camera unavailable handling',{message:await page.locator('.bridge-error').first().textContent()});
- for(const route of ['/history','/offline','/privacy']){
+ for(const route of ['/history','/privacy']){
   const response=await page.goto(`http://localhost:3000${route}`);await expect(page.locator('.support-page')).toBeVisible();
   for(const theme of ['light','dark']){await page.emulateMedia({colorScheme:theme});await page.screenshot({path:`${dir}/secondary-${route.slice(1)}-${theme}.png`,fullPage:true});}
   check('secondary route rendered',{route,status:response.status(),overflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)});
  }
- await page.goto('http://localhost:3000/offline');const promise=page.waitForEvent('download',{timeout:60000});await page.locator('.offline-download').click();const download=await promise;const zip=await fs.readFile(await download.path());const names=Object.keys(unzipSync(zip));check('real offline ZIP generated and downloaded',{bytes:zip.length,files:names.length,containsIndex:names.includes('index.html'),isolatedExecution:'NOT TESTED'});
- const tv=await page.goto('http://localhost:3000/tv');check('pre-existing missing fast receiver route',{status:tv.status(),scope:'not added or changed'});
- // Real browser multipart submission through the existing share endpoint.
- await page.goto('http://localhost:3000');
- await page.evaluate(()=>{const f=document.createElement('form');f.method='POST';f.enctype='multipart/form-data';f.action='/share';f.id='real-share-check';const i=document.createElement('input');i.type='file';i.name='file';f.append(i);document.body.append(f);});
+ const tv=await page.goto('http://localhost:3000/tv');await expect(page.getByRole('heading',{name:'استقبال على الشاشة'})).toBeVisible();check('restored QFTV receiver route',{status:tv.status()});
+ // Real browser multipart submission intercepted locally by the installed SW.
+ await page.goto('http://localhost:3000');await page.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));});
+ await page.evaluate(()=>{const f=document.createElement('form');f.method='POST';f.enctype='multipart/form-data';f.action='/share';f.id='real-share-check';const i=document.createElement('input');i.type='file';i.name='files';f.append(i);document.body.append(f);});
  await page.locator('#real-share-check input').setInputFiles(files[0]);await page.locator('#real-share-check').evaluate(f=>f.submit());
  await page.waitForURL(/shared=1/);await expect(page.locator('.batch-file')).toContainText('file-1.txt',{timeout:30000});check('real multipart share and IndexedDB pickup',{selected:'file-1.txt',route:page.url()});
  // Performance of real scrolling with active browser compositing, not device simulation.

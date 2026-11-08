@@ -9,6 +9,7 @@ import { prepareZXingModule, readBarcodes } from 'zxing-wasm/reader';
 import { PNG } from 'pngjs';
 const require=createRequire(import.meta.url), dir=process.env.EVIDENCE_DIR||'/home/user/qrferry-redesign-evidence';
 const result={kind:'real-browser-WebRTC',mockNetwork:false,mockCamera:false,testHooks:false,events:[],qr:[],chatStyles:[],errors:[],physicalCamera:'NOT TESTED: no physical camera/display path in this sandbox'};
+await fs.mkdir(dir,{recursive:true});
 const browsers=[];
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const event=(name,detail)=>{result.events.push({name,...detail});console.log(name,detail);};
@@ -57,7 +58,10 @@ try {
  await guest.locator('#bridge-paste-input').fill(url);
  await expect(guest.getByRole('button',{name:'اتصل',exact:true})).toBeEnabled();
  await guest.getByRole('button',{name:'اتصل',exact:true}).click();
- await connected();event('real connection auto-opens Chat from another route',{route:host.url()});event('pasted link real DTLS connection',{milliseconds:Date.now()-start});
+ await expect(host.locator('#nav-chat')).toBeVisible({timeout:35000});
+ await expect(host.locator('#nav-send')).toHaveAttribute('aria-selected','true');
+ event('real connection respects the user-selected Send route',{route:host.url()});
+ await host.locator('#nav-chat').click();await connected();event('pasted link real DTLS connection',{milliseconds:Date.now()-start});
  for(const [sender,receiver,label] of [[host,guest,'host-to-guest'],[guest,host,'guest-to-host']]){
   const t=Date.now();
   for(let i=1;i<=3;i++){
@@ -129,8 +133,10 @@ try {
  await host.locator('#nav-send').click();await expect(host.locator('.sender-page')).toBeVisible();
  let t=Date.now();await guest.getByRole('button',{name:'قطع الاتصال',exact:true}).click();
  await Promise.all(pages.map(p=>expect(p.locator('#nav-chat')).toHaveCount(0,{timeout:15000})));
- for(const p of pages)await expect(p.locator('#nav-pair')).toHaveAttribute('aria-selected','true');
- event('disconnect returns to Pair from another route',{route:host.url()});
+ await expect(host.locator("#nav-send")).toHaveAttribute("aria-selected","true");
+ await expect(guest.locator("#nav-pair")).toHaveAttribute("aria-selected","true");
+ event("disconnect respects the user-selected Send route",{route:host.url()});
+ await host.locator("#nav-pair").click();
  event('guest disconnect propagated',{milliseconds:Date.now()-t});
  // Host remains a real listener after peer disconnect; cancel it to generate a new secret.
  await host.getByRole('button',{name:'إلغاء',exact:true}).click();

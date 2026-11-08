@@ -71,3 +71,9 @@
 @media(prefers-reduced-transparency:reduce){
   html .lg-menu-surface{background:var(--solid);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
 }
+
+/* Measured compositor fix: live SVG BACKDROP graphs cost 4–5 frames per scroll
+   on Chromium. Keep native foreground label refraction, rims and all springs;
+   use the native frosted material for the scene behind controls. This is not a
+   substitute TabBar/Menu and does not disable its held-label lens. */
+.lg-glass,.lg-tab-glass,.lg-tab-lens{--lg-filter:blur(3px) saturate(1.5)!important}

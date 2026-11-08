@@ -18,7 +18,6 @@ const ar = {
   "nav.send": "إرسال",
   "nav.scan": "مسح",
   "nav.history": "السجل",
-  "nav.offline": "أوفلاين",
   "footer.note": "QRFerry · ملفاتك لا تغادر أجهزتك أبداً",
   "network.zero": "صفر شبكة — كل شيء محلي",
   "network.active": "حدث اتصال بالشبكة",
@@ -117,7 +116,6 @@ const ar = {
   "send.how2.desc": "رموز ثنائية بلا توسعة Base45، مع هندسة تتبّع ثابتة يسهل على الكاميرا الإمساك بها.",
   "send.how3.title": "RaptorQ عبر الزمن",
   "send.how3.desc": "تتداخل رموز المصدر والإصلاح، فتتحول الضبابية والإطارات المفقودة إلى محوٍ غير ضار.",
-  "send.offlineButton": "حزمة أوفلاين",
   "send.sharedPickup": "استُلمت {n} ملف من المشاركة — جاهزة للإرسال.",
   "send.error.tooLarge": "اختر ملفاً أصغر من 512 ميجابايت لهذا الإصدار.",
   "send.error.prepare": "تعذّر تجهيز الملف.",
@@ -312,17 +310,6 @@ const ar = {
   "history.clear": "مسح السجل",
   "history.localNote": "السجل محفوظ على جهازك فقط.",
 
-  // أوفلاين
-  "offline.title": "حزمة النشر الأوفلاين",
-  "offline.desc":
-    "حمّل الموقع كاملاً (صفحات + مكتبات WASM + خطوط) في ملف واحد، وانقله إلى أي شبكة معزولة عن الإنترنت.",
-  "offline.download": "تحميل الحزمة الأوفلاين",
-  "offline.preparing": "جارٍ تجهيز الحزمة…",
-  "offline.howTitle": "كيف تستخدمها في شبكة معزولة؟",
-  "offline.how1": "1) انقل ملف الحزمة (ZIP) عبر USB إلى الجهاز داخل الشبكة المعزولة.",
-  "offline.how2": "2) فك ضغطه وارفع المجلد على أي خادم ويب بسيط (مثل python -m http.server).",
-  "offline.how3": "3) الكاميرا تحتاج HTTPS أو localhost — الأسهل: شغّله على localhost على الجهاز المستضيف.",
-  "offline.note": "ملاحظة: تُحتسب أصول الحزمة من نسخة الموقع الحالية التي تشاهدها الآن.",
 
   // الخصوصية
   "privacy.title": "سياسة الخصوصية",
@@ -337,7 +324,6 @@ const en: Record<string, string> = {
   "nav.send": "Send",
   "nav.scan": "Scan",
   "nav.history": "History",
-  "nav.offline": "Offline",
   "footer.note": "QRFerry · Your files never leave your devices",
   "network.zero": "Zero network — everything is local",
   "network.active": "A network request occurred",
@@ -435,7 +421,6 @@ const en: Record<string, string> = {
   "send.how2.desc": "Byte-mode symbols remove Base45 expansion while stable finder geometry stays easy to track.",
   "send.how3.title": "RaptorQ across time",
   "send.how3.desc": "Source and repair symbols are interleaved, so blur and dropped exposures become harmless erasures.",
-  "send.offlineButton": "Offline package",
   "send.sharedPickup": "Received {n} file(s) from sharing — ready to send.",
   "send.error.tooLarge": "Choose a file smaller than 512 MB for this build.",
   "send.error.prepare": "The file could not be prepared.",
@@ -627,16 +612,6 @@ const en: Record<string, string> = {
   "history.clear": "Clear history",
   "history.localNote": "History is stored only on your device.",
 
-  "offline.title": "Offline deployment package",
-  "offline.desc":
-    "Download the entire site (pages + WASM libraries + fonts) as a single file and move it to any network isolated from the internet.",
-  "offline.download": "Download offline package",
-  "offline.preparing": "Preparing package…",
-  "offline.howTitle": "How to use it in an isolated network?",
-  "offline.how1": "1) Move the package (ZIP) via USB to a device inside the isolated network.",
-  "offline.how2": "2) Unzip it and serve the folder with any simple web server (e.g. python -m http.server).",
-  "offline.how3": "3) The camera needs HTTPS or localhost — easiest: run it on localhost on the host device.",
-  "offline.note": "Note: the package is built from the version of the site you are viewing now.",
 
   "privacy.title": "Privacy Policy",
   "privacy.updated": "Last updated: August 1, 2026",

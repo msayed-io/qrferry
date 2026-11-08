@@ -12,7 +12,7 @@ try{
    const ar=lang==='ar';const context=await browser.newContext({viewport:{width,height:900},locale:ar?'ar-EG':'en-US',colorScheme:theme});
    await context.addInitScript(({lang,theme})=>{localStorage.setItem('qrferry-lang',lang==='ar'?'en':'ar');localStorage.setItem('qrferry-theme',theme==='dark'?'light':'dark');},{lang,theme});
    const page=await context.newPage();page.on('pageerror',e=>result.errors.push({engine,width,theme,lang,message:e.message}));
-   const response=await page.goto('http://localhost:3000');const ssr=await response.text();expect(ssr).toContain(`lang="${lang}"`);
+   const response=await page.goto('http://localhost:3000');expect(response.status()).toBe(200); // CSR: locale is asserted on the hydrated document below.
    await expect(page.locator('html')).toHaveAttribute('lang',lang);await expect(page.locator('html')).toHaveAttribute('dir',ar?'rtl':'ltr');await page.locator('.qf-tab-bar[data-ready]').waitFor();
    await expect(page.locator('[data-theme]')).toHaveCount(0);await expect(page.locator('.secondary-links,.site-footer,.tools')).toHaveCount(0);
    const tint=await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--tint').trim().toUpperCase());expect(tint).toBe(theme==='light'?'#9A315E':'#E792B9');
@@ -25,7 +25,7 @@ try{
    await page.mouse.click(width/2,230);await expect(menu).toHaveCount(0);
    await page.locator('#nav-scan').click();await page.waitForURL('**/scan');
    const pages=[];
-   for(const [route,label] of [['history',ar?'السجل':'History'],['privacy',ar?'الخصوصية':'Privacy'],['offline',ar?'أوفلاين':'Offline']]){
+   for(const [route,label] of [['history',ar?'السجل':'History'],['privacy',ar?'الخصوصية':'Privacy']]){
     await page.getByRole('button',{name:ar?'قائمة التطبيق':'App menu',exact:true}).click();await page.getByRole('menuitem',{name:label,exact:true}).click();await page.waitForURL(`**/${route}`);
     await expect(page.locator('.app-header,.bottom-nav,.site-footer,.support-nav,.app-menu')).toHaveCount(0);
     await expect(page.locator('.support-toolbar>.lg-glass')).toHaveCount(2);await expect(page.locator('.support-toolbar h1')).toHaveText(label);
@@ -42,6 +42,7 @@ try{
    await page.emulateMedia({colorScheme:theme==='light'?'dark':'light'});await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--tint').trim().toUpperCase())).toBe(theme==='light'?'#E792B9':'#9A315E');
    await page.emulateMedia({colorScheme:theme});
    if(engine==='chromium'&&width===390&&lang==='ar'){
+    await page.locator('.file-button').first().waitFor({state:'visible'});
     const colors=await page.evaluate(()=>{
      const root=getComputedStyle(document.documentElement),canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');
      const rgb=v=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=v;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data].slice(0,3);};
@@ -50,7 +51,7 @@ try{
     });
     for(const [name,a,b] of [['on-accent / accent',colors.on,colors.accent],['secondary / card',colors.secondary,colors.card],['error / card',colors.error,colors.card],['actual filled control',colors.buttonFg,colors.buttonBg]]){const ratio=contrast(a,b);expect(ratio).toBeGreaterThanOrEqual(4.5);result.contrast.push({theme,name,ratio});}
    }
-   result.cases.push({engine,width,theme,lang,ssrLanguage:true,storedOverridesIgnored:true,tint,menuKeyboard:true,outsideDismiss:true,menuInViewport:true,itemHeights,pages,directLinkExit:true,liveColorScheme:true});console.log('PASS',engine,width,theme,lang);await context.close();
+   result.cases.push({engine,width,theme,lang,hydratedLanguage:true,storedOverridesIgnored:true,tint,menuKeyboard:true,outsideDismiss:true,menuInViewport:true,itemHeights,pages,directLinkExit:true,liveColorScheme:true});console.log('PASS',engine,width,theme,lang);await context.close();
   }
  }
  // This is explicitly a preference-event test, not a physical device language-settings test.

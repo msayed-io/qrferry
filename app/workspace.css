@@ -102,3 +102,10 @@ input.field{padding:0 16px;font-size:16px;line-height:1.4}
 .brand{min-height:44px}
 .seg button{transition-duration:.35s}
 @media(prefers-reduced-transparency:reduce){html .seg [aria-selected=true]{background:var(--solid)}html .tab[aria-selected=true]{background:color-mix(in srgb,var(--tint) 14%,var(--solid))}}
+
+/* A failed camera is inactive: collapse its empty stage so the real error and
+   retry stay visible on small screens. Camera selection remains available. */
+.scanner-page.ws-state-error .camera-view,.scanner-page.ws-state-error .handsfree-tip{display:none}
+
+.scanner-page:is(.is-complete,.needs-review) .camera-card{display:none}
+.scanner-page:is(.is-complete,.needs-review) .scanner-shell{grid-template-columns:1fr}

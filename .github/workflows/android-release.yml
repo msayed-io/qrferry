@@ -1,100 +1,92 @@
 name: Android Release
-
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: write
-
 concurrency:
   group: android-release-main
   cancel-in-progress: false
-
 env:
   NODE_VERSION: '22.13.0'
-
 jobs:
-  version:
-    name: Bump version and tag release
+  quality:
+    name: Web and protocol quality gates
     if: ${{ !contains(github.event.head_commit.message, '[skip android release]') }}
     runs-on: ubuntu-24.04
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      version_code: ${{ steps.version.outputs.version_code }}
-      sha: ${{ steps.commit.outputs.sha }}
     steps:
-      - name: Check out main
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Bump patch version
-        id: version
-        run: |
-          set -euo pipefail
-          npm version patch --no-git-tag-version --allow-same-version
-          result="$(node scripts/bump-android-version.mjs)"
-          version="$(node -p 'require("./package.json").version')"
-          version_code="$(printf '%s' "$result" | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).versionCode')"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
-      - name: Commit and tag release
-        id: commit
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package.json package-lock.json android/app/build.gradle
-          git commit -m "chore: release v${VERSION} [skip android release]"
-          git tag -a "v${VERSION}" -m "QRFerry Android v${VERSION}"
-          git push origin HEAD:main --follow-tags
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
+      - run: npm ci
+      - run: npm run lint && npm run typecheck && npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:release
+      - name: Preserve browser failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-failures
+          path: test-results/
+          retention-days: 14
   build:
-    name: Build signed Android release
-    needs: version
+    name: Test Android and publish verified signed artifacts
+    needs: quality
     runs-on: ubuntu-24.04
     environment: android-release
-    permissions:
-      contents: write
     steps:
-      - name: Check out versioned commit
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version.outputs.sha }}
           fetch-depth: 0
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Build local React web assets and sync Capacitor
+      - run: npm ci
+      - name: Prepare next patch version locally (no commit/tag yet)
+        id: version
         run: |
           set -euo pipefail
+          npm version patch --no-git-tag-version
+          result="$(node scripts/bump-android-version.mjs)"
+          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          echo "version_code=$(printf '%s' "$result" | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).versionCode')" >> "$GITHUB_OUTPUT"
+      - name: Build complete local assets and native test fixture
+        run: |
           npm run build
-          test -s www/index.html
-          test -s www/assets/index-*.js
-          test -s www/icons/icon-512.png
           npx cap sync android
-          test -s android/app/src/main/assets/public/index.html
-          test -s android/app/src/main/assets/public/assets/index-*.js
+          node --import tsx scripts/make-native-fixture.ts
+          chmod +x android/gradlew
+          android/gradlew --no-daemon -p android testDebugUnitTest assembleDebug assembleDebugAndroidTest
+      - name: Enable emulator hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify native WebView worker and Android OS preferences
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: android/gradlew --no-daemon -p android connectedDebugAndroidTest
+      - name: Preserve native test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: android/app/build/reports/
+          retention-days: 14
       - name: Materialize signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -129,30 +121,61 @@ jobs:
           test -x "$aapt2"
           actual="$("$aapt2" dump badging android/app/build/outputs/apk/release/app-release.apk | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
           test "$actual" = "$expected"
-          jarsigner -verify -strict android/app/build/outputs/apk/release/app-release.apk >/dev/null
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk
+          badging="$("$aapt2" dump badging android/app/build/outputs/apk/release/app-release.apk)"
+          [[ "$badging" == *"versionName='${{ steps.version.outputs.version }}'"* ]]
+          [[ "$badging" == *"versionCode='${{ steps.version.outputs.version_code }}'"* ]]
+          unzip -Z1 android/app/build/outputs/apk/release/app-release.apk | grep 'assets/public/assets/scan.worker-'
+          unzip -p android/app/build/outputs/apk/release/app-release.apk assets/capacitor.config.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{if(JSON.parse(s).server?.url)process.exit(1)})'
           unzip -t android/app/build/outputs/bundle/release/app-release.aab >/dev/null
           sha256sum android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/bundle/release/app-release.aab
       - name: Upload signed artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: qrferry-android-${{ needs.version.outputs.version }}
+          name: qrferry-android-${{ steps.version.outputs.version }}
           path: |
             android/app/build/outputs/apk/release/app-release.apk
             android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
-      - name: Create GitHub Release
+      # Nothing is committed/tagged until tests, packaging and signature checks pass.
+      - name: Commit and atomically publish the verified version
         env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "v${VERSION}" \
-            android/app/build/outputs/apk/release/app-release.apk \
-            android/app/build/outputs/bundle/release/app-release.aab \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "QRFerry Android v${VERSION}" \
-            --generate-notes
+          git fetch origin main --tags
+          remote="$(git rev-parse origin/main)"
+          if [ "$remote" = "$GITHUB_SHA" ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add package.json package-lock.json android/app/build.gradle
+            git commit -m "chore: release v${VERSION} [skip android release]"
+            git tag -a "v${VERSION}" -m "QRFerry Android v${VERSION}"
+            git push --atomic origin HEAD:main "refs/tags/v${VERSION}"
+          else
+            # Safe rerun after a release-upload failure: do not bump/tag a second time.
+            test "$(git rev-parse 'origin/main^')" = "$GITHUB_SHA"
+            test "$(git rev-parse "v${VERSION}^{commit}")" = "$remote"
+            test "$(git show origin/main:package.json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')" = "$VERSION"
+          fi
+      - name: Publish complete GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "v${VERSION}" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --title "QRFerry Android v${VERSION}" --generate-notes
+          fi
+          if [ "$(gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true ]; then
+            gh release upload "v${VERSION}" --repo "$GITHUB_REPOSITORY" --clobber \
+              android/app/build/outputs/apk/release/app-release.apk \
+              android/app/build/outputs/bundle/release/app-release.aab
+            gh release edit "v${VERSION}" --repo "$GITHUB_REPOSITORY" --draft=false
+          fi
       - name: Remove signing material
         if: ${{ always() }}
         run: rm -f "$RUNNER_TEMP/qrferry-release.keystore"

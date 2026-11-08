@@ -1,7 +1,7 @@
 "use client";
 
 
-import { usePathname, useRouter } from "./router";
+import { AppLink, usePathname, useRouter } from "./router";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "./lang-provider";
 import { LiquidChoices } from "./liquid-controls";
@@ -10,6 +10,7 @@ import { BridgeViewContext, type BridgeView } from "./design-system";
 const BridgeClient = lazy(() => import("./bridge/bridge-client").then(({ BridgeClient }) => ({ default: BridgeClient })));
 import { AppMenu } from "./app-menu";
 import { SupportReturnContext, SUPPORT_ROUTES } from "./support-navigation";
+import { RouteErrorBoundary } from "./global-error";
 import { observeRims } from "./rim";
 
 /** Only the mounted UI/session owner is retained. The transport and its authentication are unchanged. */
@@ -30,14 +31,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const connectionChanged = useCallback((next: boolean) => {
     const changed = connectedRef.current !== next;
     connectedRef.current = next;
+    if (!changed) return; // Repeated status notifications must not override a user-selected tab.
     setConnected(next);
     setView(next ? "chat" : "pair");
-    // The session callback outlives route renders; read the live path, not a stale closure.
-    // Only an actual connection/disconnection edge can move a different route to Pair/Chat.
-    if (changed && !["/pc", "/bridge"].includes(window.location.pathname)) {
-      router.push("/bridge");
-    }
-  }, [router]);
+    // An asynchronous network edge must never steal a newer explicit route choice.
+    // On Pair itself, switching to Chat remains automatic; other routes stay put.
+  }, []);
   const context = useMemo(() => ({ connected, view, setView, connectionChanged }), [connected, view, connectionChanged]);
   useEffect(observeRims, []);
   const active = bridgeRoute ? (connected && view === "chat" ? "chat" : "pair") : path === "/" ? "send" : path === "/scan" ? "scan" : null;
@@ -55,14 +54,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   return <BridgeViewContext.Provider value={context}><SupportReturnContext.Provider value={returnPath}>
     <div className={`wrap app-wrap ${standalone ? "standalone-wrap" : ""} ${active === "chat" ? "chat-wrap" : ""}`}>
       {!standalone && <header className="app-header">
-        <a className="brand" href="/" aria-label="QRFerry">
+        <AppLink className="brand" href="/" aria-label="QRFerry">
           <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3"/><rect x="17" y="3" width="10" height="10" rx="3"/><rect x="3" y="17" width="10" height="10" rx="3"/><rect x="17" y="17" width="10" height="10" rx="3" fill="var(--tint)" stroke="none"/></svg>
           QRFerry
-        </a>
+        </AppLink>
         <AppMenu onNavigate={href => { setReturnPath(path); router.push(href); }} />
       </header>}
       <div id="route-content" hidden={bridgeRoute}>{children}</div>
-      {bridgeMounted && <div id="bridge-content" hidden={!bridgeRoute}><Suspense fallback={null}><BridgeClient /></Suspense></div>}
+      {bridgeMounted && <div id="bridge-content" hidden={!bridgeRoute}><RouteErrorBoundary><Suspense fallback={<div role="status">…</div>}><BridgeClient /></Suspense></RouteErrorBoundary></div>}
     </div>
     {!standalone && <nav className="bottom-nav" aria-label={lang === "ar" ? "التنقل الرئيسي" : "Main navigation"}>
       <LiquidChoices

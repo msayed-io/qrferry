@@ -1,3 +1,4 @@
+import { isNativeDevice, NativeDevice } from "./native-device";
 /**
  * إشعارات إتمام النقل: اهتزاز + نغمة صوتية (Web Audio) + إشعار نظام
  * (Notification API) عند الاكتمال — حتى يتمكن المستخدم من ترك الجهاز.
@@ -61,6 +62,7 @@ export function vibrateCompletion(): void {
 /** يطلب إذن الإشعارات مرة واحدة فقط. */
 export async function ensureNotificationPermission(): Promise<boolean> {
   try {
+    if(isNativeDevice()) return (await NativeDevice.requestNotifications()).granted;
     if (!("Notification" in window)) return false;
     if (Notification.permission === "granted") return true;
     if (Notification.permission === "denied") return false;
@@ -76,6 +78,7 @@ export function showCompletionNotification(
   body: string,
 ): void {
   try {
+    if(isNativeDevice()){void NativeDevice.notify({title,body}).catch(()=>{});return;}
     if (!("Notification" in window) || Notification.permission !== "granted") {
       return;
     }

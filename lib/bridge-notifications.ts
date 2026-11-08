@@ -1,8 +1,10 @@
+import { isNativeDevice, NativeDevice } from "./native-device";
 let notificationAudioContext: AudioContext | null = null;
 
 export type BridgeNotificationPermission = NotificationPermission | "unsupported";
 
 export async function requestBridgeNotificationPermission(): Promise<BridgeNotificationPermission> {
+  if(isNativeDevice()){try{return (await NativeDevice.requestNotifications()).granted?"granted":"denied";}catch{return "unsupported";}}
   if (typeof window === "undefined" || typeof Notification === "undefined") {
     return "unsupported";
   }
@@ -15,6 +17,7 @@ export async function requestBridgeNotificationPermission(): Promise<BridgeNotif
 }
 
 export function notifyBridgeIncoming(title: string, body: string): void {
+  if(isNativeDevice()){if(document.hidden)void NativeDevice.notify({title,body}).catch(()=>{});return;}
   if (
     typeof window === "undefined" ||
     typeof Notification === "undefined" ||

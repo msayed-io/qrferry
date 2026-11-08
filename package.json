@@ -9,10 +9,14 @@
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build && rm -rf www && cp -R dist www",
+    "build": "vite build && node scripts/build-precache.mjs && rm -rf www && cp -R dist www",
     "start": "vite preview --host 0.0.0.0 -p 3000",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern www --ignore-pattern .next",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc --noEmit --incremental false",
+    "test": "tsx --test tests/*.test.ts",
+    "test:release": "node --import tsx scripts/make-e2e-fixture.ts && playwright test",
+    "test:routes": "node --test tests/rendered-html.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.6.0",

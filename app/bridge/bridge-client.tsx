@@ -9,6 +9,8 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import { ScanWorkerClient } from "@/lib/scan-worker-client";
+import { isNativeDevice, saveNativeFile, applicationShareOrigin } from "@/lib/native-device";
 import { Glass } from "glisse";
 import { usePathname } from "../router";
 import { DesignIcon } from "../design-icons";
@@ -192,6 +194,7 @@ export function BridgeClient() {
   const scanCountRef = useRef(0);
   /** يزداد مع كل إيقاف للكاميرا، فيُغلق أي تدفق يصل بعد الإلغاء. */
   const cameraTokenRef = useRef(0);
+  const scanDecoderRef = useRef<ScanWorkerClient|null>(null);
   const localTypingRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,6 +209,7 @@ export function BridgeClient() {
 
   const stopCamera = () => {
     cameraTokenRef.current += 1;
+    const decoder=scanDecoderRef.current;scanDecoderRef.current=null;void decoder?.dispose();
     scanningRef.current = false;
     setCameraRunning(false);
     if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
@@ -346,7 +350,7 @@ export function BridgeClient() {
       }
       hostRef.current = handle;
       activeRef.current = handle;
-      const url = bridgeShareUrl(window.location.origin, handle.payload);
+      const url = bridgeShareUrl(applicationShareOrigin(), handle.payload);
       const bytes = new TextEncoder().encode(url);
       const image = await renderRawQr(bytes, qrVersionFor(bytes.length), "M", QR_SCALE);
       if (generation !== generationRef.current || !mountedRef.current) return;
@@ -425,6 +429,7 @@ export function BridgeClient() {
 
   const scanFrame = async (): Promise<void> => {
     if (!scanningRef.current) return;
+    const token=cameraTokenRef.current;
     const video = videoRef.current;
     const canvas = scanCanvasRef.current;
     if (!video || !canvas || video.readyState < 2 || !video.videoWidth) {
@@ -442,9 +447,9 @@ export function BridgeClient() {
         // الوضع المتين أبطأ، لذا نستخدمه كل سادس إطار فقط.
         scanCountRef.current += 1;
         const robust = scanCountRef.current % 6 === 0;
-        const { scanRawQr } = await import("@/lib/qr-scanner");
-        const bytes = await scanRawQr(image, robust);
-        if (!scanningRef.current) return;
+        const result=await scanDecoderRef.current!.scan(image,robust,1,true);
+        const bytes=result.raw?.[0];
+        if (!scanningRef.current || token!==cameraTokenRef.current) return;
         if (bytes) {
           const pairing = decodeBridgePairing(new TextDecoder().decode(bytes));
           if (pairing) {
@@ -460,10 +465,11 @@ export function BridgeClient() {
           );
         }
       }
-    } catch {
-      // إطار غير صالح: نتجاهله ونكمل.
+    } catch(error) {
+      if(token!==cameraTokenRef.current)return;
+      stopCamera();setPhase("home");setScanError(errorText(error,tx("تعذّر تشغيل ماسح QR.","QR decoder failed.")));return;
     }
-    if (scanningRef.current) scanTimerRef.current = setTimeout(() => void scanFrame(), SCAN_INTERVAL_MS);
+    if (scanningRef.current && token===cameraTokenRef.current) scanTimerRef.current = setTimeout(() => void scanFrame(), SCAN_INTERVAL_MS);
   };
 
   const startCamera = async () => {
@@ -490,12 +496,17 @@ export function BridgeClient() {
         return;
       }
       streamRef.current = stream;
+      const decoder=new ScanWorkerClient();scanDecoderRef.current=decoder;await decoder.prepare();
+      if(token!==cameraTokenRef.current)return;
       video.srcObject = stream;
-      await video.play().catch(() => undefined);
+      await video.play();
+      if(token!==cameraTokenRef.current)return;
       scanningRef.current = true;
       setCameraRunning(true);
       void scanFrame();
     } catch (error) {
+      if(token!==cameraTokenRef.current)return;
+      stopCamera();
       setPhase("home");
       setScanError(
         error instanceof DOMException && error.name === "NotAllowedError"
@@ -605,6 +616,7 @@ export function BridgeClient() {
 
   const downloadItem = (item: BridgeFileItem) => {
     if (!item.bytes) return;
+    if(isNativeDevice()){void saveNativeFile(item.name,item.mime,item.bytes).catch(cause=>setNotice(String(cause)));return;}
     const url = URL.createObjectURL(receivedBlob(item.bytes, item.mime));
     const link = document.createElement("a");
     link.href = url;

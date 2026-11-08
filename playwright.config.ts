@@ -23,6 +23,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     headless: true,
+    actionTimeout: 15000,
+    navigationTimeout: 20000,
+    locale: "ar-EG",
     launchOptions: {
       // Chromium on Linux POSIX locale replaces Unicode download names with "download".
       // Exercise real Arabic filenames under a deterministic UTF-8 filesystem locale.

@@ -53,7 +53,7 @@ test("fast transfer: phone sends a file to the TV receiver via pairing QR", asyn
   await phonePage.addInitScript(installCameraStub);
   await phonePage.goto("/");
   const buffer = Buffer.from("نقل سريع عبر الشبكة المحلية ".repeat(4000));
-  await phonePage.setInputFiles('input[type="file"]', {
+  await phonePage.setInputFiles('input[type="file"]:not([webkitdirectory])', {
     name: "سريع.txt",
     mimeType: "text/plain",
     buffer,
@@ -84,7 +84,7 @@ test("fast transfer: multi-file package is received on TV", async ({ context }) 
   await phonePage.goto("/");
   await feedPairingQrToPhone(phonePage, tvPage);
 
-  await phonePage.setInputFiles('input[type="file"]', [
+  await phonePage.setInputFiles('input[type="file"]:not([webkitdirectory])', [
     { name: "a.txt", mimeType: "text/plain", buffer: Buffer.from("ألف ".repeat(2000)) },
     { name: "b.txt", mimeType: "text/plain", buffer: Buffer.from("باء ".repeat(3000)) },
   ]);

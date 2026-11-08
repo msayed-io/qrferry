@@ -1,3 +1,4 @@
+import { isNativeDevice, acquireNativeWakeLock } from "./native-device";
 /**
  * Wake Lock: يمنع نوم شاشة الجهاز أثناء النشاط (استقبال/إرسال) حتى لا
  * ينقطع النقل عندما يترك المستخدم الجهاز. يرجع null بأمان إن لم يُدعم.
@@ -9,6 +10,7 @@ export type ScreenWakeLockHandle = {
 
 export async function requestScreenWakeLock(): Promise<ScreenWakeLockHandle | null> {
   try {
+    if(isNativeDevice()) return { release: await acquireNativeWakeLock() };
     const nav = navigator as Navigator & {
       wakeLock?: {
         request(type: "screen"): Promise<{ release: () => Promise<void> }>;

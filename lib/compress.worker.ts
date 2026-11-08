@@ -40,7 +40,7 @@ function gzipAsync(bytes: Uint8Array): Promise<Uint8Array> {
 function post(response: CompressWorkerResponse, transfer?: Transferable[]) {
   (self as unknown as {
     postMessage(message: unknown, transfer?: Transferable[]): void;
-  }).postMessage(response, transfer);
+  }).postMessage(response, transfer ?? (response.ok ? [response.compressed] : []));
 }
 
 self.onmessage = async (event: MessageEvent<CompressWorkerRequest>) => {

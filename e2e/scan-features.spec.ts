@@ -46,7 +46,7 @@ test("scanner receives a multi-file package and offers per-file downloads", asyn
   await setFrames(page, fixture);
 
   await page.getByRole("button", { name: "تشغيل الكاميرا" }).click();
-  await expect(page.getByText("تم استرداد الملف.")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("heading", { name: "ملفاتك جاهزة" })).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText("تقرير.txt", { exact: true })).toBeVisible();
   await expect(page.getByText("بيانات.csv", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /تنزيل الكل/ })).toBeVisible();
@@ -68,7 +68,7 @@ test("scanner verifies a signed package after the user trusts the sender", async
   await expect(page.getByText(/قسم الأمن/)).toBeVisible();
   await page.getByRole("button", { name: "أثق بهذا المرسل" }).click();
 
-  await expect(page.getByRole("heading", { name: "تم استرداد الملف." })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "ملفاتك جاهزة" })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/توقيع موثوق: قسم الأمن/)).toBeVisible();
 });
 
@@ -79,7 +79,7 @@ test("scanner shows burn-after-reading notice for burn packages", async ({ page 
   await setFrames(page, fixture);
 
   await page.getByRole("button", { name: "تشغيل الكاميرا" }).click();
-  await expect(page.getByText("تم استرداد الملف.")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("heading", { name: "ملفاتك جاهزة" })).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText(/حذف بعد القراءة/)).toBeVisible();
 });
 
@@ -89,9 +89,9 @@ test("completed transfers appear in the local history page", async ({ page }) =>
   await page.goto("/scan");
   await setFrames(page, fixture);
   await page.getByRole("button", { name: "تشغيل الكاميرا" }).click();
-  await expect(page.getByText("تم استرداد الملف.")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("heading", { name: "ملفاتك جاهزة" })).toBeVisible({ timeout: 120_000 });
 
   await page.goto("/history");
-  await expect(page.getByText("سجل النقل المحلي")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "سجل النقل المحلي" })).toBeVisible();
   await expect(page.getByText("للتاريخ.txt")).toBeVisible();
 });

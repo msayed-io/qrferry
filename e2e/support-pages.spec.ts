@@ -1,10 +1,8 @@
 import { expect, test, type Page } from "./test";
-import fs from "node:fs/promises";
-import { unzipSync, strFromU8 } from "fflate";
 
 test.use({ serviceWorkers: "block" });
 
-const routes = ["history", "offline", "privacy"] as const;
+const routes = ["history", "privacy"] as const;
 for (const route of routes)
   for (const [width, height] of [
     [320, 568],
@@ -14,43 +12,36 @@ for (const route of routes)
     [1440, 900],
     [3840, 2160],
   ]) {
-    test(`UI7 /${route} shares the brand and has a visible working home link at ${width}x${height}`, async ({
+    test(`Mulberry /${route} shares the brand and has a visible working home link at ${width}x${height}`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height });
       await page.goto(`/${route}`);
-      await expect(
-        page.getByText("QRFERRY-UI-7", { exact: true }),
-      ).toBeVisible();
-      await expect(
-        page.locator(`.support-nav a[href="/${route}"]`),
-      ).toHaveAttribute("aria-current", "page");
-      await expect(
-        page.locator(".workspace-nav [aria-current=page]"),
-      ).toHaveCount(0);
+      await expect(page.locator('.app-header,.bottom-nav')).toHaveCount(0);
+      await expect(page.locator('.support-toolbar > *')).toHaveCount(2);
+      await expect(page.locator('.support-title h1')).toBeVisible();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBeLessThanOrEqual(width);
       await expect(page.locator(".support-card").first()).toHaveCSS(
         "background-color",
-        "rgb(255, 255, 255)",
+        "rgb(255, 253, 255)",
       );
       await expect(page.locator(".support-card").first()).toHaveCSS(
         "border-radius",
-        "3px",
+        "28px",
       );
-      const home = page.getByRole("link", {
-        name: "الرجوع للرئيسية",
+      const home = page.getByRole("button", {
+        name: "الرجوع إلى التطبيق",
         exact: true,
       });
-      await expect(home).toHaveAttribute("href", "/");
       const box = await home.boundingBox();
       expect(box!.height).toBeGreaterThanOrEqual(44);
       expect(box!.y + box!.height).toBeLessThan(height);
       await home.click();
       await expect(page).toHaveURL(/\/$/);
       await expect(
-        page.getByRole("heading", { name: "أرسل ملفاتك." }),
+        page.getByRole("heading", { name: "إرسال", exact: true }),
       ).toBeVisible();
     });
   }
@@ -93,7 +84,7 @@ async function seedHistory(page: Page) {
   await expect(page.locator(".history-item")).toHaveCount(3);
 }
 
-test("UI7 history preserves records and fields; clearing requires confirmation and survives reload", async ({
+test("Mulberry history preserves records and fields; clearing requires confirmation and survives reload", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
@@ -127,66 +118,24 @@ test("UI7 history preserves records and fields; clearing requires confirmation a
   await expect(page).toHaveURL(/\/scan$/);
 });
 
-test("UI7 offline download is a real ZIP with the current privacy page; failures are inline and retryable", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/offline");
-  await page.route("**/scan", (route) =>
-    route.fulfill({ status: 503, body: "test unavailable" }),
-  );
-  await page.getByRole("button", { name: "تحميل الحزمة الأوفلاين" }).click();
-  await expect(page.locator("main").getByRole("alert")).toContainText(
-    "تعذّر تجهيز الحزمة",
-  );
-  await expect(
-    page.getByRole("button", { name: "تحميل الحزمة الأوفلاين" }),
-  ).toBeEnabled();
-  await page.unroute("**/scan");
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "تحميل الحزمة الأوفلاين" }).click();
-  const d = await download;
-  expect(d.suggestedFilename()).toMatch(/qrferry-offline-.*\.zip$/);
-  const files = unzipSync(await fs.readFile((await d.path())!));
-  for (const name of ["index.html", "scan.html", "privacy.html", "READ-ME.txt"])
-    expect(files[name]).toBeTruthy();
-  expect(strFromU8(files["privacy.html"])).toContain("الرجوع للرئيسية");
-  expect(strFromU8(files["privacy.html"])).toContain("QRFERRY-UI-7");
-  await expect(page.getByRole("status")).toContainText(
-    "تم تجهيز الحزمة وطلب تنزيلها",
-  );
-  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+test('removed offline package has no page or menu entry',async({page})=>{
+  await page.goto('/offline');await expect(page.getByRole('heading',{name:/404/})).toBeVisible();
+  await page.goto('/');await page.getByRole('button',{name:'قائمة التطبيق'}).click();
+  await expect(page.getByRole('menuitem')).toHaveCount(2);
+  await expect(page.getByRole('menuitem',{name:/أوفلاين|Offline/})).toHaveCount(0);
 });
 
 for (const route of routes)
-  test(`UI7 /${route} supports English, larger text, and navigation without browser history`, async ({
+  test(`Mulberry /${route} supports English, larger text, and navigation without browser history`, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/${route}`);
-    await page
-      .getByRole("button", { name: "Switch language / تبديل اللغة" })
-      .click();
-    await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-    await expect(
-      page.getByRole("link", { name: "Back to home", exact: true }),
-    ).toBeVisible();
-    await page.addStyleTag({
-      content: ".support-page{font-size:32px!important}",
-    });
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-    ).toBe(390);
-    await page.reload();
-    await expect(
-      page.getByRole("link", { name: "Back to home", exact: true }),
-    ).toBeVisible();
-    await page.locator('.support-nav a[href="/privacy"]').click();
-    await expect(
-      page.getByRole("heading", { name: "Privacy policy", exact: true }),
-    ).toBeVisible();
-    await page.getByRole("link", { name: "Back to home", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { name: "Send your files." }),
-    ).toBeVisible();
+    await page.evaluate(()=>{Object.defineProperty(navigator,'languages',{configurable:true,get:()=>['en-US','ar']});window.dispatchEvent(new Event('languagechange'));});
+    await expect(page.locator('html')).toHaveAttribute('dir','ltr');
+    await expect(page.getByRole('button',{name:'Back to app',exact:true})).toBeVisible();
+    await page.addStyleTag({content:'.support-page{font-size:32px!important}'});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+    await page.getByRole('button',{name:'Back to app',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Send',exact:true})).toBeVisible();
   });

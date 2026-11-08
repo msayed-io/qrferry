@@ -3,11 +3,11 @@ import { expect, test } from "./test";
 test("sender turns a selected file into a live QR stream", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "أرسل ملفاتك." }),
+    page.getByRole("heading", { name: "إرسال", exact: true }),
   ).toBeVisible();
 
   const buffer = Buffer.from("QRFerry تجربة إرسال عربي ".repeat(8000));
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('input[type="file"]:not([webkitdirectory])', {
     name: "message.txt",
     mimeType: "text/plain",
     buffer,
@@ -36,13 +36,13 @@ test("sender turns a selected file into a live QR stream", async ({ page }) => {
 test("sender can encrypt the file with a password", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "الخصوصية وخيارات إضافية" }).click();
-  await page.getByRole("button", { name: /تشفير الملف/ }).click();
+  await page.getByRole("switch", { name: /تشفير الملف/ }).click();
   const passwordInput = page.getByLabel("كلمة المرور");
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill("كلمة-سرية-123");
 
   const buffer = Buffer.from("محتوى سري للاختبار ".repeat(4000));
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('input[type="file"]:not([webkitdirectory])', {
     name: "secret.txt",
     mimeType: "text/plain",
     buffer,

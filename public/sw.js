@@ -1,108 +1,58 @@
-/**
- * QRFerry Service Worker
- * - يخزّن مسبقاً قشرة التطبيق وأيقونات PWA.
- * - يسترجع /asset-manifest.json (يُولَّد وقت البناء) فيخزّن كل الأصول
- *   المجزّأة: JavaScript و CSS و WebAssembly (RaptorQ / fast_qr / ZXing)
- *   والخطوط، فتشتغل التطبيقات بالكامل دون اتصال بعد أول زيارة.
- * - إن لم تتوفر القائمة (بيئة تطوير محلية)، يفحص صفحات HTML ويخزّن
- *   روابط /assets/ التي يجدها، مع اعتماد التخزين وقت التشغيل للباقي.
- */
-const CACHE = "qrferry-shell-v5";
-const SHELL = [
-  "/",
-  "/scan",
-  "/tv",
-  "/history",
-  "/offline",
-  "/manifest.webmanifest",
-  "/favicon.svg",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/maskable-512.png",
-];
-
-async function collectHtmlAssets() {
-  const urls = new Set();
-  for (const page of ["/", "/scan"]) {
-    try {
-      const response = await fetch(page, { headers: { accept: "text/html" } });
-      if (!response.ok) continue;
-      const html = await response.text();
-      const pattern = /(?:src|href)="(\/assets\/[^"]+)"/g;
-      let match;
-      while ((match = pattern.exec(html)) !== null) urls.add(match[1]);
-    } catch {
-      // تجاهل الصفحة غير المتاحة.
-    }
-  }
-  return [...urls];
+/** Build-specific, atomic precache. No HTML scraping and no caching of received files. */
+const CACHE='qrferry-build-__BUILD_ID__';
+const ASSETS=/*__PRECACHE__*/[];
+const ROUTES=new Set(['/','/scan','/bridge','/pc','/tv','/history','/privacy','/share']);
+self.addEventListener('install',event=>event.waitUntil((async()=>{
+  if(!ASSETS.length)throw new Error('Build the application before registering its worker.');
+  const cache=await caches.open(CACHE);
+  try{await cache.addAll(ASSETS.map(url=>new Request(url,{cache:'reload'})));}
+  catch(error){await caches.delete(CACHE);throw error;}
+  await self.skipWaiting();
+})()));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+  // Keep one previous complete build for still-open tabs with old lazy imports.
+  const keys=(await caches.keys()).filter(key=>key.startsWith('qrferry-build-'));
+  const previous=keys.filter(key=>key!==CACHE).slice(-1);
+  await Promise.all((await caches.keys()).filter(key=>key.startsWith('qrferry-')&&key!==CACHE&&!previous.includes(key)).map(key=>caches.delete(key)));
+  await self.clients.claim();
+})()));
+function storeSharedFiles(files){return new Promise((resolve,reject)=>{
+  const open=indexedDB.open('qrferry-shared',1);
+  open.onupgradeneeded=()=>{if(!open.result.objectStoreNames.contains('pending'))open.result.createObjectStore('pending',{keyPath:'key'});};
+  open.onerror=()=>reject(open.error);
+  open.onsuccess=()=>{
+    const db=open.result;const transaction=db.transaction('pending','readwrite');
+    transaction.objectStore('pending').put({key:'pending',files,at:Date.now()});
+    transaction.oncomplete=()=>{db.close();resolve();};
+    transaction.onerror=()=>{db.close();reject(transaction.error);};
+    transaction.onabort=()=>{db.close();reject(transaction.error);};
+  };
+});}
+async function share(request){
+  try{
+    const data=await request.formData();
+    const files=data.getAll('files').filter(value=>value instanceof File);
+    if(!files.length||files.length>3||files.reduce((sum,file)=>sum+file.size,0)>512*1024*1024)return Response.redirect(new URL('/share?error=limits',self.location.origin),303);
+    const entries=await Promise.all(files.map(async file=>({name:file.name,mime:file.type||'application/octet-stream',data:await file.arrayBuffer()})));
+    await storeSharedFiles(entries);
+    return Response.redirect(new URL('/?shared=1',self.location.origin),303);
+  }catch{return Response.redirect(new URL('/share?error=storage',self.location.origin),303);}
 }
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    (async () => {
-      const cache = await caches.open(CACHE);
-      await cache.addAll(SHELL);
-      let assets = [];
-      try {
-        const response = await fetch("/asset-manifest.json");
-        if (response.ok) {
-          const list = await response.json();
-          if (Array.isArray(list)) assets = list;
-        }
-      } catch {
-        // غير متاحة محلياً.
+self.addEventListener('fetch',event=>{
+  const {request}=event;const url=new URL(request.url);
+  if(url.origin!==self.location.origin)return;
+  if(request.method==='POST'&&url.pathname==='/share'){event.respondWith(share(request));return;}
+  if(request.method!=='GET')return;
+  if(request.mode==='navigate'&&ROUTES.has(url.pathname)){
+    event.respondWith(caches.open(CACHE).then(async cache=>(await cache.match('/index.html'))||fetch(request)));return;
+  }
+  if(ASSETS.includes(url.pathname)||url.pathname.startsWith('/assets/')){
+    event.respondWith((async()=>{
+      const current=await caches.open(CACHE);const cached=await current.match(url.pathname);if(cached)return cached;
+      for(const name of (await caches.keys()).filter(key=>key.startsWith('qrferry-build-')&&key!==CACHE)){
+        const previous=await(await caches.open(name)).match(url.pathname);if(previous)return previous;
       }
-      if (assets.length === 0) {
-        assets = await collectHtmlAssets();
-      }
-      if (assets.length > 0) {
-        await cache.addAll(assets);
-      }
-      await self.skipWaiting();
-    })(),
-  );
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter((key) => key !== CACHE)
-          .map((key) => caches.delete(key)),
-      );
-      await self.clients.claim();
-    })(),
-  );
-});
-
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  if (request.method !== "GET") return;
-  const url = new URL(request.url);
-  // لا نتعامل مع الطلبات المتقاطعة الأصل.
-  if (url.origin !== self.location.origin) return;
-
-  event.respondWith(
-    (async () => {
-      const cache = await caches.open(CACHE);
-      try {
-        const response = await fetch(request);
-        if (response && response.ok) {
-          const copy = response.clone();
-          cache.put(request, copy).catch(() => {});
-        }
-        return response;
-      } catch {
-        const cached = await cache.match(request);
-        if (cached) return cached;
-        if (request.mode === "navigate") {
-          return (await cache.match("/scan")) || Response.error();
-        }
-        return Response.error();
-      }
-    })(),
-  );
+      return fetch(request);
+    })());
+  }
 });

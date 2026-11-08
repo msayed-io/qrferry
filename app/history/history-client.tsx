@@ -1,5 +1,6 @@
 "use client";
 
+import { AppLink } from "../router";
 import { LiquidButton } from "../liquid-controls";
 
 
@@ -95,10 +96,10 @@ export function HistoryClient() {
                   ? "ستظهر هنا تفاصيل النقولات المستلمة."
                   : "Details of received transfers will appear here."}
               </p>
-              <a className="support-button support-signal glass cap tinted" href="/scan">
+              <AppLink className="support-button support-signal glass cap tinted" href="/scan">
                 <ScanLine size={19} aria-hidden="true" />
                 {ar ? "استقبال ملفات" : "Receive files"}
-              </a>
+              </AppLink>
             </div>
           ) : (
             <>

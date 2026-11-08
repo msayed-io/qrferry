@@ -7,36 +7,11 @@ import { useI18n } from "../lang-provider";
 import { DesignIcon } from "../design-icons";
 import { WorkspaceDisclosure } from "../workspace-ui";
 import { Bird, Check, Download, Camera } from "lucide-react";
-import { decompressTransfer } from "@/lib/compression";
-import { decryptPayload } from "@/lib/encryption";
-import {
-  crc32,
-  formatBytes,
-  formatRate,
-  parseOpticalContainer,
-  parseOpticalFrame,
-  raptorPacketKey,
-} from "@/lib/optical-transfer";
-import {
-  evictOldSessions,
-  loadSession,
-  MAX_SYMBOLS_STORED,
-  payloadSymbolKey,
-  saveSession,
-  sessionKey,
-  deleteSession,
-} from "@/lib/resume-store";
-import {
-  isTransferPackage,
-  parseTransferPackage,
-  buildTransferPackage,
-} from "@/lib/transfer-package";
-import {
-  decodePublicKey,
-  importPublicKeyRaw,
-  verifySignature,
-  formatPublicKeyFingerprint,
-} from "@/lib/signing";
+import { isNativeDevice, saveNativeFile } from "@/lib/native-device";
+import { ScanWorkerClient } from "@/lib/scan-worker-client";
+import type { ReceiverMeta, ScanResult } from "@/lib/scan-worker-types";
+import { formatBytes, formatRate } from "@/lib/optical-transfer";
+import { decodePublicKey, formatPublicKeyFingerprint } from "@/lib/signing";
 import { addTrustedKey, getTrustedKeys } from "@/lib/identity-store";
 import { addHistoryEntry } from "@/lib/history-store";
 import { acquireScreenWakeLock } from "@/lib/wakelock";
@@ -54,24 +29,10 @@ type ScanState =
   | "error";
 type ScanMode = "single" | "dual";
 type RateSample = { at: number; bytes: number };
-type RaptorDecoder = { push(payload: Uint8Array): Uint8Array | null };
-type ReceiverSession = {
-  session: number;
-  containerLength: number;
-  originalSize: number;
-  compressed: boolean;
-  symbolSize: number;
-  sourcePacketCount: number;
-  decoder: RaptorDecoder;
-  seen: Set<string>;
-};
-type IncomingMeta = Omit<ReceiverSession, "decoder" | "seen">;
+type ReceiverSession = ReceiverMeta;
+type IncomingMeta = ReceiverMeta;
 type RecoveredFile = { name: string; mime: string; bytes: Uint8Array };
-type PendingDecryption = {
-  container: Uint8Array;
-  session: ReceiverSession;
-  recovered: ReturnType<typeof parseOpticalContainer>;
-};
+type PendingDecryption = { session: ReceiverSession };
 type SignatureReview = {
   signerName: string | null;
   publicKeyRaw: Uint8Array;
@@ -149,10 +110,15 @@ export function ScannerClient() {
   const scanPerformanceRef = useRef<ScanPerformanceSample[]>([]);
   const lastPresentedFramesRef = useRef(0);
   const lastMetricsUpdateRef = useRef(0);
-  const pendingPayloadsRef = useRef<Uint8Array[]>([]);
+  const decoderRef = useRef<ScanWorkerClient | null>(null);
+  const cameraGenerationRef = useRef(0);
+  const purposeRef = useRef<ScanPurpose>('qr');
+  const badFramesRef = useRef(0);
+  const rateRef = useRef(0);
+  const guidanceRef = useRef<string | null>(null);
+  const metricsRef = useRef<ScanMetrics>({ deliveredFps:0, scannerFps:0, decodeP50:0, decodeP95:0 });
   const [state, setState] = useState<ScanState>("idle");
   const [scanMode, setScanMode] = useState<ScanMode>("single");
-  const [scanPurpose, setScanPurpose] = useState<ScanPurpose>("qr");
   const [progress, setProgress] = useState(0);
   const [frames, setFrames] = useState(0);
   const [qrReads, setQrReads] = useState(0);
@@ -165,6 +131,7 @@ export function ScannerClient() {
   const [signVerified, setSignVerified] = useState(false);
   const [signerName, setSignerName] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [downloadError, setDownloadError] = useState("");
   const [guidance, setGuidance] = useState(
     "ثبّت الكود الكامل داخل الزوايا الأربع.",
   );
@@ -198,12 +165,29 @@ export function ScannerClient() {
   });
   const stabilityTrackerRef = useRef(new StabilityTracker());
   const releaseWakeLockRef = useRef<(() => void) | null>(null);
-  const scanFramesSinceStabilityUpdateRef = useRef(0);
+  const flushScanUI = useCallback(() => {
+    setQrReads(qrReadsRef.current); setFrames(acceptedFramesRef.current);
+    setBadFrames(badFramesRef.current); setMissedExposures(missedExposuresRef.current);
+    setOpticalRate(rateRef.current);
+    const receiver = receiverRef.current;
+    if (receiver && !completingRef.current) setProgress(Math.min(.99, acceptedFramesRef.current / (receiver.sourcePacketCount + 2)));
+    if (guidanceRef.current) { setGuidance(guidanceRef.current); guidanceRef.current = null; }
+    const current = stabilityTrackerRef.current.state;
+    setStability({ stable:current.stable, successRate:current.successRate, attempts:current.attempts });
+    setScanMetrics(metricsRef.current);
+  }, []);
+  // A fixed 8Hz presentation clock, independent of delivered camera/decode FPS.
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (scanningRef.current) flushScanUI(); }, 125);
+    return () => window.clearInterval(timer);
+  }, [flushScanUI]);
 
   const stopCamera = useCallback(() => {
+    cameraGenerationRef.current += 1;
     scanningRef.current = false;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = undefined;
+    void decoderRef.current?.flush().catch(() => undefined);
     releaseWakeLockRef.current?.();
     releaseWakeLockRef.current = null;
   }, []);
@@ -240,7 +224,7 @@ export function ScannerClient() {
       const urls: string[] = [];
       const names: string[] = [];
       for (const file of recoveredFiles) {
-        const blobPart = new Uint8Array(file.bytes).buffer as BlobPart;
+        const blobPart = file.bytes as Uint8Array<ArrayBuffer>;
         const url = URL.createObjectURL(
           new Blob([blobPart], { type: file.mime }),
         );
@@ -277,180 +261,65 @@ export function ScannerClient() {
     [revokeDownloadUrls, stopCamera, t],
   );
 
-  const finishTransfer = useCallback(
-    async (
-      container: Uint8Array,
-      session: ReceiverSession,
-      password?: string,
-    ) => {
-      if (completingRef.current) return;
-      completingRef.current = true;
-      try {
-        setGuidance(
-          session.compressed
-            ? t("scan.guide.completeCompressed")
-            : t("scan.guide.complete"),
-        );
-        if (
-          container.length !== session.containerLength ||
-          crc32(container) !== session.session
-        ) {
-          throw new Error(t("scan.error.raptorq"));
-        }
-        const recovered = parseOpticalContainer(container);
-        if (recovered.meta.encrypted && !password) {
-          // نُفرج القفل حتى تتمكن المحاولات اللاحقة (بعد إدخال كلمة المرور)
-          completingRef.current = false;
-          setPendingDecryption({ container, session, recovered });
-          setPromptPassword("");
-          setPromptError("");
-          setState("password");
-          stopCamera();
-          return;
-        }
-
-        let transmitted = recovered.transmitted;
-        if (recovered.meta.encrypted) {
-          transmitted = await decryptPayload(transmitted, password as string);
-        }
-        const decompressed = await decompressTransfer(
-          transmitted,
-          recovered.meta.compression,
-        );
-
-        let files: RecoveredFile[];
-        let burn = false;
-        let signed = false;
-        let signerName: string | null = null;
-        let verified = false;
-
-        if (isTransferPackage(decompressed)) {
-          const parsed = parseTransferPackage(decompressed);
-          files = parsed.files.map((file) => ({
-            name: file.name,
-            mime: file.mime,
-            bytes: file.bytes,
-          }));
-          burn = parsed.burnAfterReading;
-          signed = parsed.signature !== null;
-          signerName = parsed.signerName;
-
-          if (parsed.signature && parsed.signerPublicKey) {
-            const canonical = buildTransferPackage({
-              files: parsed.files,
-              burnAfterReading: parsed.burnAfterReading,
-            });
-            const trusted = await getTrustedKeys();
-            const fingerprint = Array.from(parsed.signerPublicKey).join(",");
-            const alreadyTrusted = trusted.some(
-              (key) => Array.from(key).join(",") === fingerprint,
-            );
-            if (alreadyTrusted) {
-              const key = await importPublicKeyRaw(parsed.signerPublicKey);
-              verified = await verifySignature(
-                key,
-                canonical,
-                parsed.signature,
-              );
-            } else {
-              // شاشة الثقة: نوقف وننتظر قرار المستخدم
-              setSignatureReview({
-                signerName: parsed.signerName,
-                publicKeyRaw: parsed.signerPublicKey,
-                fingerprint: formatPublicKeyFingerprint(parsed.signerPublicKey),
-                proceed: async (trust: boolean) => {
-                  setSignatureReview(null);
-                  let ok = false;
-                  if (trust) {
-                    await addTrustedKey(parsed.signerPublicKey as Uint8Array);
-                    const key = await importPublicKeyRaw(
-                      parsed.signerPublicKey as Uint8Array,
-                    );
-                    ok = await verifySignature(
-                      key,
-                      canonical,
-                      parsed.signature as Uint8Array,
-                    );
-                  }
-                  completingRef.current = false;
-                  await finalizeAndSave(files, {
-                    burnAfterReading: burn,
-                    signed,
-                    signerName,
-                    verified: trust ? ok : false,
-                    encrypted: recovered.meta.encrypted,
-                    fileCount: files.length,
-                    originalSize: recovered.meta.fileSize,
-                  });
-                  await deleteSession(
-                    sessionKey(
-                      session.session,
-                      session.containerLength,
-                      session.symbolSize,
-                    ),
-                  );
-                },
-              });
-              setState("signature-review");
-              stopCamera();
-              return;
-            }
-          }
-        } else {
-          // المسار الكلاسيكي: ملف واحد
-          files = [
-            {
-              name: recovered.meta.filename,
-              mime: recovered.meta.mime,
-              bytes: decompressed,
-            },
-          ];
-          if (
-            decompressed.length !== recovered.meta.fileSize ||
-            crc32(decompressed) !== recovered.meta.fileCrc
-          ) {
-            throw new Error(t("scan.error.checksum"));
-          }
-        }
-
+  const finishTransfer = useCallback(async (session: ReceiverSession, password?: string) => {
+    if (completingRef.current) return;
+    const decoder = decoderRef.current;
+    if (!decoder) return;
+    completingRef.current = true;
+    try {
+      // CRC, decrypt/decompress, package parsing and signature verification also
+      // stay off the UI thread; the worker retains ciphertext for password retries.
+      const result = await decoder.recover(password);
+      if (decoderRef.current !== decoder) return;
+      if (result.passwordRequired) {
         completingRef.current = false;
-        await finalizeAndSave(files, {
-          burnAfterReading: burn,
-          signed,
-          signerName,
-          verified: signed ? verified : true,
-          encrypted: recovered.meta.encrypted,
-          fileCount: files.length,
-          originalSize: recovered.meta.fileSize,
-        });
-        await deleteSession(
-          sessionKey(
-            session.session,
-            session.containerLength,
-            session.symbolSize,
-          ),
-        );
-      } catch (cause) {
-        completingRef.current = false;
-        setState("error");
-        setError(
-          cause instanceof Error ? cause.message : t("scan.error.verify"),
-        );
-        stopCamera();
-        // نُعيد الرمي حتى يعرف المتصل (نافذة كلمة المرور) بسبب الفشل
-        throw cause;
+        setPendingDecryption({ session }); setPromptPassword(''); setPromptError('');
+        setState('password'); stopCamera(); return;
       }
-    },
-    [finalizeAndSave, stopCamera, t],
-  );
+      const options = { burnAfterReading:result.burnAfterReading, signed:result.signed,
+        signerName:result.signerName, encrypted:result.encrypted, fileCount:result.files.length,
+        originalSize:result.originalSize };
+      let trusted = !result.signed;
+      if (result.publicKey) {
+        const fingerprint = Array.from(result.publicKey).join(',');
+        trusted = (await getTrustedKeys()).some(key => Array.from(key).join(',') === fingerprint);
+        if (!trusted) {
+          const publicKey = result.publicKey;
+          let acted=false;
+          setSignatureReview({ signerName:result.signerName, publicKeyRaw:publicKey,
+            fingerprint:formatPublicKeyFingerprint(publicKey), proceed:async trust => {
+              if (acted || decoderRef.current !== decoder) return;
+              acted=true;
+              try {
+              if (trust) await addTrustedKey(publicKey);
+              if (decoderRef.current !== decoder) return;
+              setSignatureReview(null); completingRef.current=false;
+              await finalizeAndSave(result.files, { ...options, verified:trust && result.signatureValid });
+              await decoder.discard();
+              if(decoderRef.current===decoder){decoderRef.current=null;void decoder.dispose();}
+              } catch(cause) { if(decoderRef.current===decoder){acted=false;setError(String(cause));} }
+            } });
+          setState('signature-review'); stopCamera(); return;
+        }
+      }
+      completingRef.current=false;
+      await finalizeAndSave(result.files,{...options,verified:trusted && result.signatureValid});
+      await decoder.discard();
+              if(decoderRef.current===decoder){decoderRef.current=null;void decoder.dispose();}
+    } catch (cause) {
+      if (decoderRef.current !== decoder) return;
+      completingRef.current=false; setState('error');
+      setError(cause instanceof Error ? cause.message : t('scan.error.verify'));stopCamera();throw cause;
+    }
+  }, [finalizeAndSave, stopCamera, t]);
 
   const submitPassword = useCallback(async () => {
     const pending = pendingDecryption;
     if (!pending) return;
     setPromptError("");
     try {
-      await finishTransfer(pending.container, pending.session, promptPassword);
-      setPendingDecryption(undefined);
+      await finishTransfer(pending.session, promptPassword);
+      setPendingDecryption(current=>current===pending?undefined:current);
     } catch (cause) {
       // إبقاء النافذة مع عرض سبب الفشل (كلمة مرور خاطئة مثلاً)
       // ونخفي الخطأ العام حتى لا يتكرر العرض
@@ -463,6 +332,7 @@ export function ScannerClient() {
   }, [finishTransfer, pendingDecryption, promptPassword, t]);
 
   const cancelPassword = useCallback(() => {
+    const decoder=decoderRef.current;decoderRef.current=null;void decoder?.dispose();completingRef.current=false;
     setPendingDecryption(undefined);
     setPromptPassword("");
     setPromptError("");
@@ -471,236 +341,38 @@ export function ScannerClient() {
   }, [t]);
 
   const cancelSignatureReview = useCallback(() => {
+    const decoder=decoderRef.current;decoderRef.current=null;void decoder?.dispose();completingRef.current=false;
     setSignatureReview(null);
     setState("idle");
     setGuidance(t("scan.guide.decryptCancelled"));
   }, [t]);
 
-  const acceptQrBytes = useCallback(
-    async (bytes: Uint8Array) => {
-      qrReadsRef.current += 1;
-      lastQrAtRef.current = performance.now();
-      setQrReads(qrReadsRef.current);
-
-      // معالجة نصوص QR (كلمة المرور / المفتاح العام) قبل إطارات QF4
-      let textPayload: string | null = null;
-      try {
-        textPayload = new TextDecoder().decode(bytes);
-      } catch {
-        textPayload = null;
-      }
-
-      if (textPayload?.startsWith("QFPW:")) {
-        const password = textPayload.slice(5);
-        if (scanPurpose === "password" || state === "password") {
-          setPromptPassword(password);
-          setPromptError("");
-          setScanPurpose("qr");
-          setGuidance(t("scan.passwordPlaceholder"));
-          stopCamera();
-          return;
-        }
-      }
-      if (textPayload?.startsWith("QFPUB:")) {
-        const raw = decodePublicKey(textPayload);
-        if (raw && scanPurpose === "pubkey") {
-          await addTrustedKey(raw);
-          setScanPurpose("qr");
-          setGuidance(t("scan.signTrust"));
-          stopCamera();
-          return;
-        }
-      }
-
-      if (scanPurpose !== "qr") {
-        // وضع مسح نصي: أي إطار QF4 يُتجاهل حتى نقرأ النص المطلوب
-        return;
-      }
-
-      let frame;
-      try {
-        frame = parseOpticalFrame(bytes);
-      } catch {
-        if (textPayload?.startsWith("QF2") || textPayload?.startsWith("QF3")) {
-          setGuidance(t("scan.guide.oldSender"));
-          return;
-        }
-        setBadFrames((current) => current + 1);
-        setGuidance(t("scan.guide.badFrame"));
-        return;
-      }
-
-      let receiver = receiverRef.current;
-      if (!receiver) {
-        const { RaptorQWasmDecoder } =
-          await import("@raptorqr/core/fec/raptorq_wasm");
-        const decoder = await RaptorQWasmDecoder.create(
-          frame.containerLength,
-          frame.symbolSize,
-        );
-        const seen = new Set<string>();
-        let baseline = 0;
-        let replayedDecoded: Uint8Array | null = null;
-        const key = sessionKey(
-          frame.session,
-          frame.containerLength,
-          frame.symbolSize,
-        );
-        const stored = await loadSession(key);
-        if (
-          stored &&
-          stored.payloads.length > 0 &&
-          stored.containerLength === frame.containerLength &&
-          stored.symbolSize === frame.symbolSize
-        ) {
-          baseline = stored.payloads.length;
-          for (const payload of stored.payloads) {
-            if (payload.length < 4) continue;
-            seen.add(payloadSymbolKey(frame.session, payload));
-            const decoded = decoder.push(payload);
-            if (decoded && !replayedDecoded) replayedDecoded = decoded;
-          }
-          setResumeNote(t("scan.resumeNote", { n: baseline.toLocaleString() }));
-        } else {
-          setResumeNote("");
-        }
-        receiver = {
-          session: frame.session,
-          containerLength: frame.containerLength,
-          originalSize: frame.originalSize,
-          compressed: frame.compressed,
-          symbolSize: frame.symbolSize,
-          sourcePacketCount: Math.max(
-            1,
-            Math.ceil(frame.containerLength / (frame.symbolSize - 4)),
-          ),
-          decoder,
-          seen,
-        };
-        receiverRef.current = receiver;
-        acceptedFramesRef.current = baseline;
-        setFrames(baseline);
-        setIncoming({
-          session: receiver.session,
-          containerLength: receiver.containerLength,
-          originalSize: receiver.originalSize,
-          compressed: receiver.compressed,
-          symbolSize: receiver.symbolSize,
-          sourcePacketCount: receiver.sourcePacketCount,
-        });
-        setGuidance(
-          baseline > 0 ? t("scan.guide.lockedResume") : t("scan.guide.locked"),
-        );
-        setState("receiving");
-        if (replayedDecoded) {
-          await finishTransfer(replayedDecoded, receiver);
-          return;
-        }
-      }
-
-      if (
-        frame.session !== receiver.session ||
-        frame.containerLength !== receiver.containerLength ||
-        frame.symbolSize !== receiver.symbolSize
-      ) {
-        setGuidance(t("scan.guide.different"));
-        return;
-      }
-
-      const key = raptorPacketKey(frame);
-      if (receiver.seen.has(key)) {
-        setGuidance(t("scan.guide.duplicate"));
-        return;
-      }
-      receiver.seen.add(key);
-      acceptedFramesRef.current += 1;
-      const accepted = acceptedFramesRef.current;
-      const sourceBytes = Math.max(1, frame.symbolSize - 4);
-      const rate = updateRollingRate(rateSamplesRef.current, sourceBytes);
-      const estimatedProgress = Math.min(
-        0.99,
-        accepted / (receiver.sourcePacketCount + 2),
-      );
-      setFrames(accepted);
-      setOpticalRate(rate);
-      setProgress(estimatedProgress);
-      setGuidance(
-        frame.symbolSize > 2200
-          ? t("scan.guide.highDensity")
-          : t("scan.guide.lockedSymbol"),
-      );
-      setState("receiving");
-      if (pendingPayloadsRef.current.length < MAX_SYMBOLS_STORED) {
-        pendingPayloadsRef.current.push(frame.payload);
-      }
-
-      const decoded = receiver.decoder.push(frame.payload);
-      if (decoded) await finishTransfer(decoded, receiver);
-    },
-    [finishTransfer, scanPurpose, state, stopCamera, t],
-  );
-
-  // حفظ الرموز المستلمة دورياً في IndexedDB لتمكين الاستئناف.
-  useEffect(() => {
-    const timer = window.setInterval(async () => {
-      const batch = pendingPayloadsRef.current;
-      if (batch.length === 0) return;
-      pendingPayloadsRef.current = [];
-      const receiver = receiverRef.current;
-      if (!receiver) return;
-      const key = sessionKey(
-        receiver.session,
-        receiver.containerLength,
-        receiver.symbolSize,
-      );
-      try {
-        const existing = (await loadSession(key)) ?? {
-          key,
-          session: receiver.session,
-          containerLength: receiver.containerLength,
-          symbolSize: receiver.symbolSize,
-          originalSize: receiver.originalSize,
-          compressed: receiver.compressed,
-          payloads: [] as Uint8Array[],
-          updatedAt: Date.now(),
-        };
-        const seen = new Set(
-          existing.payloads.map((payload) =>
-            payloadSymbolKey(receiver.session, payload),
-          ),
-        );
-        const fresh = batch.filter(
-          (payload) => !seen.has(payloadSymbolKey(receiver.session, payload)),
-        );
-        await saveSession({
-          ...existing,
-          payloads: existing.payloads.concat(fresh).slice(-MAX_SYMBOLS_STORED),
-          updatedAt: Date.now(),
-        });
-        await evictOldSessions(2);
-      } catch {
-        // التخزين للاستئناف اختياري؛ لا نوقف المسح عند فشله.
-      }
-    }, 2000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  /** يحدّث حالة شارة الاستقرار كل بضع محاولات (تجنب إعادة رسم متكررة). */
-  const maybeUpdateStability = () => {
-    if (scanFramesSinceStabilityUpdateRef.current % 4 === 0) {
-      const current = stabilityTrackerRef.current.state;
-      setStability({
-        stable: current.stable,
-        successRate: current.successRate,
-        attempts: current.attempts,
-      });
+  const acceptScanResult = useCallback(async (result: ScanResult) => {
+    const snap = result.snapshot;
+    const delta = Math.max(0, snap.accepted - acceptedFramesRef.current);
+    qrReadsRef.current=snap.reads; badFramesRef.current=snap.bad; acceptedFramesRef.current=snap.accepted;
+    if(result.decoded) lastQrAtRef.current=performance.now();
+    if(delta && snap.incoming) rateRef.current=updateRollingRate(rateSamplesRef.current,delta*Math.max(1,snap.incoming.symbolSize-4));
+    if(snap.incoming && !receiverRef.current){
+      receiverRef.current=snap.incoming;setIncoming(snap.incoming);setState('receiving');
+      setResumeNote(snap.resumed ? t('scan.resumeNote',{n:snap.resumed.toLocaleString()}) : '');
     }
-    scanFramesSinceStabilityUpdateRef.current += 1;
-  };
+    if(result.decoded) guidanceRef.current=t('scan.guide.'+snap.guidance);
+    for(const text of result.texts){
+      if(text.startsWith('QFPW:') && purposeRef.current==='password'){
+        setPromptPassword(text.slice(5));setPromptError('');purposeRef.current='qr';stopCamera();setState('password');return;
+      }
+      if(text.startsWith('QFPUB:') && purposeRef.current==='pubkey'){
+        const raw=decodePublicKey(text);if(raw){await addTrustedKey(raw);purposeRef.current='qr';setGuidance(t('scan.signTrust'));stopCamera();return;}
+      }
+    }
+    if(snap.complete && snap.incoming && purposeRef.current==='qr'){flushScanUI();await finishTransfer(snap.incoming);}
+  },[finishTransfer,flushScanUI,stopCamera,t]);
 
   const scanVideo = useCallback(
     function scanVideoFrame(metadata?: VideoFrameMetadataLike) {
       if (!scanningRef.current) return;
+      const generation = cameraGenerationRef.current;
       const callbackAt = performance.now();
       const reportedFrames = metadata?.presentedFrames;
       const presentedFrames =
@@ -765,8 +437,8 @@ export function ScannerClient() {
         const scanHeight = dualMode
           ? Math.max(1, Math.floor(scanWidth / 2))
           : scanWidth;
-        canvas.width = scanWidth;
-        canvas.height = scanHeight;
+        if (canvas.width !== scanWidth) canvas.width = scanWidth;
+        if (canvas.height !== scanHeight) canvas.height = scanHeight;
         const context = canvas.getContext("2d", { willReadFrequently: true });
         if (!context) return;
         context.imageSmoothingEnabled = false;
@@ -783,46 +455,24 @@ export function ScannerClient() {
         );
 
         const image = context.getImageData(0, 0, scanWidth, scanHeight);
-        const { scanRawQr, scanRawQrs } = await import("@/lib/qr-scanner");
-        attempted = true;
-        const decodeStartedAt = performance.now();
-        let decodedFrames: Uint8Array[];
-        try {
-          if (dualMode) {
-            decodedFrames = await scanRawQrs(image, robustAttempt, 2);
-          } else {
-            const decoded = await scanRawQr(image, robustAttempt);
-            decodedFrames = decoded ? [decoded] : [];
-          }
-        } finally {
-          decodeMs = performance.now() - decodeStartedAt;
-        }
-
-        if (decodedFrames.length === 0) {
-          decodeFailuresRef.current += 1;
-          missedExposuresRef.current += 1;
-          if (missedExposuresRef.current % 5 === 0) {
-            setMissedExposures(missedExposuresRef.current);
-          }
-          stabilityTrackerRef.current.push(false);
-          maybeUpdateStability();
-          return;
-        }
-        decodeFailuresRef.current = 0;
-        stabilityTrackerRef.current.push(true);
-        maybeUpdateStability();
-        for (const decoded of decodedFrames) {
-          await acceptQrBytes(decoded);
-        }
+        const decoder=decoderRef.current;
+        if(!decoder)return;
+        attempted=true;
+        const result=await decoder.scan(image,robustAttempt,dualMode?2:1,false,purposeRef.current);
+        if(generation!==cameraGenerationRef.current || !scanningRef.current)return;
+        decodeMs=result.decodeMs;
+        if(!result.decoded){decodeFailuresRef.current++;missedExposuresRef.current++;stabilityTrackerRef.current.push(false);return;}
+        decodeFailuresRef.current=0;stabilityTrackerRef.current.push(true);
+        await acceptScanResult(result);
       };
 
       void runScan()
-        .catch(() => {
-          decodeFailuresRef.current += 1;
-          missedExposuresRef.current += 1;
+        .catch(cause => {
+          if(generation!==cameraGenerationRef.current)return;
+          stopCamera();setState('error');setError(cause instanceof Error?cause.message:t('scan.error.verify'));
         })
         .finally(() => {
-          if (!scanningRef.current) return;
+          if (!scanningRef.current || generation !== cameraGenerationRef.current) return;
           const finishedAt = performance.now();
           if (attempted) {
             const performanceSamples = scanPerformanceRef.current;
@@ -858,12 +508,12 @@ export function ScannerClient() {
               const decodeValues = performanceSamples.map(
                 (sample) => sample.decodeMs,
               );
-              setScanMetrics({
+              metricsRef.current = {
                 deliveredFps,
                 scannerFps,
                 decodeP50: percentile(decodeValues, 0.5),
                 decodeP95: percentile(decodeValues, 0.95),
-              });
+              };
               lastMetricsUpdateRef.current = finishedAt;
             }
           }
@@ -878,7 +528,7 @@ export function ScannerClient() {
           }
         });
     },
-    [acceptQrBytes],
+    [acceptScanResult, stopCamera, t],
   );
 
   const listCameras = useCallback(async (): Promise<MediaDeviceInfo[]> => {
@@ -893,8 +543,14 @@ export function ScannerClient() {
 
   const startCamera = useCallback(
     async (purpose: ScanPurpose = "qr") => {
-      setError("");
-      setScanPurpose(purpose);
+      setError("");setDownloadError("");
+
+      purposeRef.current = purpose;
+      stopCamera();
+      const generation = cameraGenerationRef.current;
+      if (purpose !== "password") {
+        const oldDecoder=decoderRef.current;decoderRef.current=null;void oldDecoder?.dispose();
+      }
       setGuidance(
         purpose === "qr"
           ? scanModeRef.current === "dual"
@@ -903,7 +559,7 @@ export function ScannerClient() {
           : t("scan.guide.signScan"),
       );
       setState("starting");
-      receiverRef.current = undefined;
+      if (purpose !== "password") receiverRef.current = undefined;
       completingRef.current = false;
       qrReadsRef.current = 0;
       acceptedFramesRef.current = 0;
@@ -916,8 +572,8 @@ export function ScannerClient() {
       lastMetricsUpdateRef.current = 0;
       lastQrAtRef.current = 0;
       scanStartedAtRef.current = performance.now();
-      pendingPayloadsRef.current = [];
-      setIncoming(undefined);
+      badFramesRef.current = 0; rateRef.current = 0; guidanceRef.current = null;
+      if (purpose !== "password") setIncoming(undefined);
       setProgress(0);
       setFrames(0);
       setQrReads(0);
@@ -927,7 +583,7 @@ export function ScannerClient() {
       setTorchOn(false);
       setCameraSettings(undefined);
       setResumeNote("");
-      setPendingDecryption(undefined);
+      if (purpose !== "password") setPendingDecryption(undefined);
       setPromptPassword("");
       setPromptError("");
       setScanMetrics({
@@ -950,14 +606,18 @@ export function ScannerClient() {
         // تجاهل
       }
       // منع نوم الشاشة أثناء النشاط
-      releaseWakeLockRef.current = await acquireScreenWakeLock();
+      const releaseLock = await acquireScreenWakeLock();
+      if (generation !== cameraGenerationRef.current) { releaseLock(); return; }
+      releaseWakeLockRef.current = releaseLock;
 
       try {
         const devices = await listCameras();
+        if (generation !== cameraGenerationRef.current) return;
         setCameraDevices(devices);
-        const decoderLoad = import("@/lib/qr-scanner").then(
-          ({ prepareQrScanner }) => prepareQrScanner(),
-        );
+        const decoder = decoderRef.current ?? new ScanWorkerClient();
+        decoderRef.current = decoder;
+        const decoderLoad = decoder.prepare();
+        void decoderLoad.catch(() => undefined);
         const videoConstraints: MediaTrackConstraints = {
           facingMode: { ideal: "environment" },
           width: { ideal: 1920 },
@@ -971,8 +631,10 @@ export function ScannerClient() {
           audio: false,
           video: videoConstraints,
         });
-        await decoderLoad;
+        if(generation!==cameraGenerationRef.current){stream.getTracks().forEach(track=>track.stop());return;}
         streamRef.current = stream;
+        await decoderLoad;
+        if(generation!==cameraGenerationRef.current){stream.getTracks().forEach(track=>track.stop());return;}
         const track = stream.getVideoTracks()[0];
         const settings = track.getSettings();
         setCameraSettings({
@@ -999,6 +661,7 @@ export function ScannerClient() {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
+        if (generation !== cameraGenerationRef.current) { stream.getTracks().forEach(track=>track.stop()); return; }
         scanningRef.current = true;
         setState("scanning");
         const video = videoRef.current as VideoWithFrameCallback | null;
@@ -1010,7 +673,9 @@ export function ScannerClient() {
           window.requestAnimationFrame(() => scanVideo());
         }
       } catch (cause) {
+        if(generation!==cameraGenerationRef.current)return;
         stopCamera();
+        void decoderRef.current?.dispose(); decoderRef.current=null;
         setState("error");
         const name = cause instanceof DOMException ? cause.name : "";
         setError(
@@ -1063,6 +728,7 @@ export function ScannerClient() {
   useEffect(() => {
     return () => {
       stopCamera();
+      const decoder=decoderRef.current;decoderRef.current=null;void decoder?.dispose();
       revokeDownloadUrls();
     };
   }, [revokeDownloadUrls, stopCamera]);
@@ -1070,12 +736,13 @@ export function ScannerClient() {
   // تنزيل كل الملفات كـ ZIP
   const downloadAllZip = useCallback(async () => {
     if (recoveredFiles.length === 0) return;
-    const { zipSync } = await import("fflate");
+    const { zip } = await import("fflate");
     const entries: Record<string, Uint8Array> = {};
     for (const file of recoveredFiles) {
       entries[file.name] = new Uint8Array(file.bytes);
     }
-    const zipData = zipSync(entries, { level: 6 });
+    const zipData = await new Promise<Uint8Array<ArrayBuffer>>((resolve,reject)=>zip(entries,{level:6},(error,data)=>error?reject(error):resolve(data as Uint8Array<ArrayBuffer>)));
+    if(isNativeDevice()){await saveNativeFile(`qrferry-${Date.now()}.zip`,"application/zip",zipData);return;}
     const url = URL.createObjectURL(
       new Blob([zipData], { type: "application/zip" }),
     );
@@ -1557,16 +1224,17 @@ export function ScannerClient() {
               <p className="error-message" role="alert">
                 {error}
               </p>
-              <LiquidButton
+              {state === "error" && <LiquidButton
                 type="button"
                 className="primary-action camera-retry glass tinted cap"
                 onClick={() => void startCamera("qr")}
               >
                 {lang === "ar" ? "إعادة المحاولة" : "Try again"}
-              </LiquidButton>
+              </LiquidButton>}
             </>
           ) : null}
 
+          {downloadError && <p className="error-message" role="alert">{downloadError}</p>}
           {complete && recoveredFiles.length > 0 ? (
             <>
               <div className="received-files">
@@ -1580,7 +1248,9 @@ export function ScannerClient() {
                       href={downloadUrlsRef.current[index] ?? "#"}
                       download={file.name}
                       aria-label={t("scan.save", { name: file.name })}
-                      onClick={() => {
+                      onClick={event => {
+                        setDownloadError("");
+                        if(isNativeDevice()){event.preventDefault();void saveNativeFile(file.name,file.mime,file.bytes).then(result=>{if(result==="saved"&&burnAfterReading)setTimeout(revokeDownloadUrls,60000);}).catch(cause=>setDownloadError(String(cause)));return;}
                         if (burnAfterReading) {
                           setTimeout(() => revokeDownloadUrls(), 60_000);
                         }
@@ -1596,7 +1266,7 @@ export function ScannerClient() {
                 <LiquidButton
                   type="button"
                   className="primary-action glass tinted cap"
-                  onClick={() => void downloadAllZip()}
+                  onClick={() => {setDownloadError("");void downloadAllZip().catch(cause=>setDownloadError(String(cause)));}}
                 >
                   <Download size={18} aria-hidden="true" />
                   {t("scan.saveAll")}

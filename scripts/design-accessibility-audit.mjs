@@ -14,7 +14,7 @@ for(const theme of ['light','dark']){
  for(const [name,foreground,background] of [['body label on card',colors.label,colors.card],['secondary label on card',colors.label2,colors.card],['white on tint',colors.white,colors.tint],['white on actual tinted control',colors.white,blend(colors.button,colors.card)],['error on card',colors.error,colors.card]]){
   const value=ratio(blend(foreground,background),background);result.contrast.push({theme,name,ratio:value,passes4_5:value>=4.5});
  }
- for(const route of ['/','/scan','/bridge','/history','/offline','/privacy']){
+ for(const route of ['/','/scan','/bridge','/history','/privacy']){
   await page.goto('http://localhost:3000'+route);await page.locator('.tabs').waitFor();
   result.targets.push({theme,route,small:await page.locator('button,a[href],input:not([type=file]),textarea,select,summary').evaluateAll(els=>els.filter(el=>el.getClientRects().length&&!el.closest('[hidden]')&&!el.disabled).map(el=>{const r=el.getBoundingClientRect();let w=r.width,h=r.height;const s=getComputedStyle(el,'::before');if(s.content!=='none'&&s.position==='absolute'){w-=parseFloat(s.left)||0;w-=parseFloat(s.right)||0;h-=parseFloat(s.top)||0;h-=parseFloat(s.bottom)||0;}const label=el.closest('label');if(label){const lr=label.getBoundingClientRect();w=Math.max(w,lr.width);h=Math.max(h,lr.height);}return {tag:el.tagName,class:el.className,label:el.getAttribute('aria-label')||el.textContent.trim().slice(0,60),width:w,height:h};}).filter(r=>r.width<44||r.height<44))});
  }

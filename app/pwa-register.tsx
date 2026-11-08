@@ -1,10 +1,11 @@
 "use client";
 
+import { isNativeDevice } from "@/lib/native-device";
 import { useEffect } from "react";
 
 export function PwaRegister() {
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
+    if (!isNativeDevice() && import.meta.env.PROD && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {
         // Offline support is optional; the transfer still works without it.
       });

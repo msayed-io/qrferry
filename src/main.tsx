@@ -1,33 +1,108 @@
-import React, { lazy, Suspense } from 'react';
-import { createRoot } from 'react-dom/client';
-import 'glisse/styles.css';
-import '../app/globals.css';
-import '../app/workspace.css';
-import '../app/support.css';
-import '../app/bridge/bridge.css';
-import '../app/liquid-controls.css';
-import { AppShell } from '../app/app-shell';
-import { LangProvider } from '../app/lang-provider';
-import { PwaRegister } from '../app/pwa-register';
-const SendClient = lazy(() => import('../app/send-client').then(({ SendClient }) => ({ default: SendClient })));
-const ScannerClient = lazy(() => import('../app/scan/scanner-client').then(({ ScannerClient }) => ({ default: ScannerClient })));
-const HistoryClient = lazy(() => import('../app/history/history-client').then(({ HistoryClient }) => ({ default: HistoryClient })));
-const OfflineClient = lazy(() => import('../app/offline/offline-client').then(({ OfflineClient }) => ({ default: OfflineClient })));
-const PrivacyClient = lazy(() => import('../app/privacy/privacy-client').then(({ PrivacyClient }) => ({ default: PrivacyClient })));
-import { usePathname } from '../app/router';
+import React, { lazy, Suspense } from "react";
+import { createRoot } from "react-dom/client";
+import "glisse/styles.css";
+import "../app/globals.css";
+import "../app/workspace.css";
+import "../app/support.css";
+import "../app/bridge/bridge.css";
+import "../app/liquid-controls.css";
+import { AppShell } from "../app/app-shell";
+import { LangProvider, useI18n } from "../app/lang-provider";
+import { PwaRegister } from "../app/pwa-register";
+import { RouteErrorBoundary } from "../app/global-error";
+import { PageMetadata } from "../app/page-metadata";
+import { NativeShareReceiver } from "../app/native-share-receiver";
+import { initializeDeviceEnvironment } from "../app/device-environment";
+import { usePathname, AppLink } from "../app/router";
+const SendClient = lazy(() =>
+  import("../app/send-client").then(({ SendClient }) => ({
+    default: SendClient,
+  })),
+);
+const ScannerClient = lazy(() =>
+  import("../app/scan/scanner-client").then(({ ScannerClient }) => ({
+    default: ScannerClient,
+  })),
+);
+const HistoryClient = lazy(() =>
+  import("../app/history/history-client").then(({ HistoryClient }) => ({
+    default: HistoryClient,
+  })),
+);
+const PrivacyClient = lazy(() =>
+  import("../app/privacy/privacy-client").then(({ PrivacyClient }) => ({
+    default: PrivacyClient,
+  })),
+);
+const TvClient = lazy(() =>
+  import("../app/tv/tv-client").then(({ TvClient }) => ({ default: TvClient })),
+);
 
 function RouteContent() {
   const path = usePathname();
-  if (path === '/scan') return <ScannerClient />;
-  if (path === '/history') return <HistoryClient />;
-  if (path === '/offline') return <OfflineClient />;
-  if (path === '/privacy') return <PrivacyClient />;
-  if (path === '/bridge' || path === '/pc' || path === '/tv') return null;
-  return <SendClient />;
+  const { lang } = useI18n();
+  const ar = lang === "ar";
+  if (path === "/") return <SendClient />;
+  if (path === "/scan") return <ScannerClient />;
+  if (path === "/history") return <HistoryClient />;
+  if (path === "/privacy") return <PrivacyClient />;
+  if (path === "/tv") return <TvClient />;
+  if (path === "/bridge" || path === "/pc") return null;
+  if (path === "/share")
+    return (
+      <section className="card">
+        <h1>{ar ? "مشاركة الملفات" : "Share files"}</h1>
+        <p role="alert">
+          {location.search
+            ? ar
+              ? "لم تُستورد المشاركة. اختر حتى 3 ملفات، بإجمالي 512 ميجابايت، وتأكد من توفر مساحة تخزين."
+              : "The share was not imported. Choose up to 3 files, totaling 512 MiB, and ensure storage is available."
+            : ar
+              ? "للمشاركة من تطبيق آخر، ثبّت QRFerry وافتحه مرة واحدة أولاً. أو اختر الملفات من صفحة الإرسال."
+              : "To share from another app, install QRFerry and open it once first. Alternatively, choose files on Send."}
+        </p>
+        <AppLink href="/">{ar ? "الإرسال" : "Send"}</AppLink>
+      </section>
+    );
+  return (
+    <section className="card">
+      <h1>{ar ? "404 — الصفحة غير موجودة" : "404 — Page not found"}</h1>
+      <AppLink href="/">{ar ? "العودة إلى الإرسال" : "Back to Send"}</AppLink>
+    </section>
+  );
 }
-
 function App() {
-  return <LangProvider initialLang="ar"><PwaRegister /><AppShell><Suspense fallback={<div className="route-loading" role="status" aria-live="polite">…</div>}><RouteContent /></Suspense></AppShell></LangProvider>;
+  return (
+    <LangProvider>
+      <PwaRegister />
+      <PageMetadata />
+      <NativeShareReceiver />
+      <RouteErrorBoundary>
+        <AppShell>
+          <RouteErrorBoundary>
+            <Suspense
+              fallback={
+                <div className="route-loading" role="status" aria-live="polite">
+                  …
+                </div>
+              }
+            >
+              <RouteContent />
+            </Suspense>
+          </RouteErrorBoundary>
+        </AppShell>
+      </RouteErrorBoundary>
+    </LangProvider>
+  );
 }
-
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);
+// Android resolves actual Configuration before the first React render. Browser
+// execution does not wait for a native bridge or a network resource.
+void initializeDeviceEnvironment()
+  .catch((error) => console.warn("Device settings unavailable", error))
+  .finally(() => {
+    createRoot(document.getElementById("root")!).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  });

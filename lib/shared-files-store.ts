@@ -1,7 +1,6 @@
 /**
  * مخزن الملفات المتبادلة عبر «المشاركة» (Web Share Target):
- * صفحة /share (route) تعيد صفحة مؤقتة تحفظ الملفات هنا في IndexedDB
- * ثم يعيد التوجيه إلى صفحة الإرسال التي تلتقطها وتجهّزها تلقائياً.
+ * يستقبلها Service Worker أو جسر Android محليًا؛ لا تُرفع إلى خادم.
  */
 
 const DB_NAME = "qrferry-shared";
@@ -52,21 +51,16 @@ export async function stashSharedFiles(
   );
 }
 
-export async function takeSharedFiles(): Promise<SharedFileEntry[] | null> {
-  try {
-    const db = await openDb();
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    const row = await requestToPromise(
-      store.get("pending") as IDBRequest<
-        { key: string; files: SharedFileEntry[] } | undefined
-      >,
-    );
-    if (row) {
-      await requestToPromise(store.delete("pending"));
-    }
-    return row?.files ?? null;
-  } catch {
-    return null;
-  }
+export async function readSharedFiles(): Promise<{files:SharedFileEntry[];at:number}|null> {
+  const db=await openDb();const tx=db.transaction(STORE_NAME,'readonly');
+  return (await requestToPromise(tx.objectStore(STORE_NAME).get('pending'))) ?? null;
+}
+/** Consume only after successful preparation; never delete a newer concurrent share. */
+export async function acknowledgeSharedFiles(at:number):Promise<void> {
+  const db=await openDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE_NAME,'readwrite'),store=tx.objectStore(STORE_NAME);
+    const request=store.get('pending');request.onsuccess=()=>{if(request.result?.at===at)store.delete('pending');};
+    tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+  });
 }

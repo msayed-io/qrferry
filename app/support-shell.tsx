@@ -8,10 +8,9 @@ import { useI18n } from "./lang-provider";
 import { useSupportReturn } from "./support-navigation";
 import "./support.css";
 
-type SupportRoute = "history" | "offline" | "privacy";
+type SupportRoute = "history" | "privacy";
 const names = {
   history: { ar: "السجل", en: "History" },
-  offline: { ar: "أوفلاين", en: "Offline" },
   privacy: { ar: "الخصوصية", en: "Privacy" },
 };
 

@@ -1,29 +1,39 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-const origin = process.env.QRFERRY_TEST_ORIGIN || "http://localhost:3000";
-const routes = [
- ["/", "إرسال ملف · QRFerry", "Send a file · QRFerry", false],
- ["/scan", "مسح نقل · QRFerry", "Scan a transfer · QRFerry", false],
- ["/bridge", "جسر النقل الذكي · QRFerry", "Pair devices · QRFerry", false],
- ["/pc", "جسر الكمبيوتر · QRFerry", "Computer bridge · QRFerry", false],
- ["/history", "سجل النقل · QRFerry", "Transfer history · QRFerry", true],
- ["/offline", "حزمة أوفلاين · QRFerry", "Offline package · QRFerry", true],
- ["/privacy", "سياسة الخصوصية · QRFerry", "Privacy policy · QRFerry", true],
-];
-for (const lang of ["ar", "en"]) for (const [route, ar, en, standalone] of routes) {
- test(`real HTTP SSR: ${route} ${lang} system locale and page chrome`, async () => {
-  const response=await fetch(new URL(route,origin),{headers:{accept:"text/html","accept-language":lang==="ar"?"ar-EG,ar;q=.9":"en-US,en;q=.9"}});
-  assert.equal(response.status,200);const html=await response.text();
-  assert.ok(html.includes(`<title>${lang==="ar"?ar:en}</title>`));
-  assert.ok(html.includes(`lang="${lang}"`));assert.ok(html.includes(`dir="${lang==="ar"?"rtl":"ltr"}"`));
-  assert.equal(html.includes('class="app-header"'),!standalone);
-  assert.equal(html.includes('class="bottom-nav"'),!standalone);
-  if(standalone){assert.ok(html.includes('support-exit'));assert.ok(html.includes('support-title'));}
-  assert.ok(!html.includes('qrferry-theme'));assert.ok(!html.includes('secondary-links'));
- });
+import assert from 'node:assert/strict';
+import { before, after, test } from 'node:test';
+import { chromium } from '@playwright/test';
+
+// Vite is CSR: exercise hydrated pages rather than asserting nonexistent SSR.
+const origin=process.env.QRFERRY_TEST_ORIGIN||'http://localhost:3000';
+let browser;
+before(async()=>{browser=await chromium.launch();});
+after(async()=>{await browser?.close();});
+for(const locale of ['ar-EG','en-US'])for(const route of ['/','/scan','/bridge','/pc','/history','/privacy']){
+  test(`hydrated route ${route} follows ${locale} and preserves chrome`,async()=>{
+    const context=await browser.newContext({locale});const page=await context.newPage();
+    try{
+      await page.goto(origin+route);await page.locator('main').waitFor();
+      const ar=locale.startsWith('ar');assert.equal(await page.locator('html').getAttribute('lang'),ar?'ar':'en');
+      assert.equal(await page.locator('html').getAttribute('dir'),ar?'rtl':'ltr');
+      assert.match(await page.title(),/QRFerry/);assert.notEqual(await page.title(),'QRFerry');
+      const support=['/history','/privacy'].includes(route);
+      assert.equal(await page.locator('.app-header').count(),support?0:1);
+      assert.equal(await page.locator('.bottom-nav').count(),support?0:1);
+      if(support){assert.equal(await page.locator('.support-toolbar > *').count(),2);}
+      assert.equal(await page.locator('.secondary-links').count(),0);
+    }finally{await context.close();}
+  });
 }
-test("pre-existing missing receiver stays 404, not an invented route",async()=>assert.equal((await fetch(new URL('/tv',origin))).status,404));
-for(const lang of ['ar','en']){
- test(`manifest follows request language ${lang}`,async()=>{const r=await fetch(new URL('/manifest.webmanifest',origin),{headers:{'accept-language':lang}});assert.equal(r.status,200);const m=await r.json();assert.equal(m.lang,lang);assert.equal(m.dir,lang==='ar'?'rtl':'ltr');assert.equal(m.share_target.action,'/share');});
- test(`real multipart share transitional HTML follows ${lang}`,async()=>{const form=new FormData();form.append('file',new Blob(['language check'],{type:'text/plain'}),'locale.txt');const r=await fetch(new URL('/share',origin),{method:'POST',headers:{'accept-language':lang},body:form});assert.equal(r.status,200);const html=await r.text();assert.ok(html.includes(`lang="${lang}"`));assert.ok(html.includes(lang==='ar'?'جارٍ تجهيز الملفات…':'Preparing files…'));assert.ok(html.includes('qrferry-shared'));});
-}
+test('manifest declares local multipart sharing; installation metadata is language neutral',async()=>{
+  const response=await fetch(origin+'/manifest.webmanifest');assert.equal(response.status,200);const manifest=await response.json();
+  assert.equal(manifest.name,'QRFerry');assert.equal(manifest.share_target.action,'/share');assert.equal(manifest.share_target.method,'POST');assert.equal(manifest.share_target.params.files[0].name,'files');
+});
+test('precache includes lazy route, decoder worker and all four WASM files',async()=>{
+  const response=await fetch(origin+'/asset-manifest.json');assert.equal(response.status,200);const assets=await response.json();
+  for(const name of ['scanner-client','bridge-client','tv-client','scan.worker'])assert.ok(assets.some(asset=>asset.includes(name)),name);
+  assert.ok(assets.filter(asset=>asset.endsWith('.wasm')).length>=4);
+  assert.ok(!assets.some(asset=>asset.includes('offline-client')||asset.includes('offline-server')));
+});
+test('unknown and removed offline routes render a real not-found state, not Send',async()=>{
+  const context=await browser.newContext({locale:'en-US'});const page=await context.newPage();
+  try{for(const path of ['/not-a-route','/offline']){await page.goto(origin+path);await page.getByRole('heading',{name:'404 — Page not found'}).waitFor();assert.equal(await page.locator('.sender-page').count(),0);}}finally{await context.close();}
+});

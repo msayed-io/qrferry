@@ -6,7 +6,7 @@
  *  - لا يمر أي بايت من الملف عبر خادم التسيير (يرسل رسائل الإشارة فقط).
  *
  * خادم التسيير: افتراضياً السحابة العامة (0.peerjs.com)، ويمكن ضبطه عبر
- * localStorage (qrferry-peer-host) لشبكة معزولة بخادم مدمج (حزمة الأوفلاين).
+ * localStorage (qrferry-peer-host) لخادم إشارة مخصص يديره المستخدم.
  */
 
 import { crc32 } from "./optical-transfer";
@@ -183,8 +183,10 @@ export class FastReceiver {
     onProgress?: (received: number, total: number) => void,
     onStatus?: (message: string) => void,
     onFailure?: (message: string) => void,
+    signal?: AbortSignal,
   ): Promise<FastReceiver> {
     const { default: Peer } = await import("peerjs");
+    if (signal?.aborted) throw new DOMException("Receiver cancelled", "AbortError");
     const config = getPeerServerConfig();
     const passcode = makePasscode();
     const peer = new Peer({
@@ -195,16 +197,21 @@ export class FastReceiver {
       debug: 0,
     });
     const peerId = await new Promise<string>((resolve, reject) => {
-      const onOpen = (id: string) => {
-        peer.off("error", onError);
-        resolve(id);
+      const cleanup = () => {
+        peer.off("open", onOpen); peer.off("error", onError);
+        signal?.removeEventListener("abort", onAbort);
       };
+      const onOpen = (id: string) => { cleanup(); resolve(id); };
       const onError = (error: unknown) => {
-        peer.off("open", onOpen);
+        cleanup(); peer.destroy();
         reject(error instanceof Error ? error : new Error(String(error)));
       };
-      peer.on("open", onOpen);
-      peer.on("error", onError);
+      const onAbort = () => {
+        cleanup(); peer.destroy(); reject(new DOMException("Receiver cancelled", "AbortError"));
+      };
+      peer.on("open", onOpen); peer.on("error", onError);
+      if (signal?.aborted) onAbort();
+      else signal?.addEventListener("abort", onAbort, { once: true });
     });
     const receiver = new FastReceiver(
       peer,

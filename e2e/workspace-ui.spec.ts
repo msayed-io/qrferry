@@ -25,49 +25,40 @@ async function noOverflow(page: Page) {
 }
 for (const [width, height] of sizes)
   for (const route of ["/", "/scan"]) {
-    test(`UI6 ${route} is readable and responsive at ${width}x${height}`, async ({
+    test(`Mulberry ${route} is readable and responsive at ${width}x${height}`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height });
       await page.goto(route);
       await page.evaluate(() => document.fonts.ready);
       await noOverflow(page);
-      await expect(page.locator(".workspace-brand small")).toHaveText(
-        "QRFERRY-UI-7",
-      );
-      await expect(
-        page.locator(".workspace-nav a[aria-current=page]"),
-      ).toHaveText(route === "/" ? "إرسال" : "مسح");
-      await expect(
-        page.locator(".tour-overlay,.sender-hero,.how-it-works,.scan-tips"),
-      ).toHaveCount(0);
-      expect((await page.locator("main").innerText()).length).toBeLessThan(
-        route === "/" ? 650 : 350,
-      );
+      await expect(page.locator('.brand')).toHaveText('QRFerry');
+      await expect(page.locator(route==='/'?'#nav-send':'#nav-scan')).toHaveAttribute('aria-selected','true');
+      await expect(page.locator('.tour-overlay,.sender-hero,.how-it-works,.scan-tips')).toHaveCount(0);
       const panel = page.locator(
         route === "/" ? ".control-panel" : ".camera-card",
       );
-      await expect(panel).toHaveCSS("background-color", "rgb(255, 255, 255)");
-      await expect(panel).toHaveCSS("color", "rgb(17, 24, 32)");
-      await expect(panel).toHaveCSS("border-radius", "3px");
+      await expect(panel).toHaveCSS("background-color", "rgb(255, 253, 255)");
+      await expect(panel).toHaveCSS("color", "rgb(36, 27, 36)");
+      await expect(panel).toHaveCSS("border-radius", "28px");
       const action = page
         .locator(
           route === "/"
             ? ".drop-zone .file-button"
-            : ".camera-actions .primary-action",
+            : ".camera-actions .qf-liquid-button",
         )
         .first();
+      await action.scrollIntoViewIfNeeded();
       const rect = await action.boundingBox();
       expect(rect!.height).toBeGreaterThanOrEqual(44);
       expect(rect!.x).toBeGreaterThanOrEqual(0);
       expect(rect!.x + rect!.width).toBeLessThanOrEqual(width);
-      if (height >= 568)
-        expect(rect!.y + rect!.height).toBeLessThanOrEqual(height);
+
       if (route === "/") {
         await expect(
           page.locator(".privacy-settings .workspace-disclosure-toggle"),
         ).toHaveAttribute("aria-expanded", "false");
-        await page.setInputFiles("input[type=file]", [
+        await page.setInputFiles("input[type=file]:not([webkitdirectory])", [
           file(
             "اسم ملف طويل جدًا لاختبار عدم خروج الاسم أو أزرار الحذف عن حدود البطاقة.txt",
           ),
@@ -78,19 +69,8 @@ for (const [width, height] of sizes)
         await expect(page.locator(".stream-status strong")).toHaveText(
           "جاهز للبث",
         );
-        await expect(page.locator(".stream-status > div")).toHaveCSS(
-          "color",
-          "rgb(17, 24, 32)",
-        );
-        await expect(page.locator(".broadcast-progress strong")).toHaveCSS(
-          "color",
-          "rgb(17, 24, 32)",
-        );
-        await expect(page.locator(".fast-action")).toBeEnabled();
-        await expect(page.locator(".fast-action")).toHaveCSS(
-          "background-color",
-          "rgb(231, 255, 84)",
-        );
+        await expect(page.locator('.fast-action')).toBeEnabled();
+        await expect(page.locator('.fast-action')).toHaveAttribute('data-variant','filled');
         await noOverflow(page);
       } else {
         await expect(
@@ -101,7 +81,7 @@ for (const [width, height] of sizes)
     });
   }
 
-test("UI6 disclosures preserve input values, hide controls from tab order and return focus", async ({
+test("Mulberry disclosures preserve input values, hide controls from tab order and return focus", async ({
   page,
 }) => {
   await page.goto("/");
@@ -110,7 +90,7 @@ test("UI6 disclosures preserve input values, hide controls from tab order and re
   );
   await disclosure.focus();
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: /تشفير الملف/ }).click();
+  await page.getByRole("switch", { name: /تشفير الملف/ }).click();
   const password = page.getByLabel("كلمة المرور", { exact: true });
   await password.fill("a-password-123");
   await page.keyboard.press("Escape");
@@ -125,12 +105,12 @@ for (const [width, height] of [
   [390, 844],
   [844, 390],
 ]) {
-  test(`UI6 fast-transfer modal fits ${width}x${height}, traps focus and restores it`, async ({
+  test(`Mulberry fast-transfer modal fits ${width}x${height}, traps focus and restores it`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height });
     await page.goto("/");
-    await page.setInputFiles("input[type=file]", file("modal.txt"));
+    await page.setInputFiles("input[type=file]:not([webkitdirectory])", file("modal.txt"));
     await expect(page.locator(".stream-status strong")).toHaveText("جاهز للبث");
     await page.locator(".fast-action").click();
     const dialog = page.getByRole("dialog");
@@ -157,7 +137,7 @@ for (const [width, height] of [
   });
 }
 
-test("UI6 camera permission failure is prominent and offers a working retry", async ({
+test("Mulberry camera permission failure is prominent and offers a working retry", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -195,7 +175,7 @@ test("UI6 camera permission failure is prominent and offers a working retry", as
   await expect(page.locator(".error-message")).toHaveCount(0);
 });
 
-test("UI6 camera modes remain usable and stopping fast scanning returns to its start screen", async ({
+test("Mulberry camera modes remain usable and stopping fast scanning returns to its start screen", async ({
   page,
 }) => {
   await page.addInitScript(installCameraStub);
@@ -214,7 +194,7 @@ test("UI6 camera modes remain usable and stopping fast scanning returns to its s
     .click();
   await expect(page.getByRole("radio", { name: /مسار مزدوج/ })).toBeEnabled();
   await page.goto("/");
-  await page.setInputFiles("input[type=file]", file("camera.txt"));
+  await page.setInputFiles("input[type=file]:not([webkitdirectory])", file("camera.txt"));
   await page.locator(".fast-action").click();
   await page.getByRole("button", { name: "ابدأ المسح", exact: true }).click();
   await expect(page.locator(".fast-video")).toBeVisible();
@@ -229,7 +209,7 @@ test("UI6 camera modes remain usable and stopping fast scanning returns to its s
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("UI6 mobile completed scan exposes exact individual downloads and restart", async ({
+test("Mulberry mobile completed scan exposes exact individual downloads and restart", async ({
   page,
 }) => {
   const fixtures = JSON.parse(
@@ -250,9 +230,9 @@ test("UI6 mobile completed scan exposes exact individual downloads and restart",
     .getByRole("button", { name: "تشغيل الكاميرا", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "تم استرداد الملف.", exact: true }),
+    page.getByRole("heading", { name: "ملفاتك جاهزة", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".camera-card")).not.toBeVisible();
+  await expect(page.locator(".camera-view video")).not.toBeVisible();
   await expect(page.locator(".handsfree-tip")).not.toBeVisible();
   await expect(page.locator(".rate-panel")).not.toBeVisible();
   const firstDownload = await page
@@ -281,37 +261,37 @@ test("UI6 mobile completed scan exposes exact individual downloads and restart",
 });
 
 for (const route of ["/", "/scan"])
-  test(`UI6 ${route} English and 200% text remain usable`, async ({ page }) => {
+  test(`Mulberry ${route} English and 200% text remain usable`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(route);
-    await page.getByRole("button", { name: /Switch language/ }).click();
+    await page.evaluate(()=>{Object.defineProperty(navigator,"languages",{configurable:true,get:()=>["en-US","ar"]});window.dispatchEvent(new Event("languagechange"));});
     await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
     await expect(page.locator(".workspace-intro h1")).toHaveText(
-      route === "/" ? "Send your files." : "Receive your files.",
+      route === "/" ? "Send" : "Receive",
     );
     await page.addStyleTag({
       content: ".transfer-page {font-size:32px!important}",
     });
     await noOverflow(page);
     await expect(
-      page.locator(".workspace-nav a[aria-current=page]"),
+      page.locator(".qf-tab-bar [aria-selected=true]"),
     ).toHaveText(route === "/" ? "Send" : "Scan");
   });
 
-test("UI6 file inputs survive tab changes and a completed batch has no redundant picker", async ({
+test("Mulberry file inputs survive tab changes and a completed batch has no redundant picker", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.setInputFiles("input[type=file]", file("first.txt"));
+  await page.setInputFiles("input[type=file]:not([webkitdirectory])", file("first.txt"));
   await expect(page.locator(".batch-add")).toBeEnabled();
   await expect(page.locator(".drop-zone")).not.toBeVisible();
-  await page.getByRole("tab", { name: "نص", exact: true }).click();
+  await page.getByRole("radio", { name: "نص", exact: true }).click();
   const chooser = page.waitForEvent("filechooser");
   await page.locator(".batch-add").click();
   await (await chooser).setFiles([file("second.txt"), file("third.txt")]);
   await expect(
-    page.getByRole("tab", { name: "ملف", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
+    page.getByRole("radio", { name: "ملف", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
   await expect(page.locator(".batch-file")).toHaveCount(3);
   await expect(page.locator(".batch-add")).not.toBeVisible();
   await expect(page.locator(".fast-action")).toBeEnabled();

@@ -33,7 +33,7 @@ async function pointPhoneAtLaptopQr(phone: Page, laptop: Page): Promise<void> {
 }
 
 async function expectConnected(page: Page): Promise<void> {
-  await expect(page.locator(".bridge-status")).toContainText("متصل", { timeout: 60_000 });
+  await expect(page.locator(".chatbar")).toBeVisible({ timeout: 60_000 });
 }
 
 function patternedBytes(length: number, seed: number): Buffer {
@@ -68,12 +68,12 @@ test("bridge: laptop shows a QR and the phone pairs by scanning it, then both wa
   // الشات في الاتجاهين.
   await phone.getByLabel("اكتب رسالة").fill("مرحباً من الهاتف");
   await phone.getByRole("button", { name: "إرسال", exact: true }).click();
-  await expect(laptop.locator(".bridge-bubble.in")).toContainText("مرحباً من الهاتف");
-  await expect(phone.locator(".bridge-bubble.out")).toContainText("مرحباً من الهاتف");
+  await expect(laptop.locator(".bridge-bubble.pc")).toContainText("مرحباً من الهاتف");
+  await expect(phone.locator(".bridge-bubble.me")).toContainText("مرحباً من الهاتف");
 
   await laptop.getByLabel("اكتب رسالة").fill("أهلاً من الكمبيوتر");
   await laptop.getByRole("button", { name: "إرسال", exact: true }).click();
-  await expect(phone.locator(".bridge-bubble.in")).toContainText("أهلاً من الكمبيوتر");
+  await expect(phone.locator(".bridge-bubble.pc")).toContainText("أهلاً من الكمبيوتر");
 
   // ملف من الهاتف إلى الكمبيوتر (أكثر من قطعة واحدة) والتحقق بايت بايت.
   const phoneFile = patternedBytes(300_000, 7);
@@ -116,8 +116,7 @@ test("bridge: pasted link pairs the phone without the camera", async ({ context 
   const phone = await context.newPage();
   await phone.goto("/pc");
   await phone.getByLabel("أو الصق الرابط الذي يعرضه الكمبيوتر").fill("ليس رابطاً");
-  await phone.getByRole("button", { name: "اتصل", exact: true }).click();
-  await expect(phone.getByRole("alert")).toContainText("الرابط أو الرمز غير صالح");
+  await expect(phone.getByRole("button", { name: "اتصل", exact: true })).toBeDisabled();
 
   await phone.getByLabel("أو الصق الرابط الذي يعرضه الكمبيوتر").fill(url);
   await phone.getByRole("button", { name: "اتصل", exact: true }).click();

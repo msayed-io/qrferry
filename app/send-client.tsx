@@ -1,4 +1,6 @@
 "use client";
+import { applicationShareOrigin } from "@/lib/native-device";
+import { ScanWorkerClient } from "@/lib/scan-worker-client";
 
 import { LiquidButton, LiquidChoices } from "./liquid-controls";
 
@@ -58,7 +60,7 @@ import {
   FileSelectionError,
   planFileSelection,
 } from "@/lib/file-selection";
-import { takeSharedFiles } from "@/lib/shared-files-store";
+import { readSharedFiles, acknowledgeSharedFiles } from "@/lib/shared-files-store";
 import {
   loadCustomPresets,
   saveCustomPreset,
@@ -186,6 +188,8 @@ export function SendClient() {
   const fastCanvasRef = useRef<HTMLCanvasElement>(null);
   const fastStreamRef = useRef<MediaStream | null>(null);
   const fastScanLoopRef = useRef(0);
+  const fastCameraGeneration = useRef(0);
+  const fastDecoderRef = useRef<ScanWorkerClient|null>(null);
   const fastScanActiveRef = useRef(false);
 
   /** نوع موحّد لأي بروفايل (افتراضي أو مخصص). */
@@ -219,8 +223,12 @@ export function SendClient() {
   // الملفات القادمة من «المشاركة» (Web Share Target)
   useEffect(() => {
     let cancelled = false;
-    const job = prepareJobRef.current;
-    void takeSharedFiles().then(async (entries) => {
+    let loading=false, again=false;
+    const receive=()=>{
+    if(loading){again=true;return;}loading=true;
+    const job=prepareJobRef.current;
+    void readSharedFiles().then(async (row) => {
+      const entries=row?.files;
       if (
         cancelled ||
         job !== prepareJobRef.current ||
@@ -253,15 +261,19 @@ export function SendClient() {
         }
         if (cancelled || job !== prepareJobRef.current) return;
         const prepared: PreparedFiles = { items };
+        await acknowledgeSharedFiles(row!.at);
+        if(cancelled)return;
         setFileData(prepared);
         setTab("file");
         setSharedNotice(t("send.sharedPickup", { n: items.length }));
-      } catch {
-        // تجاهل: المستخدم يختار الملفات يدوياً
+      } catch (cause) {
+        if(!cancelled)setError(String(cause));
       }
-    });
+    }).catch(cause=>{if(!cancelled)setError(String(cause));}).finally(()=>{loading=false;if(again&&!cancelled){again=false;receive();}});
+    };
+    receive();window.addEventListener("qrferry-shared-files",receive);
     return () => {
-      cancelled = true;
+      cancelled = true;window.removeEventListener("qrferry-shared-files",receive);
     };
   }, []);
 
@@ -657,6 +669,8 @@ export function SendClient() {
   // ===== النقل السريع (شبكة محلية) =====
 
   const stopFastScanning = useCallback(() => {
+    fastCameraGeneration.current++;
+    const decoder=fastDecoderRef.current;fastDecoderRef.current=null;void decoder?.dispose();
     fastScanActiveRef.current = false;
     if (fastScanLoopRef.current) {
       window.cancelAnimationFrame(fastScanLoopRef.current);
@@ -665,6 +679,8 @@ export function SendClient() {
     fastStreamRef.current?.getTracks().forEach((track) => track.stop());
     fastStreamRef.current = null;
   }, []);
+
+  useEffect(()=>()=>stopFastScanning(),[stopFastScanning]);
 
   const closeFastModal = useCallback(() => {
     stopFastScanning();
@@ -796,7 +812,8 @@ export function SendClient() {
 
   /** يبدأ حلقة المسح على تدفق كاميرا معطى (تُستخدم للبدء والتبديل معاً). */
   const beginFastLoop = useCallback(
-    async (stream: MediaStream) => {
+    async (stream: MediaStream, generation: number) => {
+      if(generation!==fastCameraGeneration.current){stream.getTracks().forEach(track=>track.stop());return;}
       const video = fastVideoRef.current;
       const canvas = fastCanvasRef.current;
       if (!video || !canvas) {
@@ -805,7 +822,9 @@ export function SendClient() {
       }
       fastStreamRef.current = stream;
       video.srcObject = stream;
+      const decoder=new ScanWorkerClient();fastDecoderRef.current=decoder;await decoder.prepare();
       await video.play();
+      if(generation!==fastCameraGeneration.current)return;
       fastScanActiveRef.current = true;
 
       const track = stream.getVideoTracks()[0];
@@ -827,6 +846,7 @@ export function SendClient() {
         if (currentTrack && currentTrack.readyState !== "ended") return true;
         try {
           const fresh = await requestCamera(fastFacingRef.current);
+          if(generation!==fastCameraGeneration.current){fresh.getTracks().forEach(track=>track.stop());return false;}
           fastStreamRef.current = fresh;
           video.srcObject = fresh;
           await video.play();
@@ -837,15 +857,15 @@ export function SendClient() {
       };
 
       const loop = async () => {
-        if (!fastScanActiveRef.current) return;
+        if (!fastScanActiveRef.current || generation!==fastCameraGeneration.current) return;
         try {
           if (video.readyState < 2 || video.videoWidth === 0) return;
           if (!(await ensureLiveStream())) return;
           const side = Math.min(video.videoWidth, video.videoHeight);
           const offsetX = Math.floor((video.videoWidth - side) / 2);
           const offsetY = Math.floor((video.videoHeight - side) / 2);
-          canvas.width = SCAN_SIZE;
-          canvas.height = SCAN_SIZE;
+          if(canvas.width!==SCAN_SIZE)canvas.width=SCAN_SIZE;
+          if(canvas.height!==SCAN_SIZE)canvas.height=SCAN_SIZE;
           context.imageSmoothingEnabled = false;
           context.drawImage(
             video,
@@ -859,11 +879,12 @@ export function SendClient() {
             SCAN_SIZE,
           );
           const image = context.getImageData(0, 0, SCAN_SIZE, SCAN_SIZE);
-          const { scanRawQr } = await import("@/lib/qr-scanner");
           // تكيّف: معظم المحاولات سريعة (بدون tryHarder)؛ وكل 6 محاولات tryHarder
           fastFramesSinceRobustRef.current += 1;
           const robust = fastFramesSinceRobustRef.current % 6 === 5;
-          const decoded = await scanRawQr(image, robust);
+          const result=await decoder.scan(image,robust,1,true);
+          if(generation!==fastCameraGeneration.current)return;
+          const decoded=result.raw?.[0];
           if (decoded) {
             const text = new TextDecoder().decode(decoded);
             const pairing = decodePairing(text);
@@ -873,10 +894,11 @@ export function SendClient() {
               return;
             }
           }
-        } catch {
-          // أي خطأ غير متوقع: نتجاهله ونواصل — الحلقة لا تموت أبداً
+        } catch(cause) {
+          if(generation!==fastCameraGeneration.current)return;
+          stopFastScanning();setFastState("error");setFastStatus(String(cause));
         } finally {
-          if (fastScanActiveRef.current) {
+          if (fastScanActiveRef.current && generation===fastCameraGeneration.current) {
             fastScanLoopRef.current = window.requestAnimationFrame(
               () => void loop(),
             );
@@ -890,19 +912,23 @@ export function SendClient() {
   );
 
   const startFastScan = useCallback(async () => {
+    stopFastScanning();const generation=fastCameraGeneration.current;
     setFastState("scanning");
     setFastStatus(t("send.fastScanning"));
     try {
       // ننتظر ربط React للفيديو داخل النافذة قبل طلب الكاميرا
       await new Promise((resolve) => window.setTimeout(resolve, 60));
+      if(generation!==fastCameraGeneration.current)return;
       const stream = await requestCamera(fastFacingRef.current);
+      if(generation!==fastCameraGeneration.current){stream.getTracks().forEach(track=>track.stop());return;}
       await enableContinuousFocus(stream);
-      await beginFastLoop(stream);
+      await beginFastLoop(stream,generation);
     } catch {
-      setFastState("error");
+      if(generation!==fastCameraGeneration.current)return;
+      stopFastScanning();setFastState("error");
       setFastStatus(t("send.fastError", { msg: t("scan.error.cameraStart") }));
     }
-  }, [beginFastLoop, enableContinuousFocus, requestCamera, t]);
+  }, [beginFastLoop, enableContinuousFocus, requestCamera, stopFastScanning, t]);
 
   /** تبديل الكاميرا الأمامية/الخلفية أثناء المسح. */
   const switchFastCamera = useCallback(() => {
@@ -910,6 +936,7 @@ export function SendClient() {
       fastFacingRef.current === "environment" ? "user" : "environment";
     fastFacingRef.current = next;
     setFastStatus(t("send.fastScanning"));
+    stopFastScanning();const generation=fastCameraGeneration.current;
     void (async () => {
       fastScanActiveRef.current = false;
       if (fastScanLoopRef.current) {
@@ -920,8 +947,9 @@ export function SendClient() {
       fastStreamRef.current = null;
       try {
         const stream = await requestCamera(next);
+        if(generation!==fastCameraGeneration.current){stream.getTracks().forEach(track=>track.stop());return;}
         await enableContinuousFocus(stream);
-        await beginFastLoop(stream);
+        await beginFastLoop(stream,generation);
       } catch {
         setFastState("error");
         setFastStatus(
@@ -962,7 +990,7 @@ export function SendClient() {
 
   const scanUrl = useMemo(() => {
     if (typeof window === "undefined") return "/scan";
-    return `${window.location.origin}/scan`;
+    return `${applicationShareOrigin()}/scan`;
   }, []);
 
   // Pair with this installation, not a hard-coded deployment with potentially older receiver code.

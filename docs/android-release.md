@@ -1,28 +1,46 @@
-# QRFerry Android release
+# Android implementation and release gates
 
-The Android app is a Capacitor 8.6.0 shell around a React 19 + Vite static application. `npm run build` bundles the React entry point, CSS, WebAssembly modules, workers, fonts, icons, and other public assets into `www/`; Capacitor then packages that directory into the APK/AAB. There is no `server.url`, Vercel dependency, Next.js runtime, or remote web page in the Android application.
+## Packaged application
 
-The native application ID is `com.msayed.qrferry`. The checked-in Android project targets SDK 36, uses Java 21 in CI, and uses the QRFerry maskable icon in the launcher resources.
+React 19 + Vite builds `dist/`; the complete output is copied to `www/`, then packaged by Capacitor 8.6.0. There is no `server.url` and no remote-website dependency for the application UI or optical transport. Package: `com.msayed.qrferry`; min SDK 24; compile/target SDK 36; build JDK 21. A current compatible Android System WebView is required; minSdk alone does not establish support for old WebView JavaScript engines.
 
-## Android permissions
+`MainActivity` registers the local `QRFerryDevicePlugin` before bridge creation. This adapter uses existing Capacitor/Android dependencies, not a new runtime plugin package:
 
-- `INTERNET`: loads the HTTPS application and supports the optional PeerJS/WebRTC signaling path.
-- `CAMERA`: scans animated QR transfers and bridge pairing codes.
-- `VIBRATE`: completion and incoming-transfer feedback.
-- `WAKE_LOCK`: supports the web Wake Lock flow while a transfer is active.
-- `POST_NOTIFICATIONS`: allows the app's optional completion/incoming notifications on Android 13+.
+- Actual Android `Configuration` locales/night mode, initial read and configuration/resume events. React awaits the initial native read before mounting.
+- `ACTION_SEND` / `ACTION_SEND_MULTIPLE` with temporary content-URI permissions, bounded sequential reads and file-count/total-size checks. No broad storage permission or arbitrary path access from JavaScript.
+- User-selected `ACTION_CREATE_DOCUMENT` destinations and bounded native save chunks. Cancellation is not reported as a saved file. Web downloads remain browser downloads.
+- Native notification permission/channel, and reference-counted screen-awake ownership with pause/resume behavior.
 
-The app does not request microphone, contacts, location, storage, SMS, or phone permissions. File data remains in the web app's in-memory/object storage paths and IndexedDB; the app does not upload optical-transfer files to a QRFerry file server.
+The QR/RaptorQ worker is identical on web and Android. Camera generation tokens discard late permission results and worker responses after cancel/navigation. Worker failures are visible/retryable, not a silent return to main-thread decoding.
 
-## Automated release
+Android backup is disabled to avoid automatically backing up locally stored private identity material. This does not retroactively erase earlier system backups, migrate keys into Android Keystore, or provide a hardware-backed key guarantee. The existing identity/resume/history/library schemas are retained.
 
-`.github/workflows/android-release.yml` runs automatically on every push to `main` and can also be started with `workflow_dispatch`. The first job increments the patch version, derives a monotonic Android `versionCode`, commits the update with `[skip android release]`, tags it as `vX.Y.Z`, and pushes both commit and tag. The second job checks out that exact SHA, runs `npm run build`, verifies the generated local assets, runs `npx cap sync android`, builds a signed release APK and AAB, uploads both as an artifact, and creates a GitHub Release with generated notes.
+## Release pipeline
 
-Release signing is isolated in the `android-release` Environment. The workflow expects these Environment secrets and never commits them:
+A push to `main` (except the bot's `[skip android release]` commit) runs:
+
+1. Clean dependency install, lint, TypeScript, protocol/unit tests, production build, and browser release tests.
+2. Prepare the next patch and monotonically increment `versionCode` **only in the CI working tree**.
+3. Build/sync the complete local web output and compile Android/unit/instrumented tests.
+4. Run API 35 Emulator tests using an actual WebView: real QR pixels → ZXing worker → RaptorQ recovery, ArrayBuffer ownership transfer, live Android OS language/night-mode changes, and real content-URI share chunks at nonzero offsets. Test fixtures and JavaScript test bridges live only in `androidTest`, not the release app.
+5. Build signed APK and AAB with the existing `android-release` environment secrets.
+6. Verify package/version/code, local worker assets, absence of a remote `server.url`, APK signatures via **apksigner**, and archive integrity.
+7. Only after those checks: atomically push the version commit and tag. A failed build/test does not consume another release number.
+8. Upload both assets to a draft GitHub Release, then publish it. A rerun after upload failure recognizes the already-created matching tag rather than creating another version.
+
+Do **not** manually bump `package.json` before the normal main push. Starting from 1.2.8, this pipeline targets **1.2.9 / versionCode 10209**. The version code is previousCode+1; it no longer collides when patch reaches 100.
+
+Required environment secrets:
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-The keystore is materialized only under the runner temporary directory and removed in an `always()` cleanup step. Pull-request workflows are not granted signing secrets because this repository intentionally uses a push-to-main release pipeline.
+Keep the same signing key for upgrades. Keystore material is written only to the runner's temporary directory and removed in an always-running cleanup step. Credentials must not be embedded in remote URLs, source files, logs, APK assets, or documentation.
+
+## Validation boundaries
+
+A configured gate is not proof it passed. Check the specific run's quality job, emulator tests, signature verification, final tag, published assets and latest web deployment. Browser camera fixtures do not qualify a physical camera. API 35 Emulator tests do not qualify all API 24+ devices or OEM WebViews, document providers, notification settings, camera autofocus/torch, or background delivery.
+
+Before wider distribution, test on a real target phone: first launch offline, system theme/language changes while foreground/background, actual screen-to-camera transfer including password and signature flows, cancelled permission requests, SAF save/cancel, sharing from another app, system Back, notification refusal/grant, wake-lock release and network changes. Insecure local WS signaling remains blocked on Android; use trusted WSS rather than enabling global cleartext.

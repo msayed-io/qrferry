@@ -31,7 +31,7 @@ test("progress updates are throttled (not per-chunk) during a large transfer", a
   // ملف 25MB = 100 شريحة (256KB)
   const fs = await import("node:fs");
   fs.writeFileSync("/tmp/big25.bin", Buffer.alloc(25 * 1024 * 1024, 5));
-  await phonePage.setInputFiles('input[type="file"]', "/tmp/big25.bin");
+  await phonePage.setInputFiles('input[type="file"]:not([webkitdirectory])', "/tmp/big25.bin");
 
   const modules = await tvPage.evaluate(() => window.__qrferryTvModules!);
   await phonePage.evaluate(
@@ -45,7 +45,7 @@ test("progress updates are throttled (not per-chunk) during a large transfer", a
     (window as unknown as { __progressUpdates: number }).__progressUpdates = 0;
     let previous = "";
     const observer = new MutationObserver(() => {
-      const text = document.querySelector(".tv-progress-text")?.textContent;
+      const text = document.querySelector("progress")?.getAttribute("value");
       if (text && text !== previous) {
         previous = text;
         (
@@ -55,6 +55,8 @@ test("progress updates are throttled (not per-chunk) during a large transfer", a
     });
     // The progress element is created only after receipt starts: observe its parent.
     observer.observe(document.body, {
+      attributes: true,
+      attributeFilter:["value"],
       characterData: true,
       childList: true,
       subtree: true,
