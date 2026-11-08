@@ -43,10 +43,23 @@ public class NativeIntegrationTest {
         return response.get("value").toString();
     }
     private static final String READY="const until=Date.now()+30000;while(!document.querySelector('#root main')){if(Date.now()>until)throw Error('App did not render');await new Promise(r=>setTimeout(r,50));}";
-    private static WebView install(ActivityScenario<MainActivity> scenario,Sink sink){
+    private static WebView install(ActivityScenario<MainActivity> scenario,Sink sink) throws Exception {
         AtomicReference<WebView> result=new AtomicReference<>();
         scenario.onActivity(activity->{WebView view=activity.getBridge().getWebView();view.addJavascriptInterface(sink,"NativeTestSink");view.reload();result.set(view);});
-        return result.get();
+        WebView view=result.get();
+        // addJavascriptInterface is visible only after the reload completes. Do not
+        // start async test code in the old JavaScript context being destroyed.
+        long deadline=System.currentTimeMillis()+45000;
+        while(System.currentTimeMillis()<deadline){
+            CountDownLatch checked=new CountDownLatch(1);AtomicReference<String> ready=new AtomicReference<>();
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(()->view.evaluateJavascript(
+                "typeof NativeTestSink !== 'undefined' && document.readyState !== 'loading' && Boolean(document.querySelector('#root main'))",
+                value->{ready.set(value);checked.countDown();}));
+            checked.await(2,TimeUnit.SECONDS);
+            if("true".equals(ready.get()))return view;
+            Thread.sleep(100);
+        }
+        throw new AssertionError("Reloaded WebView/test interface did not become ready");
     }
     @Test public void packagedWorkerDecodesQrAndRecoversTransferredBytes() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
