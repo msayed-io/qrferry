@@ -10,10 +10,14 @@ test('reselecting the current navigation tab preserves scroll position',async({p
 
 test('route entry does not translate or spring the whole page',async({page})=>{
  await page.goto('/');await expect(page.locator('.transfer-page')).toBeVisible();
- for(const id of ['scan','pair','send']){
+ for(const [id,path] of [['scan','/scan'],['pair','/bridge'],['send','/']]){
   await page.locator('#nav-'+id).click();
+  // The source intentionally remains visible during module loading. Wait for
+  // the destination commit rather than inspecting a source node being removed.
+  await expect(page).toHaveURL(new RegExp(path+'$'));
   const root=page.locator('.transfer-page:visible');await expect(root).toBeVisible();
-  expect(await root.evaluate(e=>({animation:getComputedStyle(e).animationName,transform:getComputedStyle(e).transform}))).toEqual({animation:'none',transform:'none'});
+  await expect(root).toHaveCSS('animation-name','none');
+  await expect(root).toHaveCSS('transform','none');
  }
 });
 
