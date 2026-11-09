@@ -56,7 +56,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: false
-          script: bash diagnostics/run.sh ${{ matrix.api }}
+          script: bash diagnostics/run.sh ${{ matrix.api }} functional
       - uses: actions/upload-artifact@v4
         if: always()
         with:
