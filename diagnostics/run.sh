@@ -7,8 +7,8 @@ classes='com.msayed.qrferry.NavigationDiagnosticTest,com.msayed.qrferry.ChromePo
 count=2
 if [ "${1:-31}" -ge 33 ]; then classes="com.msayed.qrferry.NativeIntegrationTest,$classes"; count=7; fi
 if [ "${2:-}" = functional ]; then
-  classes='com.msayed.qrferry.ChromePolicyTest'; count=1
-  if [ "${1:-31}" -ge 33 ]; then classes="com.msayed.qrferry.NativeIntegrationTest,$classes"; count=6; fi
+  classes='com.msayed.qrferry.ChromePolicyTest,com.msayed.qrferry.SpecularRimTest'; count=2
+  if [ "${1:-31}" -ge 33 ]; then classes="com.msayed.qrferry.NativeIntegrationTest,$classes"; count=7; fi
 fi
 # Run directly so Gradle's post-test uninstall cannot erase the captured traces.
 adb shell am instrument -w -r -e class "$classes" com.msayed.qrferry.test/androidx.test.runner.AndroidJUnitRunner | tee android/app/build/reports/nav-trace/instrumentation.txt

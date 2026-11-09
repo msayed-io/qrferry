@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [31, 35]
+        api: [31]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

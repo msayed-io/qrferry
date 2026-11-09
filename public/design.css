@@ -34,33 +34,11 @@ body{font:400 17px/1.4 var(--font);color:var(--label);min-height:100vh;
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 
-/* Liquid Glass. Fill + ONE 1px specular rim on the edge itself (masked ring, light fixed top-left, never mirrored in RTL).
-   --o = ring offset so the .60 peak sits on the arc nearest the corner (set by JS = 0.4142 x radius). --rim = master intensity 0..1 */
-:root{--rim:1}
+/* Glass material; the single physical rim is owned by app/rim.ts. */
+:root{--rim:1;--qf-specular-rim:physical}
 .glass{position:relative;isolation:isolate;background:var(--glass);
   -webkit-backdrop-filter:blur(22px) saturate(1.8);backdrop-filter:blur(22px) saturate(1.8);
-  box-shadow:0 0 0 .5px var(--hair),0 8px 20px var(--shadow);transition:transform .35s var(--ease)}
-.glass::after,.seg [aria-selected=true]::after,.mini .on::after,.tab[aria-selected=true]::after{
-  content:"";position:absolute;inset:0;box-sizing:border-box;border-radius:inherit;
-  padding:var(--rim-w,1px);pointer-events:none;opacity:calc(var(--rim,1)*var(--k,1));
-  background:linear-gradient(135deg,
-    rgba(255,255,255,.60) var(--o,0px),
-    rgba(255,255,255,.29) calc(var(--o,0px) + min(12px,8%)),
-    rgba(255,255,255,.13) calc(var(--o,0px) + min(24px,16%)),
-    rgba(255,255,255,.07) calc(var(--o,0px) + min(36px,24%)),
-    rgba(255,255,255,.06) calc(var(--o,0px) + min(48px,32%)),
-    rgba(255,255,255,.06) calc(calc(100% - var(--o,0px)) - min(36px,30%)),
-    rgba(255,255,255,.067) calc(calc(100% - var(--o,0px)) - min(27px,22.5%)),
-    rgba(255,255,255,.095) calc(calc(100% - var(--o,0px)) - min(18px,15%)),
-    rgba(255,255,255,.178) calc(calc(100% - var(--o,0px)) - min(9px,7.5%)),
-    rgba(255,255,255,.34) calc(100% - var(--o,0px)));
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor;
-  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-  mask-composite:exclude}
-@supports not ((-webkit-mask-composite:xor) or (mask-composite:exclude)){
-  .glass::after,.seg [aria-selected=true]::after,.mini .on::after,.tab[aria-selected=true]::after{display:none}
-  .glass{box-shadow:0 8px 20px var(--shadow)}}
+  box-shadow:0 8px 20px var(--shadow);transition:transform .35s var(--ease)}
 .glass:active{transform:scale(.96)}
 .tinted{background:color-mix(in srgb,var(--tint) 90%,transparent);color:var(--on-accent)}
 .cap{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 20px;border-radius:999px;font-weight:600;font-size:16px}
@@ -163,7 +141,7 @@ body[data-v=chat] #composer{display:flex}
 .inp input{flex:1;width:100%;background:none;border:0;outline:0;font:inherit;font-size:16px;color:var(--label)}
 .tab[hidden]{display:none}
 @media(max-width:520px){.tab{padding:0 15px}.tab:not([aria-selected=true]) span{display:none}}
-@media (prefers-reduced-transparency:reduce){.glass:not(.tinted){-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--solid)}:root{--rim:.5}}
+@media (prefers-reduced-transparency:reduce){.glass:not(.tinted){-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--solid)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 
