@@ -1,5 +1,6 @@
 // Narrow, version-checked patch to upstream Glisse 0.5.0 (MIT). No spring,
 // lens map, refraction graph or input/selection implementation is replaced.
+// The opt-in physical rim replaces native rim rasterization, never the lens.
 import { readFile, writeFile } from 'node:fs/promises';
 const root = new URL('../node_modules/glisse/', import.meta.url);
 const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
@@ -48,11 +49,20 @@ function unusedOriginalMask(element, layers) {
  ['const behind = member.replaces.getBoundingClientRect();', 'const behind = member.behind;'],
 ];
 // Validate both artifacts before writing either, and fail closed on upstream drift.
+const rimMarker = '// QRFerry: physical rim owns this edge; do not raster a second native rim.';
+const rimChanges = [
+ ['function paintRim(element) {\n\tconst style = getComputedStyle(element);', `function paintRim(element) {
+ ${rimMarker}
+ const style = getComputedStyle(element);
+ if (style.getPropertyValue("--qf-specular-rim").trim() === "physical") return;`],
+ ['function fitSelection(element, filtered) {', `function fitSelection(element, filtered) {
+ if (!filtered && getComputedStyle(element).getPropertyValue("--qf-specular-rim").trim() === "physical") return;`],
+];
 const results = [];
 for (const name of ['dist/index.js', 'dist/index.cjs']) {
  let source = await readFile(new URL(name, root), 'utf8');
- if (source.includes(marker2)) continue;
- const pending = source.includes(marker) ? changes2 : [...changes, ...changes2];
+ if (source.includes(rimMarker)) continue;
+ const pending = [...(source.includes(marker2) ? [] : source.includes(marker) ? changes2 : [...changes, ...changes2]), ...rimChanges];
  for (const [before, after] of pending) {
   if (source.split(before).length !== 2) throw new Error(`Glisse patch mismatch: ${name}: ${before}`);
   source = source.replace(before, after);
@@ -61,4 +71,4 @@ for (const name of ['dist/index.js', 'dist/index.cjs']) {
  results.push([name, source]);
 }
 for (const [name, source] of results) await writeFile(new URL(name, root), source);
-console.log('Glisse 0.5.0: same-frame segment paint batching; unused backdrop opt-out.');
+console.log('Glisse 0.5.0: same-frame segment paint batching; unused backdrop opt-out; single physical rim owner.');

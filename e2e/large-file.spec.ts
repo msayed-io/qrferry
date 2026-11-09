@@ -28,7 +28,7 @@ test("large file: fast transfer is available immediately without heavy preparati
   await expect(fastButton).toBeEnabled({ timeout: 20_000 });
 
   // لم يُجهَّز البث البصري تلقائياً (لا توجد لوحة QR بعد)
-  await expect(page.locator(".qr-stage canvas")).toHaveCount(0);
+  await expect(page.locator(".qr-stage canvas:not(.qf-specular-rim)")).toHaveCount(0);
 
   // فتح نافذة النقل السريع (يعمل دون تجهيز)
   await fastButton.click();
@@ -49,7 +49,7 @@ test("large file: pressing start QR stream triggers on-demand preparation", asyn
   });
 
   // لم يُجهَّز تلقائياً → زر البث يجهّز عند الضغط
-  await page.locator(".qr-stage canvas").waitFor({ state: "detached" }).catch(() => undefined);
+  await page.locator(".qr-stage canvas:not(.qf-specular-rim)").waitFor({ state: "detached" }).catch(() => undefined);
   await page.getByRole("button", { name: "ابدأ بثّ QR" }).click();
   await expect(page.getByText("جاهز للبث")).toBeVisible({ timeout: 120_000 });
 });

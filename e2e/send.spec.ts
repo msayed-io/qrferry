@@ -19,7 +19,7 @@ test("sender turns a selected file into a live QR stream", async ({ page }) => {
   await page.waitForTimeout(2500);
 
   const darkPixels = await page.evaluate(() => {
-    const canvas = document.querySelector("canvas");
+    const canvas = document.querySelector<HTMLCanvasElement>(".qr-panel canvas:not(.qf-specular-rim)");
     if (!canvas || canvas.width === 0) return 0;
     const context = canvas.getContext("2d");
     if (!context) return 0;

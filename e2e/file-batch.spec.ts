@@ -90,7 +90,7 @@ test("batch: change replaces rather than appends, and removing the last file cle
   await expect(page.locator(".selected-files")).toHaveCount(0);
   await expect(page.locator(".fast-action")).toBeDisabled();
   await expect(page.locator(".primary-action")).toBeDisabled();
-  await expect(page.locator(".qr-stage canvas")).toHaveCount(0);
+  await expect(page.locator(".qr-stage canvas:not(.qf-specular-rim)")).toHaveCount(0);
 });
 
 test("batch: adding a large file invalidates the previous small-file optical payload", async ({
@@ -98,11 +98,11 @@ test("batch: adding a large file invalidates the previous small-file optical pay
 }) => {
   await page.goto("/");
   await page.setInputFiles('input[type="file"]:not([webkitdirectory])', file("small.txt"));
-  await expect(page.locator(".qr-stage canvas").first()).toBeVisible();
+  await expect(page.locator(".qr-stage canvas:not(.qf-specular-rim)").first()).toBeVisible();
   await add(page, [file("large.txt", 2 * 1024 * 1024)]);
   await expect(page.locator(".batch-file")).toHaveCount(2);
   await expect(page.locator(".fast-action")).toBeEnabled();
-  await expect(page.locator(".qr-stage canvas")).toHaveCount(0);
+  await expect(page.locator(".qr-stage canvas:not(.qf-specular-rim)")).toHaveCount(0);
 });
 
 test("batch: dropped files respect the same maximum without silently truncating", async ({

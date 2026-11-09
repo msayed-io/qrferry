@@ -1,5 +1,5 @@
 /* Glisse 0.5.0 owns its material, optical maps and spring animation.
-   Only product sizing, accent and accessibility adapt here. No .glass overlay. */
+   Product sizing, accent and accessibility adapt here. app/rim.ts replaces only the rim. */
 :root {
   --qf-live-backdrop: off;
   --lg-fill: var(--tint);
@@ -46,9 +46,10 @@
     box-shadow: none !important;
   }
   html .lg-button[data-variant="filled"] { background-color: var(--tint) !important; }
-  html :is(.lg-tab-lens, .lg-tab-tint, .lg-tab-lensed, .lg-segmented-thumb) { visibility: hidden !important; }
-  html .lg-tab-labels { filter: none !important; }
-  html .lg-tab[data-selected] { background: var(--fill); }
+  html :is(.lg-tab-tint, .lg-tab-lensed, .lg-segmented-thumb) { visibility: hidden !important; }
+  html .lg-tab-labels { filter: none !important; mask: none !important; -webkit-mask: none !important; }
+  html .lg-tab[data-selected] { background: transparent; }
+  html .lg-tab-lens.lg-glass { z-index: 0; background-color: var(--fill) !important; }
   html .lg-tab .lg-tab-face { color: var(--label) !important; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -81,3 +82,22 @@
 
 /* Bound style/layout invalidation to the persistent native Glisse control. */
 .qf-tab-bar { contain: layout style; isolation: isolate; }
+
+/* One edge-only canvas, not a second glass layer or a pseudo-element override.
+   Native Glisse material/press highlights and optical label refraction remain. */
+.lg-glass { background-image: none !important; --lg-edge: transparent; }
+.lg-menu-surface { --lg-surface-edge: transparent; }
+.lg-glass[data-qf-rim]:not(.lg-tab-lens) { box-shadow: 0 1px 3px var(--lg-drop); }
+.support-count,.history-badges span { position: relative; }
+[data-qf-rim] > .qf-specular-rim {
+  display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+  border: 0; padding: 0; margin: 0; border-radius: 0;
+  pointer-events: none; z-index: 3; background: none;
+  opacity: calc(clamp(0,var(--rim,1),1) * var(--qf-rim-layer,1) * var(--qf-rim-accessibility,1));
+}
+[data-qf-rim="nested"] > .qf-specular-rim { --qf-rim-layer: .85; }
+@media (prefers-reduced-transparency: reduce) {
+  :root { --qf-rim-accessibility: .5; }
+  .glass[data-qf-rim] { background: var(--solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .glass.tinted[data-qf-rim] { background: var(--tint); color: var(--on-accent); }
+}

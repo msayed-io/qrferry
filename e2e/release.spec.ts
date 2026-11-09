@@ -445,9 +445,9 @@ test("password QR camera round-trip retains the completed encrypted worker sessi
   await sender.getByRole("switch", { name: /تشفير الملف/ }).click();
   await sender.getByLabel("كلمة المرور", { exact: true }).fill("secret-pass");
   await sender.getByRole("button", { name: "اعرض كلمة المرور كـ QR" }).click();
-  await expect(sender.locator(".modal-card canvas")).toBeVisible();
+  await expect(sender.locator(".modal-card canvas:not(.qf-specular-rim)")).toBeVisible();
   const passwordFrame = await sender
-    .locator(".modal-card canvas")
+    .locator(".modal-card canvas:not(.qf-specular-rim)")
     .evaluate((node: HTMLCanvasElement) => {
       const pixels = node
         .getContext("2d")!

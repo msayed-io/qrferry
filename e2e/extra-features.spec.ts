@@ -8,7 +8,7 @@ test("password QR modal opens and renders a QR canvas", async ({ page }) => {
   await page.getByRole("button", { name: "اعرض كلمة المرور كـ QR" }).click();
   await expect(page.getByText("رمز كلمة المرور")).toBeVisible();
   // ننتظر ظهور canvas داخل النافذة (يُولد QR فعلياً)
-  await expect(page.locator(".modal-card canvas")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(".modal-card canvas:not(.qf-specular-rim)")).toBeVisible({ timeout: 20_000 });
 });
 
 test("keyboard shortcut Space toggles broadcast when a transfer is ready", async ({ page }) => {
