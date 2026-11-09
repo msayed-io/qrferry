@@ -48,8 +48,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   ] as const;
   const navigate = (id: string, href: string) => {
     if (id === "pair" || id === "chat") setView(id);
-    if (path !== href) router.push(href);
-    window.scrollTo({ top: 0 });
+    if (path !== href) {
+      router.push(href);
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
   };
   return <BridgeViewContext.Provider value={context}><SupportReturnContext.Provider value={returnPath}>
     <div className={`wrap app-wrap ${standalone ? "standalone-wrap" : ""} ${active === "chat" ? "chat-wrap" : ""}`}>

@@ -107,6 +107,46 @@ public class NativeIntegrationTest {
             });
         }finally{file.delete();}
     }
+    @Test public void launcherUsesTheExistingBrandForAdaptiveAndThemedIcons() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        android.graphics.drawable.Drawable drawable=context.getPackageManager().getApplicationIcon(context.getPackageName());
+        assertTrue(drawable instanceof android.graphics.drawable.AdaptiveIconDrawable);
+        android.graphics.drawable.AdaptiveIconDrawable icon=(android.graphics.drawable.AdaptiveIconDrawable)drawable;
+        android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(108,108,android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.drawable.Drawable foreground=icon.getForeground();foreground.setBounds(0,0,108,108);foreground.draw(new android.graphics.Canvas(bitmap));
+        assertEquals("Existing Mulberry fourth square",android.graphics.Color.parseColor("#9A315E"),bitmap.getPixel(67,67));
+        assertEquals("Transparent foreground, not the Capacitor template",0,android.graphics.Color.alpha(bitmap.getPixel(54,54)));
+        if(android.os.Build.VERSION.SDK_INT>=33)assertNotNull("Android themed icon",icon.getMonochrome());
+        bitmap.recycle();
+    }
+    @Test public void systemBarsMatchBothThemesAndKeepContentOutOfStatusArea() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        int previous=context.getSystemService(UiModeManager.class).getNightMode();
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+            Sink sink=new Sink();WebView view=install(scenario,sink);
+            for(boolean dark:new boolean[]{false,true}){
+                night(dark?"yes":"no");
+                String theme=dark?"dark":"light";
+                assertEquals(theme,evaluate(view,sink,"const end=Date.now()+15000;while(document.documentElement.dataset.theme!=="+JSONObject.quote(theme)+"){if(Date.now()>end)throw Error('Theme did not settle');await new Promise(r=>setTimeout(r,50));}return document.documentElement.dataset.theme;"));
+                AtomicReference<Integer> top=new AtomicReference<>();
+                scenario.onActivity(activity->{
+                    android.view.Window window=activity.getWindow();
+                    assertEquals(!dark,androidx.core.view.WindowCompat.getInsetsController(window,window.getDecorView()).isAppearanceLightStatusBars());
+                    assertEquals(SystemChrome.background(activity.getResources().getConfiguration()),((android.graphics.drawable.ColorDrawable)window.getDecorView().getBackground()).getColor());
+                    androidx.core.view.WindowInsetsCompat insets=androidx.core.view.ViewCompat.getRootWindowInsets(window.getDecorView());assertNotNull(insets);
+                    int status=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;assertTrue(status>0);top.set(status);
+                    int[] position=new int[2];view.getLocationOnScreen(position);assertEquals("Exactly one native status inset, no overlap or duplicate padding",status,position[1]);
+                    assertFalse(window.isStatusBarContrastEnforced());
+                });
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+                android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+                assertNotNull(screenshot);
+                assertEquals("Actual status strip pixels",android.graphics.Color.parseColor(dark?"#121014":"#F7F4F6"),screenshot.getPixel(screenshot.getWidth()/2,top.get()/2));
+                screenshot.recycle();
+                assertEquals("14",evaluate(view,sink,"return parseFloat(getComputedStyle(document.body).paddingTop);"));
+            }
+        }finally{night(previous==UiModeManager.MODE_NIGHT_YES?"yes":previous==UiModeManager.MODE_NIGHT_NO?"no":"auto");}
+    }
     private static void night(String value) throws Exception {
         ParcelFileDescriptor descriptor=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("cmd uimode night "+value);
         try(InputStream stream=new ParcelFileDescriptor.AutoCloseInputStream(descriptor)){stream.readAllBytes();}

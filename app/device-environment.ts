@@ -37,6 +37,7 @@ function apply(value: DevicePreferences) {
 /** Native OS configuration is authoritative, not a stored theme/language toggle. */
 export async function initializeDeviceEnvironment() {
   if (!isNativeDevice()) return;
+  document.documentElement.dataset.native = "";
   await NativeDevice.addListener("preferencesChanged", apply);
   const refresh = () => NativeDevice.getPreferences().then(apply);
   await refresh();

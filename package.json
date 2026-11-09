@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit --incremental false",
     "test": "tsx --test tests/*.test.ts",
     "test:release": "node --import tsx scripts/make-e2e-fixture.ts && playwright test",
-    "test:routes": "node --test tests/rendered-html.test.mjs"
+    "test:routes": "node --test tests/rendered-html.test.mjs",
+    "postinstall": "node scripts/patch-glisse.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.6.0",

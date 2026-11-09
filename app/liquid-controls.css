@@ -1,6 +1,7 @@
 /* Glisse 0.5.0 owns its material, optical maps and spring animation.
    Only product sizing, accent and accessibility adapt here. No .glass overlay. */
 :root {
+  --qf-live-backdrop: off;
   --lg-fill: var(--tint);
   --lg-on: var(--ok);
   --lg-ring: var(--tint);
@@ -12,7 +13,7 @@
 .qf-tab-bar .lg-tab-icon > svg { stroke-width: 1.7; }
 /* Defaults retain Glisse's 24px/16px icon-tab lift, .2 bend and 2 dispersion.
    Slot widths stay equal: variable selected widths break the native engine. */
-.qf-tab-bar .lg-tab { touch-action: pan-y; }
+.qf-tab-bar, .qf-tab-bar .lg-tab { touch-action: none; }
 .qf-segmented {
   --lg-tab-height: 44px;
   --lg-tab-width: 100px;
@@ -77,3 +78,6 @@
    use the native frosted material for the scene behind controls. This is not a
    substitute TabBar/Menu and does not disable its held-label lens. */
 .lg-glass,.lg-tab-glass,.lg-tab-lens{--lg-filter:blur(3px) saturate(1.5)!important}
+
+/* Bound style/layout invalidation to the persistent native Glisse control. */
+.qf-tab-bar { contain: layout style; isolation: isolate; }

@@ -5,7 +5,7 @@ button:disabled{opacity:.4;cursor:default}button,input,textarea,select{font-fami
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--tint);outline-offset:4px}
 svg.lucide{stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .brand{color:var(--label)}.tools .circle{position:relative}.tools .circle:before{content:"";position:absolute;inset:-2px;border-radius:inherit}
-.transfer-page,.support-page{width:100%;min-width:0;animation:in .45s var(--ease)}
+.transfer-page,.support-page{width:100%;min-width:0}
 .workspace-intro h1,.support-intro h1{font-size:34px;font-weight:800;line-height:1.15;letter-spacing:-.4px;margin:26px 4px 6px}
 .workspace-intro p,.support-intro p{color:var(--label2);font-size:16px;margin:0 4px 22px;line-height:1.4}
 .sender-grid,.scanner-shell{display:grid;gap:16px;align-items:start;min-width:0}
@@ -109,3 +109,6 @@ input.field{padding:0 16px;font-size:16px;line-height:1.4}
 
 .scanner-page:is(.is-complete,.needs-review) .camera-card{display:none}
 .scanner-page:is(.is-complete,.needs-review) .scanner-shell{grid-template-columns:1fr}
+
+/* Native system-bar gutters and the WebView share this exact solid surface. */
+html[data-native] body { background: var(--bg); }
