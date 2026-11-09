@@ -34,7 +34,7 @@ public class ChromePolicyTest {
    WebView view=ref.get();long deadline=System.currentTimeMillis()+45000;boolean ready=false;
    while(System.currentTimeMillis()<deadline){
     CountDownLatch checked=new CountDownLatch(1);AtomicReference<String> answer=new AtomicReference<>();
-    InstrumentationRegistry.getInstrumentation().runOnMainSync(()->view.evaluateJavascript("typeof ChromePolicySink!=='undefined' && !!document.querySelector('#nav-send')",v->{answer.set(v);checked.countDown();}));
+    InstrumentationRegistry.getInstrumentation().runOnMainSync(()->view.evaluateJavascript("typeof ChromePolicySink!=='undefined' && !!document.querySelector('#nav-send') && !!document.querySelector('.transfer-page h1')",v->{answer.set(v);checked.countDown();}));
     checked.await(2,TimeUnit.SECONDS);if("true".equals(answer.get())){ready=true;break;}Thread.sleep(100);
    }
    assertTrue("Packaged page did not load",ready);

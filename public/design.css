@@ -171,6 +171,11 @@ body[data-v=chat] #composer{display:flex}
    Native WebView indicators/edge effects are disabled separately in Android. */
 html,body,*{scrollbar-width:none;overscroll-behavior:none}
 *::-webkit-scrollbar{display:none;width:0;height:0}
+/* WebKit's root overscroll containment can swallow ordinary wheel scrolling
+   (reproduced in our WebKit runner). Preserve native scrolling over suppressing
+   its viewport bounce; nested scrollers and Android's native policy remain.
+   -webkit-nbsp-mode is a WebKit-only capability, not a device/OS version guess. */
+@supports (-webkit-nbsp-mode:space){html{overscroll-behavior:auto}}
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 /* Editing and user-authored message content are not application chrome. */
 input,textarea,[contenteditable]:not([contenteditable="false"]),.bridge-bubble p,.bridge-link-row code,.fast-url{
