@@ -1,13 +1,14 @@
 "use client";
 
 
-import { AppLink, usePathname, useRouter } from "./router";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AppLink, usePathname, usePendingPathname, useRouter } from "./router";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "./lang-provider";
 import { LiquidChoices } from "./liquid-controls";
 import { DesignIcon } from "./design-icons";
 import { BridgeViewContext, type BridgeView } from "./design-system";
-const BridgeClient = lazy(() => import("./bridge/bridge-client").then(({ BridgeClient }) => ({ default: BridgeClient })));
+import { BridgePage } from "./route-pages";
+const BridgeClient = BridgePage.View;
 import { AppMenu } from "./app-menu";
 import { SupportReturnContext, SUPPORT_ROUTES } from "./support-navigation";
 import { RouteErrorBoundary } from "./global-error";
@@ -17,6 +18,7 @@ import { observeRims } from "./rim";
 export function AppShell({ children }: { children: ReactNode }) {
   const { lang } = useI18n();
   const path = usePathname();
+  const pendingPath = usePendingPathname();
   const router = useRouter();
   const standalone = SUPPORT_ROUTES.includes(path);
   const [returnPath, setReturnPath] = useState("/");
@@ -39,7 +41,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
   const context = useMemo(() => ({ connected, view, setView, connectionChanged }), [connected, view, connectionChanged]);
   useEffect(observeRims, []);
-  const active = bridgeRoute ? (connected && view === "chat" ? "chat" : "pair") : path === "/" ? "send" : path === "/scan" ? "scan" : null;
+  const selectionPath = pendingPath ?? path;
+  const selectionBridge = selectionPath === "/bridge" || selectionPath === "/pc";
+  const active = selectionBridge ? (connected && view === "chat" ? "chat" : "pair") : selectionPath === "/" ? "send" : selectionPath === "/scan" ? "scan" : null;
   const tabs = [
     { id: "send", path: "/", icon: "up", ar: "إرسال", en: "Send" },
     { id: "scan", path: "/scan", icon: "scan", ar: "مسح", en: "Scan" },
@@ -48,10 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   ] as const;
   const navigate = (id: string, href: string) => {
     if (id === "pair" || id === "chat") setView(id);
-    if (path !== href) {
-      router.push(href);
-      window.scrollTo({ top: 0, behavior: "instant" });
-    }
+    router.push(href);
   };
   return <BridgeViewContext.Provider value={context}><SupportReturnContext.Provider value={returnPath}>
     <div className={`wrap app-wrap ${standalone ? "standalone-wrap" : ""} ${active === "chat" ? "chat-wrap" : ""}`}>
@@ -63,7 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AppMenu onNavigate={href => { setReturnPath(path); router.push(href); }} />
       </header>}
       <div id="route-content" hidden={bridgeRoute}>{children}</div>
-      {bridgeMounted && <div id="bridge-content" hidden={!bridgeRoute}><RouteErrorBoundary><Suspense fallback={<div role="status">…</div>}><BridgeClient /></Suspense></RouteErrorBoundary></div>}
+      {(bridgeMounted || bridgeRoute) && <div id="bridge-content" hidden={!bridgeRoute}><RouteErrorBoundary><Suspense fallback={<div role="status">…</div>}><BridgeClient /></Suspense></RouteErrorBoundary></div>}
     </div>
     {!standalone && <nav className="bottom-nav" aria-label={lang === "ar" ? "التنقل الرئيسي" : "Main navigation"}>
       <LiquidChoices

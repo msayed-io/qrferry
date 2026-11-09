@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from "react";
+import React, { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "glisse/styles.css";
 import "../app/globals.css";
@@ -14,29 +14,12 @@ import { PageMetadata } from "../app/page-metadata";
 import { NativeShareReceiver } from "../app/native-share-receiver";
 import { initializeDeviceEnvironment } from "../app/device-environment";
 import { usePathname, AppLink } from "../app/router";
-const SendClient = lazy(() =>
-  import("../app/send-client").then(({ SendClient }) => ({
-    default: SendClient,
-  })),
-);
-const ScannerClient = lazy(() =>
-  import("../app/scan/scanner-client").then(({ ScannerClient }) => ({
-    default: ScannerClient,
-  })),
-);
-const HistoryClient = lazy(() =>
-  import("../app/history/history-client").then(({ HistoryClient }) => ({
-    default: HistoryClient,
-  })),
-);
-const PrivacyClient = lazy(() =>
-  import("../app/privacy/privacy-client").then(({ PrivacyClient }) => ({
-    default: PrivacyClient,
-  })),
-);
-const TvClient = lazy(() =>
-  import("../app/tv/tv-client").then(({ TvClient }) => ({ default: TvClient })),
-);
+import { SendPage, ScanPage, HistoryPage, PrivacyPage, TvPage } from "../app/route-pages";
+const SendClient = SendPage.View;
+const ScannerClient = ScanPage.View;
+const HistoryClient = HistoryPage.View;
+const PrivacyClient = PrivacyPage.View;
+const TvClient = TvPage.View;
 
 function RouteContent() {
   const path = usePathname();

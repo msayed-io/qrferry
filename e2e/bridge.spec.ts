@@ -74,6 +74,17 @@ test("bridge: laptop shows a QR and the phone pairs by scanning it, then both wa
   await laptop.getByLabel("اكتب رسالة").fill("أهلاً من الكمبيوتر");
   await laptop.getByRole("button", { name: "إرسال", exact: true }).click();
   await expect(phone.locator(".bridge-bubble.pc")).toContainText("أهلاً من الكمبيوتر");
+  // UI selection suppression must not prevent selecting real received messages.
+  const receivedText = phone.locator('.bridge-bubble.pc p').first();
+  await expect(receivedText).toHaveCSS('user-select', 'text');
+  await receivedText.scrollIntoViewIfNeeded();
+  const textPoint = await receivedText.evaluate(el => {
+    const range = document.createRange(); range.selectNodeContents(el);
+    const rect = range.getBoundingClientRect();
+    return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+  });
+  await phone.mouse.dblclick(textPoint.x, textPoint.y);
+  expect((await phone.evaluate(() => getSelection()?.toString().trim()))?.length).toBeGreaterThan(0);
 
   // ملف من الهاتف إلى الكمبيوتر (أكثر من قطعة واحدة) والتحقق بايت بايت.
   const phoneFile = patternedBytes(300_000, 7);
