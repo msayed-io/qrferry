@@ -9,6 +9,12 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(QRFerryDevicePlugin.class);
         super.onCreate(state);
         SystemChrome.install(this);
+        if(getBridge()!=null){
+            android.webkit.WebView view=getBridge().getWebView();
+            view.setVerticalScrollBarEnabled(false);
+            view.setHorizontalScrollBarEnabled(false);
+            view.setOverScrollMode(android.view.View.OVER_SCROLL_NEVER);
+        }
     }
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);

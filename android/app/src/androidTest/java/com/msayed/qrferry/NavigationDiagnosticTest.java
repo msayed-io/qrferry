@@ -39,7 +39,7 @@ public class NavigationDiagnosticTest {
   }throw new AssertionError("Navigation did not become ready");
  }
  private static void event(long start,int action,float x,float y){
-  MotionEvent event=MotionEvent.obtain(start,SystemClock.uptimeMillis(),action,x,y,0);event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);InstrumentationRegistry.getInstrumentation().sendPointerSync(event);event.recycle();
+  MotionEvent event=MotionEvent.obtain(start,SystemClock.uptimeMillis(),action,x,y,0);event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);assertTrue("Input injection failed",InstrumentationRegistry.getInstrumentation().getUiAutomation().injectInputEvent(event,false));event.recycle();
  }
  @Test public void compareNativeInputWithUnmodifiedUpstream()throws Exception{
   File dir=new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null),"nav-diagnostic");dir.mkdirs();
@@ -51,7 +51,7 @@ public class NavigationDiagnosticTest {
     evaluate(view,sink,"document.documentElement.dataset.theme='"+(variant.endsWith("dark")?"dark":"light")+"';return true;");
     Thread.sleep(500);
     String setup="window.navTrace={ua:navigator.userAgent,dpr:devicePixelRatio,width:innerWidth,events:[],frames:[]};window.navLive=true;"
-     +"for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture'])document.addEventListener(type,e=>navTrace.events.push({type,t:performance.now(),x:e.clientX,y:e.clientY,id:e.pointerId,primary:e.isPrimary,button:e.button,buttons:e.buttons,pointerType:e.pointerType,target:String(e.target.className)}),true);"
+     +"for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture'])document.addEventListener(type,e=>navTrace.events.push({type,t:performance.now(),eventTime:e.timeStamp,x:e.clientX,y:e.clientY,id:e.pointerId,primary:e.isPrimary,button:e.button,buttons:e.buttons,pointerType:e.pointerType,target:String(e.target.className)}),true);"
      +"function frame(t){const bar=document.querySelector('.lg-tab-bar'),lens=bar.querySelector('.lg-tab-lens'),r=lens.getBoundingClientRect();navTrace.frames.push({t,x:r.x,y:r.y,w:r.width,h:r.height,transform:lens.style.transform,lift:lens.style.getPropertyValue('--lg-lift'),path:location.pathname,scroll:scrollY});if(navLive)requestAnimationFrame(frame)}requestAnimationFrame(frame);"
      +"const tabs=document.querySelectorAll('.lg-tab-bar>.lg-tab-labels:not(.lg-tab-lensed)>.lg-tab');return {width:innerWidth,from:tabs[tabs.length-1].getBoundingClientRect().toJSON(),to:tabs[0].getBoundingClientRect().toJSON()};";
     JSONObject geometry=new JSONObject(evaluate(view,sink,setup));JSONObject from=geometry.getJSONObject("from"),to=geometry.getJSONObject("to");
@@ -60,8 +60,8 @@ public class NavigationDiagnosticTest {
     float end=screen[0]+(float)(to.getDouble("x")+to.getDouble("width")/2)*scale;
     long start=SystemClock.uptimeMillis();event(start,MotionEvent.ACTION_DOWN,x,y);Thread.sleep(350);
     for(int i=1;i<=24;i++){event(start,MotionEvent.ACTION_MOVE,x+(end-x)*i/24,y);Thread.sleep(30);}
-    Thread.sleep(200);for(int i=1;i<=24;i++){event(start,MotionEvent.ACTION_MOVE,end+(x-end)*i/24,y);Thread.sleep(30);}
-    Thread.sleep(200);event(start,MotionEvent.ACTION_UP,x,y);Thread.sleep(400);
+    Thread.sleep(350);for(int i=1;i<=24;i++){event(start,MotionEvent.ACTION_MOVE,end+(x-end)*i/24,y);Thread.sleep(30);}
+    Thread.sleep(350);event(start,MotionEvent.ACTION_UP,x,y);Thread.sleep(1000);
     String result=evaluate(view,sink,"window.navLive=false;return window.navTrace;");
     try(FileOutputStream output=new FileOutputStream(new File(dir,variant+".json"))){output.write(result.getBytes(StandardCharsets.UTF_8));}
     android.graphics.Bitmap shot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();try(FileOutputStream output=new FileOutputStream(new File(dir,variant+".png"))){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}shot.recycle();

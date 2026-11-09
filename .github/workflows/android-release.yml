@@ -8,6 +8,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   trace:
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [31, 35]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -25,12 +29,13 @@ jobs:
         run: |
           npm run build
           npx cap sync android
+          node --import tsx scripts/make-native-fixture.ts
           npm pack glisse@0.5.0 --ignore-scripts --pack-destination "$RUNNER_TEMP"
           mkdir -p node_modules/.glisse-original
           tar -xzf "$RUNNER_TEMP/glisse-0.5.0.tgz" -C node_modules/.glisse-original --strip-components=1
           node diagnostics/build-reference.mjs
           chmod +x android/gradlew
-          android/gradlew --no-daemon -p android :app:assembleDebug :app:assembleDebugAndroidTest
+          android/gradlew --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -39,14 +44,14 @@ jobs:
       - name: Android 12 native touch trace
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 31
+          api-level: ${{ matrix.api }}
           arch: x86_64
           target: google_apis
           disable-animations: false
-          script: bash diagnostics/run.sh
+          script: bash diagnostics/run.sh ${{ matrix.api }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-navigation-trace
+          name: android-navigation-trace-api${{ matrix.api }}
           path: android/app/build/reports/
           retention-days: 14

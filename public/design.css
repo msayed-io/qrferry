@@ -166,3 +166,13 @@ body[data-v=chat] #composer{display:flex}
 @media (prefers-reduced-transparency:reduce){.glass:not(.tinted){-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--solid)}:root{--rim:.5}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
+
+/* Application chrome: hide indicators, not scrolling. No touch/wheel listeners.
+   Native WebView indicators/edge effects are disabled separately in Android. */
+html,body,*{scrollbar-width:none;overscroll-behavior:none}
+*::-webkit-scrollbar{display:none;width:0;height:0}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* Editing and user-authored message content are not application chrome. */
+input,textarea,[contenteditable]:not([contenteditable="false"]),.bridge-bubble p,.bridge-link-row code,.fast-url{
+  -webkit-user-select:text;user-select:text;-webkit-touch-callout:default
+}
