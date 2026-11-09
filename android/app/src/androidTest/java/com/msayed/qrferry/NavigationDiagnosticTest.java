@@ -43,15 +43,20 @@ public class NavigationDiagnosticTest {
  }
  @Test public void compareNativeInputWithUnmodifiedUpstream()throws Exception{
   File dir=new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null),"nav-diagnostic");dir.mkdirs();
-  for(String variant:new String[]{"product-light","reference-light","product-dark","reference-dark"}){
+  for(String variant:new String[]{"product-light","reference-light","product-dark","reference-dark","product-light-warm","product-light-no-paint","reference-light-no-paint"}){
    try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
     Sink sink=new Sink();AtomicReference<WebView> ref=new AtomicReference<>();
     scenario.onActivity(a->{WebView v=a.getBridge().getWebView();v.addJavascriptInterface(sink,"NavSink");v.loadUrl(variant.startsWith("reference")?"https://localhost/reference/index.html":"https://localhost/");ref.set(v);});
     WebView view=ref.get();ready(view);
-    evaluate(view,sink,"document.documentElement.dataset.theme='"+(variant.endsWith("dark")?"dark":"light")+"';return true;");
+    evaluate(view,sink,"document.documentElement.dataset.theme='"+(variant.contains("dark")?"dark":"light")+"';return true;");
     Thread.sleep(500);
-    String setup="window.navTrace={ua:navigator.userAgent,dpr:devicePixelRatio,width:innerWidth,events:[],frames:[]};window.navLive=true;"
+    if(variant.endsWith("no-paint"))evaluate(view,sink,"const style=document.createElement('style');style.textContent='.lg-tab-labels{filter:none!important}.lg-glass{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background-image:none!important}';document.head.append(style);return true;");
+    if(variant.endsWith("warm")){
+     evaluate(view,sink,"const bar=document.querySelector('.lg-tab-bar'),tab=bar.querySelector('.lg-tab'),r=tab.getBoundingClientRect();tab.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,isPrimary:true,button:0,pointerId:999,clientX:r.x+r.width/2,clientY:r.y+r.height/2}));await new Promise(r=>setTimeout(r,1000));window.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,isPrimary:true,pointerId:999}));return true;");Thread.sleep(500);
+    }
+    String setup="window.navTrace={ua:navigator.userAgent,dpr:devicePixelRatio,width:innerWidth,events:[],frames:[],longTasks:[],handlers:[]};window.navLive=true;new PerformanceObserver(list=>navTrace.longTasks.push(...list.getEntries().map(e=>({t:e.startTime,duration:e.duration})))).observe({entryTypes:['longtask']});"
      +"for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture'])document.addEventListener(type,e=>navTrace.events.push({type,t:performance.now(),eventTime:e.timeStamp,x:e.clientX,y:e.clientY,id:e.pointerId,primary:e.isPrimary,button:e.button,buttons:e.buttons,pointerType:e.pointerType,target:String(e.target.className)}),true);"
+     +"for(const type of ['pointerdown','pointermove','pointerup'])window.addEventListener(type,e=>navTrace.handlers.push({type,t:performance.now()}));"
      +"function frame(t){const bar=document.querySelector('.lg-tab-bar'),lens=bar.querySelector('.lg-tab-lens'),r=lens.getBoundingClientRect();navTrace.frames.push({t,x:r.x,y:r.y,w:r.width,h:r.height,transform:lens.style.transform,lift:lens.style.getPropertyValue('--lg-lift'),path:location.pathname,scroll:scrollY});if(navLive)requestAnimationFrame(frame)}requestAnimationFrame(frame);"
      +"const tabs=document.querySelectorAll('.lg-tab-bar>.lg-tab-labels:not(.lg-tab-lensed)>.lg-tab');return {width:innerWidth,from:tabs[tabs.length-1].getBoundingClientRect().toJSON(),to:tabs[0].getBoundingClientRect().toJSON()};";
     JSONObject geometry=new JSONObject(evaluate(view,sink,setup));JSONObject from=geometry.getJSONObject("from"),to=geometry.getJSONObject("to");
