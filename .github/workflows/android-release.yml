@@ -27,6 +27,14 @@ jobs:
       - run: npm ci
       - name: Build production and original-library reference in debug assets only
         run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const path='node_modules/glisse/dist/index.js';let source=fs.readFileSync(path,'utf8');
+          const before='surface.graph.filter.id = `${surface.name}-${++surface.version}`;';
+          if(source.split(before).length!==2)throw Error('Diagnostic patch mismatch');
+          source=source.replace(before,'surface.graph.filter.id = document.documentElement.dataset.diagnosticStableFilter ? surface.name : `${surface.name}-${++surface.version}`;');
+          fs.writeFileSync(path,source);
+          JS
           npm run build
           npx cap sync android
           node --import tsx scripts/make-native-fixture.ts

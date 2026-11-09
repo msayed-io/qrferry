@@ -43,7 +43,7 @@ public class NavigationDiagnosticTest {
  }
  @Test public void compareNativeInputWithUnmodifiedUpstream()throws Exception{
   File dir=new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null),"nav-diagnostic");dir.mkdirs();
-  for(String variant:new String[]{"product-light","reference-light","product-dark","reference-dark","product-light-warm","product-light-no-paint","reference-light-no-paint"}){
+  for(String variant:new String[]{"product-light","reference-light","product-dark","reference-dark","product-light-warm","product-light-no-paint","reference-light-no-paint","product-light-no-foreground","product-light-no-backdrop","product-light-no-rim","product-light-uncontained","product-light-stable-id"}){
    try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
     Sink sink=new Sink();AtomicReference<WebView> ref=new AtomicReference<>();
     scenario.onActivity(a->{WebView v=a.getBridge().getWebView();v.addJavascriptInterface(sink,"NavSink");v.loadUrl(variant.startsWith("reference")?"https://localhost/reference/index.html":"https://localhost/");ref.set(v);});
@@ -51,6 +51,9 @@ public class NavigationDiagnosticTest {
     evaluate(view,sink,"document.documentElement.dataset.theme='"+(variant.contains("dark")?"dark":"light")+"';return true;");
     Thread.sleep(500);
     if(variant.endsWith("no-paint"))evaluate(view,sink,"const style=document.createElement('style');style.textContent='.lg-tab-labels{filter:none!important}.lg-glass{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background-image:none!important}';document.head.append(style);return true;");
+    if(variant.endsWith("stable-id"))evaluate(view,sink,"document.documentElement.dataset.diagnosticStableFilter='1';return true;");
+    String css=variant.endsWith("no-foreground")?".lg-tab-labels{filter:none!important}":variant.endsWith("no-backdrop")?".lg-glass{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}":variant.endsWith("no-rim")?".lg-glass{background-image:none!important}":variant.endsWith("uncontained")?".qf-tab-bar{contain:none;isolation:auto}":"";
+    if(!css.isEmpty())evaluate(view,sink,"const style=document.createElement('style');style.textContent="+JSONObject.quote(css)+";document.head.append(style);return true;");
     if(variant.endsWith("warm")){
      evaluate(view,sink,"const bar=document.querySelector('.lg-tab-bar'),tab=bar.querySelector('.lg-tab'),r=tab.getBoundingClientRect();tab.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,isPrimary:true,button:0,pointerId:999,clientX:r.x+r.width/2,clientY:r.y+r.height/2}));await new Promise(r=>setTimeout(r,1000));window.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,isPrimary:true,pointerId:999}));return true;");Thread.sleep(500);
     }
@@ -67,7 +70,7 @@ public class NavigationDiagnosticTest {
     for(int i=1;i<=24;i++){event(start,MotionEvent.ACTION_MOVE,x+(end-x)*i/24,y);Thread.sleep(30);}
     Thread.sleep(350);for(int i=1;i<=24;i++){event(start,MotionEvent.ACTION_MOVE,end+(x-end)*i/24,y);Thread.sleep(30);}
     Thread.sleep(350);event(start,MotionEvent.ACTION_UP,x,y);Thread.sleep(1000);
-    String result=evaluate(view,sink,"window.navLive=false;return window.navTrace;");
+    String result=evaluate(view,sink,"const end=Date.now()+8000;while(!navTrace.events.some(e=>e.type==='pointerup')){if(Date.now()>end)throw Error('Input did not finish');await new Promise(r=>setTimeout(r,50));}window.navLive=false;return window.navTrace;");
     try(FileOutputStream output=new FileOutputStream(new File(dir,variant+".json"))){output.write(result.getBytes(StandardCharsets.UTF_8));}
     android.graphics.Bitmap shot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();try(FileOutputStream output=new FileOutputStream(new File(dir,variant+".png"))){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}shot.recycle();
    }
