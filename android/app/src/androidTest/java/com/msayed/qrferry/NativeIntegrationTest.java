@@ -139,10 +139,18 @@ public class NativeIntegrationTest {
                     assertFalse(window.isStatusBarContrastEnforced());
                 });
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-                android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
-                assertNotNull(screenshot);
-                assertEquals("Actual status strip pixels",android.graphics.Color.parseColor(dark?"#121014":"#F7F4F6"),screenshot.getPixel(screenshot.getWidth()/2,top.get()/2));
-                screenshot.recycle();
+                // Native/JS configuration callbacks precede SurfaceFlinger presentation.
+                // Await the actual rendered color, not just an idle instrumentation queue.
+                int expected=android.graphics.Color.parseColor(dark?"#121014":"#F7F4F6"),actual=0,samples=0;
+                long pixelDeadline=System.currentTimeMillis()+3000;
+                do {
+                    android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+                    assertNotNull(screenshot);samples++;
+                    actual=screenshot.getPixel(screenshot.getWidth()/2,top.get()/2);screenshot.recycle();
+                    if(actual==expected)break;
+                    Thread.sleep(50);
+                } while(System.currentTimeMillis()<pixelDeadline);
+                assertEquals("Actual status strip pixels after presentation (samples="+samples+")",expected,actual);
                 assertEquals("14",evaluate(view,sink,"return parseFloat(getComputedStyle(document.body).paddingTop);"));
             }
         }finally{night(previous==UiModeManager.MODE_NIGHT_YES?"yes":previous==UiModeManager.MODE_NIGHT_NO?"no":"auto");}
