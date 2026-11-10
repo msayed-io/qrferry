@@ -25,23 +25,11 @@ jobs:
           node-version: '22.13.0'
           cache: npm
       - run: npm ci
-      - name: Build production and original-library reference in debug assets only
+      - name: Build production assets without diagnostics
         run: |
-          node --input-type=module <<'JS'
-          import fs from 'node:fs';
-          const path='node_modules/glisse/dist/index.js';let source=fs.readFileSync(path,'utf8');
-          const before='surface.graph.filter.id = `${surface.name}-${++surface.version}`;';
-          if(source.split(before).length!==2)throw Error('Diagnostic patch mismatch');
-          source=source.replace(before,'surface.graph.filter.id = document.documentElement.dataset.diagnosticStableFilter ? surface.name : `${surface.name}-${++surface.version}`;');
-          fs.writeFileSync(path,source);
-          JS
           npm run build
           npx cap sync android
           node --import tsx scripts/make-native-fixture.ts
-          npm pack glisse@0.5.0 --ignore-scripts --pack-destination "$RUNNER_TEMP"
-          mkdir -p node_modules/.glisse-original
-          tar -xzf "$RUNNER_TEMP/glisse-0.5.0.tgz" -C node_modules/.glisse-original --strip-components=1
-          node diagnostics/build-reference.mjs
           chmod +x android/gradlew
           android/gradlew --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Glass } from "glisse";
-import { X } from "lucide-react";
+import { BackChevron } from "./progressive-blur";
 import { useRouter } from "./router";
 import type { ReactNode } from "react";
 import { useI18n } from "./lang-provider";
@@ -27,7 +27,7 @@ export function SupportShell({ active, title, description, children }: {
     <header className="support-toolbar">
       <Button
         className="support-exit"
-        icon={<X aria-hidden />}
+        icon={<BackChevron />}
         aria-label={lang === "ar" ? "الرجوع إلى التطبيق" : "Back to app"}
         onClick={() => router.push(returnPath)}
       />

@@ -5,10 +5,10 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 classes='com.msayed.qrferry.NavigationDiagnosticTest,com.msayed.qrferry.ChromePolicyTest'
 count=2
-if [ "${1:-31}" -ge 33 ]; then classes="com.msayed.qrferry.NativeIntegrationTest,$classes"; count=7; fi
+if [ "${1:-31}" -ge 33 ]; then classes="com.msayed.qrferry.NativeIntegrationTest,$classes"; count=9; fi
 if [ "${2:-}" = functional ]; then
-  classes='com.msayed.qrferry.ChromePolicyTest,com.msayed.qrferry.SpecularRimTest'; count=2
-  if [ "${1:-31}" -ge 33 ]; then classes="com.msayed.qrferry.NativeIntegrationTest,$classes"; count=7; fi
+  classes='com.msayed.qrferry.ChromePolicyTest,com.msayed.qrferry.SpecularRimTest,com.msayed.qrferry.FloatingChromeTest'; count=4
+  if [ "${1:-31}" -ge 33 ]; then classes="com.msayed.qrferry.NativeIntegrationTest,$classes"; count=9; fi
 fi
 # Run directly so Gradle's post-test uninstall cannot erase the captured traces.
 adb shell am instrument -w -r -e class "$classes" com.msayed.qrferry.test/androidx.test.runner.AndroidJUnitRunner | tee android/app/build/reports/nav-trace/instrumentation.txt

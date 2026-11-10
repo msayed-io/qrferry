@@ -6,6 +6,7 @@ import "../app/workspace.css";
 import "../app/support.css";
 import "../app/bridge/bridge.css";
 import "../app/liquid-controls.css";
+import "../app/floating-chrome.css";
 import { AppShell } from "../app/app-shell";
 import { LangProvider, useI18n } from "../app/lang-provider";
 import { PwaRegister } from "../app/pwa-register";

@@ -64,6 +64,14 @@ test("bridge: laptop shows a QR and the phone pairs by scanning it, then both wa
 
   await expectConnected(laptop);
   await expectConnected(phone);
+  for (const peer of [phone, laptop]) {
+    await expect(peer.locator('.app-header,.bottom-nav')).toHaveCount(0);
+    await expect(peer.locator('.chatbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+    await expect(peer.locator('.chat-peer')).toBeVisible();
+    await expect(peer.locator('.progressive-blur-bottom')).toHaveCount(1);
+    const box=await peer.locator('.bridge-composer').boundingBox();
+    expect(box!.y+box!.height).toBeGreaterThan((peer.viewportSize()?.height??720)-30);
+  }
 
   // الشات في الاتجاهين.
   await phone.getByLabel("اكتب رسالة").fill("مرحباً من الهاتف");
@@ -74,6 +82,23 @@ test("bridge: laptop shows a QR and the phone pairs by scanning it, then both wa
   await laptop.getByLabel("اكتب رسالة").fill("أهلاً من الكمبيوتر");
   await laptop.getByRole("button", { name: "إرسال", exact: true }).click();
   await expect(phone.locator(".bridge-bubble.pc")).toContainText("أهلاً من الكمبيوتر");
+  // Returning to Pair keeps the authenticated session and restores global chrome.
+  await phone.getByRole('button',{name:'الرجوع إلى الربط',exact:true}).click();
+  await expect(phone.locator('.bottom-nav')).toBeVisible();
+  await expect(phone.locator('.bridge-composer,.progressive-blur-bottom')).toHaveCount(0);
+  await phone.locator('#nav-chat').click();await expectConnected(phone);
+  await expect(phone.locator('.bottom-nav')).toHaveCount(0);
+  // UI selection suppression must not prevent selecting real received messages.
+  const receivedText = phone.locator('.bridge-bubble.pc p').first();
+  await expect(receivedText).toHaveCSS('user-select', 'text');
+  await receivedText.scrollIntoViewIfNeeded();
+  const textPoint = await receivedText.evaluate(el => {
+    const range = document.createRange(); range.selectNodeContents(el);
+    const rect = range.getBoundingClientRect();
+    return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+  });
+  await phone.mouse.dblclick(textPoint.x, textPoint.y);
+  expect((await phone.evaluate(() => getSelection()?.toString().trim()))?.length).toBeGreaterThan(0);
 
   // ملف من الهاتف إلى الكمبيوتر (أكثر من قطعة واحدة) والتحقق بايت بايت.
   const phoneFile = patternedBytes(300_000, 7);
