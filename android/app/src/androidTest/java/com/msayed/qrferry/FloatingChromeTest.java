@@ -22,7 +22,7 @@ public class FloatingChromeTest {
  private static void waitFor(WebView v,String condition) throws Exception {
   long end=System.currentTimeMillis()+45000;
   while(System.currentTimeMillis()<end){if("true".equals(evaluate(v,condition)))return;Thread.sleep(100);}
-  fail("WebView condition timed out: "+condition);
+  fail("WebView condition timed out: "+condition+"; state="+evaluate(v,"JSON.stringify({path:location.pathname,selected:document.querySelector('#nav-scan')?.getAttribute('aria-selected'),ready:!!document.querySelector('.qf-tab-bar[data-ready]'),max:window.tapMax})"));
  }
  @Test public void measuredSegmentsWorkWithoutContainerUnitsAndHeadersStayFixed() throws Exception {
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
@@ -46,7 +46,10 @@ public class FloatingChromeTest {
    AtomicReference<WebView> ref=new AtomicReference<>();scenario.onActivity(a->ref.set(a.getBridge().getWebView()));WebView v=ref.get();
    waitFor(v,"!!document.querySelector('.qf-tab-bar[data-ready] #nav-scan')");
    evaluate(v,"(()=>{const tab=document.querySelector('#nav-scan'),r=tab.getBoundingClientRect(),opts={bubbles:true,isPrimary:true,pointerId:41,pointerType:'touch',button:0,clientX:r.x+r.width/2,clientY:r.y+r.height/2};window.tapMax=0;window.tapDone=false;const stop=performance.now()+1200;function sample(t){window.tapMax=Math.max(window.tapMax,Number(document.querySelector('.qf-tab-bar .lg-tab-lens').style.getPropertyValue('--lg-lift')));if(t<stop)requestAnimationFrame(sample);else window.tapDone=true;}requestAnimationFrame(sample);tab.dispatchEvent(new PointerEvent('pointerdown',opts));setTimeout(()=>tab.dispatchEvent(new PointerEvent('pointerup',opts)),60);return true;})()");
-   waitFor(v,"window.tapDone === true");assertEquals("0",evaluate(v,"window.tapMax"));assertEquals("true",evaluate(v,"location.pathname==='/scan' && document.querySelector('#nav-scan').getAttribute('aria-selected')==='true'"));
+   waitFor(v,"window.tapDone === true");assertEquals("0",evaluate(v,"window.tapMax"));
+   // Sampling duration is not a deadline for a cold module to load. The source
+   // intentionally stays mounted until the destination commits on slow WebViews.
+   waitFor(v,"location.pathname==='/scan' && document.querySelector('#nav-scan').getAttribute('aria-selected')==='true'");
   }
  }
 }
