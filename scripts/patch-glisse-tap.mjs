@@ -43,7 +43,7 @@ const additions=`${marker}
 const changes=[
  ['\tconst move = (target, lifted, instant = false) => {','\tconst move = (target, lifted, instant = false) => {'],
  ['\t\tx.tune(slideStiffness, slideDamping);','\t\tx.tune(tapSettle && !gesture ? 420 : slideStiffness, tapSettle && !gesture ? 41 : slideDamping);'],
- ['\tconst reset = () => {',additions+'\n\tconst reset = () => {\n  clearTap(); tapSettle = false;'],
+ ['\tconst reset = () => {',additions+'\n\tconst reset = () => {\n  if (clearTap()) suppressClick = true; tapSettle = false;'],
  ...['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture'].flatMap(type=>{
   const owner=['pointerdown','lostpointercapture'].includes(type)?'bar':'window';
   const old=type==='pointerdown'?'onPointerDown':type==='pointermove'?'onPointerMove':'onPointerEnd';

@@ -19,7 +19,7 @@ for(const lang of ['ar-EG','en-US']) test(`measured content slots and fixed tran
   expect(title!.x).toBeLessThan(exit!.x);expect(title!.height).toBe(40);expect(exit!.width).toBe(40);expect(exit!.height).toBe(40);
   await page.evaluate(()=>scrollTo(0,180));expect((await page.locator('.support-exit').boundingBox())!.y).toBe(exit!.y);
   await expect(page.locator('.support-toolbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
-  await expect(page.locator('.progressive-blur-top i')).toHaveCount(5);await expect(page.locator('.progressive-blur-bottom')).toHaveCount(0);
+  await expect(page.locator('.progressive-blur-top i')).toHaveCount(2);await expect(page.locator('.progressive-blur-bottom')).toHaveCount(0);
  }
  await context.close();
 });
@@ -27,7 +27,7 @@ for(const lang of ['ar-EG','en-US']) test(`measured content slots and fixed tran
 test('top blur uses distinct masked radii, fades without a plate, and respects reduced transparency',async({page,context})=>{
  await page.goto('/privacy');await expect(page.locator('.support-title')).toBeVisible();
  const values=await page.locator('.progressive-blur i').evaluateAll(es=>es.map(e=>{const s=getComputedStyle(e);return {filter:s.backdropFilter,mask:s.maskImage,pointer:s.pointerEvents}}));
- expect(new Set(values.map(v=>v.filter)).size).toBe(5);expect(values.every(v=>v.filter.includes('blur(')&&v.mask.includes('gradient')&&v.pointer==='none')).toBe(true);
+ expect(new Set(values.map(v=>v.filter)).size).toBe(2);expect(values.every(v=>v.filter.includes('blur(')&&v.mask.includes('gradient')&&v.pointer==='none')).toBe(true);
  const session=await context.newCDPSession(page);await session.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-transparency',value:'reduce'}]});await expect(page.locator('.progressive-blur i').first()).toHaveCSS('display','none');
  await expect(page.locator('.support-title')).toHaveCSS('backdrop-filter','none');
 });

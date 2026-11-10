@@ -1,8 +1,8 @@
-/** Five masked blur radii approximate a continuous radius field. No opaque
+/** Two masked blur radii plus the sharp scene approximate a continuous radius field. No opaque
  * toolbar plate, scene duplication, event interception, or animated filter. */
 export function ProgressiveBlur({ edge = "top" }: { edge?: "top" | "bottom" }) {
   return <div className={`progressive-blur progressive-blur-${edge}`} aria-hidden="true">
-    {[2, 4, 8, 16, 24].map(radius => <i key={radius} />)}
+    {[6, 22].map(radius => <i key={radius} />)}
   </div>;
 }
 

@@ -1,6 +1,6 @@
 /* Shared viewport geometry: no transformed ancestor, no toolbar plate. */
 :root { --qf-toolbar-size: 40px; --qf-top: max(14px, env(safe-area-inset-top)); }
-.app-wrap { padding-top: 52px; }
+.app-wrap { padding-top: 88px; }
 .app-header,.support-toolbar,.chatbar {
   position: fixed; top: var(--qf-top); left: 50%; transform: translateX(-50%);
   width: calc(100% - 32px); max-width: 560px; height: var(--qf-toolbar-size);
@@ -27,7 +27,7 @@
  * blends continuously into the document; each mask has a different radius. */
 .progressive-blur {
   position: fixed; inset-inline: 0; top: 0;
-  height: calc(var(--qf-top) + 104px); z-index: 18; pointer-events: none;
+  height: calc(var(--qf-top) + 88px); z-index: 18; pointer-events: none;
   --qf-fade: to bottom;
   background: linear-gradient(var(--qf-fade), var(--bg), transparent);
 }
@@ -40,16 +40,16 @@
   @supports ((mask-image: linear-gradient(black, transparent)) or (-webkit-mask-image: linear-gradient(black, transparent))) {
     .progressive-blur { background: none; }
     .progressive-blur i {
-      display: block; --qf-blur: 2px; --qf-from: 70%; --qf-to: 100%;
+      display: block; --qf-blur: 6px; --qf-from: 25%; --qf-to: 100%;
       -webkit-backdrop-filter: blur(var(--qf-blur)) saturate(1.15);
       backdrop-filter: blur(var(--qf-blur)) saturate(1.15);
       -webkit-mask-image: linear-gradient(var(--qf-fade), black 0%, black var(--qf-from), transparent var(--qf-to));
       mask-image: linear-gradient(var(--qf-fade), black 0%, black var(--qf-from), transparent var(--qf-to));
     }
-    .progressive-blur i:nth-child(2) { --qf-blur: 4px; --qf-from: 52%; --qf-to: 86%; }
-    .progressive-blur i:nth-child(3) { --qf-blur: 8px; --qf-from: 34%; --qf-to: 70%; }
-    .progressive-blur i:nth-child(4) { --qf-blur: 16px; --qf-from: 16%; --qf-to: 54%; }
-    .progressive-blur i:nth-child(5) { --qf-blur: 24px; --qf-from: 0%; --qf-to: 38%; }
+    /* Bound the strong pass to its nonzero mask region. Two passes avoid
+       recursive multi-backdrop cost measured with five on software WebKit. */
+    .progressive-blur i:nth-child(2) { height: 70%; bottom: auto; --qf-blur: 22px; --qf-from: 0%; --qf-to: 100%; }
+    .progressive-blur-bottom i:nth-child(2) { top: auto; bottom: 0; }
   }
 }
 @media (prefers-reduced-transparency: reduce) {
