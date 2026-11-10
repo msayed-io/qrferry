@@ -50,6 +50,20 @@ export function LiquidChoices({ kind, items, value, onValueChange, label, classN
     icon: item.icon,
   }));
 
+  // WebView 91 has no container-query units. One measured slot shared by
+  // all three native rows and the selection, not flex labels over a stale lens.
+  useLayoutEffect(() => {
+    if (kind !== "content" || !host.current) return;
+    const container = host.current;
+    const control = container.querySelector<HTMLElement>(".qf-segmented");
+    if (!control) return;
+    const update = () => control.style.setProperty("--lg-tab-width", `${container.clientWidth / physicalItems.length}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [kind, physicalItems.length]);
+
   // The public item API has no per-button id/aria-controls. Add only these
   // non-owned attributes; selection, pointer capture and motion remain Glisse's.
   useLayoutEffect(() => {
@@ -67,6 +81,7 @@ export function LiquidChoices({ kind, items, value, onValueChange, label, classN
       dir="ltr"
       className={kind === "navigation" ? "qf-tab-bar" : "qf-segmented"}
       aria-label={label}
+      data-qf-tap={kind === "navigation" ? "settle" : undefined}
       items={glisseItems}
       value={value}
       onValueChange={onValueChange}

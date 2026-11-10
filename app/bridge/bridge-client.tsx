@@ -11,7 +11,8 @@ import {
 } from "react";
 import { ScanWorkerClient } from "@/lib/scan-worker-client";
 import { isNativeDevice, saveNativeFile, applicationShareOrigin } from "@/lib/native-device";
-import { Glass } from "glisse";
+import { Glass, Button } from "glisse";
+import { ProgressiveBlur, BackChevron } from "../progressive-blur";
 import { usePathname } from "../router";
 import { DesignIcon } from "../design-icons";
 import { Capsule, Card, CircleButton, CameraCorners, useBridgeView } from "../design-system";
@@ -814,19 +815,25 @@ export function BridgeClient() {
       {phase === "home" && hasItems && <section className="card bridge-history"><div className="bridge-section-head"><h2>{tx("آخر الرسائل والملفات", "Latest messages and files")}</h2><Capsule onClick={() => setItems([])}>{tx("مسح السجل", "Clear log")}</Capsule></div>{timeline}</section>}
     </>}
     {chatVisible && <section className="bridge-session" aria-label={tx("جلسة الاتصال", "Session")}>
-      <Glass className="chatbar"><span className="av"><DesignIcon name="monitor" /></span><div><b>{role === "host" ? tx("الهاتف", "Phone") : tx("الكمبيوتر", "Computer")}</b><small className="bridge-status" role="status">{tx("متصل الآن", "Connected now")}</small></div><button className="x" type="button" onClick={disconnect} aria-label={tx("قطع الاتصال", "Disconnect")}><DesignIcon name="x" /></button></Glass>
+      <header className="chatbar">
+        <Glass className="chat-peer"><DesignIcon name="monitor" /><div><b>{role === "host" ? tx("الهاتف", "Phone") : tx("الكمبيوتر", "Computer")}</b><small className="bridge-status" role="status">{tx("متصل الآن", "Connected now")}</small></div></Glass>
+        <div className="chat-actions">
+          <Button icon={<DesignIcon name="x" />} onClick={disconnect} aria-label={tx("قطع الاتصال", "Disconnect")} />
+          <Button className="chat-exit" icon={<BackChevron />} onClick={() => setView("pair")} aria-label={tx("الرجوع إلى الربط", "Back to Pair")} />
+        </div>
+      </header>
       {notice && <p className="bridge-error" role="alert">{notice}</p>}
       <div className={`bridge-drop ${dragging ? "dragging" : ""}`} onDragOver={e => {e.preventDefault();setDragging(true);}} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
         <div className="sys"><DesignIcon name="ok" />{tx("تم الاتصال", "Connected")}</div>
         {timeline}
       </div>
       {/* Outside the animated page: fixed controls must stay anchored to the viewport. */}
-      {(["/pc", "/bridge"].includes(pathname)) && createPortal(<form className="bridge-composer" onSubmit={e => {e.preventDefault();sendChat();}}>
+      {(["/pc", "/bridge"].includes(pathname)) && createPortal(<><ProgressiveBlur edge="bottom" /><form className="bridge-composer" onSubmit={e => {e.preventDefault();sendChat();}}>
         <input ref={fileInputRef} type="file" multiple accept="image/*,audio/*,video/*,*/*" hidden onChange={onPickFiles} tabIndex={-1} />
         <CircleButton onClick={() => fileInputRef.current?.click()} aria-label={tx("إرفاق", "Attach file")}><DesignIcon name="plus" /></CircleButton>
         <Glass className="inp"><textarea rows={1} value={draft} maxLength={BRIDGE_MAX_CHAT_CHARS} onChange={e => onDraftChange(e.target.value)} onKeyDown={onComposerKey} placeholder={tx("رسالة", "Message")} aria-label={tx("اكتب رسالة", "Type a message")} /></Glass>
         <CircleButton type="submit" tinted disabled={!draft.trim()} aria-label={tx("إرسال", "Send")}><DesignIcon name="sendup" /></CircleButton>
-      </form>, document.body)}
+      </form></>, document.body)}
     </section>}
   </main>;
 }

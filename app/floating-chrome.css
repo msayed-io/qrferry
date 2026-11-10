@@ -1,0 +1,59 @@
+/* Shared viewport geometry: no transformed ancestor, no toolbar plate. */
+:root { --qf-toolbar-size: 40px; --qf-top: max(14px, env(safe-area-inset-top)); }
+.app-wrap { padding-top: 88px; }
+.app-header,.support-toolbar,.chatbar {
+  position: fixed; top: var(--qf-top); left: 50%; transform: translateX(-50%);
+  width: calc(100% - 32px); max-width: 560px; height: var(--qf-toolbar-size);
+  margin: 0; padding: 0; z-index: 20; background: none; box-shadow: none;
+  border: 0; border-radius: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.app-header > *, .support-toolbar > *, .chatbar > * { pointer-events: auto; }
+.app-header { height: 52px; }
+.support-toolbar { direction: ltr; }
+.support-title { order: 0; height: var(--qf-toolbar-size); min-height: 0; padding: 0 18px; }
+.support-title h1 { font-size: 17px; line-height: 1.2; }
+.support-exit.lg-button[data-icon="only"] { order: 1; width: var(--qf-toolbar-size); height: var(--qf-toolbar-size); border-radius: 999px; }
+.support-exit::before,.chat-exit::before { content: ""; position: absolute; inset: -2px; border-radius: inherit; }
+.chatbar:active { transform: translateX(-50%); }
+.chat-peer { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; min-width: 0; }
+.chat-peer > svg { width: 20px; height: 20px; color: var(--tint); }
+.chat-peer b { font-size: 14px; }
+.chat-peer small { font-size: 11px; }
+.chat-actions { display: flex; gap: 8px; }
+.chat-wrap .bridge-timeline { padding-bottom: 100px; }
+.bridge-composer { bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 20; }
+/* No blanket background on any header. This independent non-interactive edge
+ * blends continuously into the document; each mask has a different radius. */
+.progressive-blur {
+  position: fixed; inset-inline: 0; top: 0;
+  height: calc(var(--qf-top) + 88px); z-index: 18; pointer-events: none;
+  --qf-fade: to bottom;
+  background: linear-gradient(var(--qf-fade), var(--bg), transparent);
+}
+.progressive-blur-bottom {
+  top: auto; bottom: 0; height: calc(108px + env(safe-area-inset-bottom));
+  --qf-fade: to top;
+}
+.progressive-blur i { display: none; position: absolute; inset: 0; }
+@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  @supports ((mask-image: linear-gradient(black, transparent)) or (-webkit-mask-image: linear-gradient(black, transparent))) {
+    .progressive-blur { background: none; }
+    .progressive-blur i {
+      display: block; --qf-blur: 6px; --qf-from: 25%; --qf-to: 100%;
+      -webkit-backdrop-filter: blur(var(--qf-blur)) saturate(1.15);
+      backdrop-filter: blur(var(--qf-blur)) saturate(1.15);
+      -webkit-mask-image: linear-gradient(var(--qf-fade), black 0%, black var(--qf-from), transparent var(--qf-to));
+      mask-image: linear-gradient(var(--qf-fade), black 0%, black var(--qf-from), transparent var(--qf-to));
+    }
+    /* Bound the strong pass to its nonzero mask region. Two passes avoid
+       recursive multi-backdrop cost measured with five on software WebKit. */
+    .progressive-blur i:nth-child(2) { height: 70%; bottom: auto; --qf-blur: 22px; --qf-from: 0%; --qf-to: 100%; }
+    .progressive-blur-bottom i:nth-child(2) { top: auto; bottom: 0; }
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .progressive-blur { background: linear-gradient(var(--qf-fade), var(--bg) 25%, transparent); }
+  .progressive-blur i { display: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (min-width: 900px) { .app-header,.support-toolbar,.chatbar { max-width: 1040px; } }

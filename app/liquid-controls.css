@@ -23,8 +23,8 @@
 .qf-segmented > .lg-tab-labels:not(.lg-tab-lensed) { width: 100%; }
 .qf-segmented .lg-tab, .qf-segmented .lg-tab-copy { font-size: 15px; font-weight: 600; }
 /* Container-relative slots, including the three aligned rows used by the lens. */
-.qf-content-choices { container-type: inline-size; margin-bottom: 14px; }
-.qf-content-choices .qf-segmented { --lg-tab-width: calc(100cqw / var(--lg-tabs)); }
+.qf-content-choices { margin-bottom: 14px; }
+/* --lg-tab-width is measured in px for Android WebViews without cqw. */
 .lg-button.qf-liquid-button { font-family: var(--font); font-size: 16px; font-weight: 600; }
 .lg-button.qf-capsule { height: 48px; border-radius: 999px; padding: 0 22px; }
 .lg-button.qf-large { height: 54px; font-size: 17px; }

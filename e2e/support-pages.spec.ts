@@ -36,7 +36,9 @@ for (const route of routes)
         exact: true,
       });
       const box = await home.boundingBox();
-      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBe(40);
+      await expect(home).toHaveCSS("position", "relative");
+      expect(await home.evaluate(el => getComputedStyle(el, "::before").inset)).toBe("-2px");
       expect(box!.y + box!.height).toBeLessThan(height);
       await home.click();
       await expect(page).toHaveURL(/\/$/);

@@ -72,3 +72,5 @@ for (const name of ['dist/index.js', 'dist/index.cjs']) {
 }
 for (const [name, source] of results) await writeFile(new URL(name, root), source);
 console.log('Glisse 0.5.0: same-frame segment paint batching; unused backdrop opt-out; single physical rim owner.');
+
+await import("./patch-glisse-tap.mjs");
