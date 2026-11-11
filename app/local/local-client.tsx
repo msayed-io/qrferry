@@ -56,7 +56,7 @@ function errorCode(e: unknown) { return e instanceof Error ? e.message : 'LOCAL_
 function size(value: number) { if (value < 0) return '—'; const units = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (value >= 1024 && i < 4) { value /= 1024; i++; } return `${value.toLocaleString(undefined, { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`; }
 function bounds(el: HTMLElement): NativeBounds { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, viewport: innerWidth }; }
 
-/** Per app run: the first Send visit drops a leftover selection. */
+/** Per app run: a leftover native selection is dropped once, at boot. */
 let selectionReset = false;
 
 /** Bottom inset driven by the real visual viewport, so a fixed composer never
@@ -112,7 +112,17 @@ export function LocalClient() {
     if (!native) return;
     let dead = false;
     const listener = NativeLocal.addListener('state', s => { if (!dead) apply(s); });
-    void NativeLocal.getState().then(s => { if (!dead) apply(s); }).catch(e => setError(errorCode(e)));
+    void NativeLocal.getState().then(async s => {
+      if (dead) return;
+      // A selection left over from an earlier run must not look pre-chosen, so it
+      // is dropped once at boot — never while the user is working on this screen.
+      if (!selectionReset && s.selected.length && !s.started) {
+        selectionReset = true;
+        try { const cleared = await NativeLocal.clearSelection(); if (!dead) s = cleared; } catch { /* keep the snapshot */ }
+        if (dead) return;
+      }
+      apply(s);
+    }).catch(e => setError(errorCode(e)));
     return () => { dead = true; void listener.then(l => l.remove()); void NativeLocal.hideNativeView(); };
   }, [native, apply]);
   useEffect(() => {
@@ -142,15 +152,10 @@ export function LocalClient() {
     }).catch(e => { if (!dead) setError(errorCode(e)); });
     return () => { dead = true; };
   }, [category, current, native]);
-  // A selection left over from an earlier run of the app must never look like
-  // something this session chose: the first visit to Send clears it once. Later
-  // visits keep the user's own selection (so Files → Send still works).
+  // The official prompts are asked on every visit, never cached.
   useEffect(() => {
-    if (current !== 'send') { askedStorage.current = false; askedMedia.current = false; return; }
-    if (selectionReset) return;
-    selectionReset = true;
-    if (state.selected.length) ask(() => NativeLocal.clearSelection());
-  }, [ask, current, state.selected.length]);
+    if (current !== 'send' && current !== 'setup') { askedStorage.current = false; askedMedia.current = false; }
+  }, [current]);
   useEffect(() => { setScanning(false); setQrShown(false); if (native) void NativeLocal.hideNativeView(); }, [current, native]);
   // Storage: Android 11+ grants "all files" only on its own settings screen, and
   // ≤10 uses the classic read/write dialog. Open whichever applies as soon as
