@@ -19,19 +19,24 @@ public final class LocalFiles {
   public String transferId(String digest)throws Exception{return LocalProtocol.transferId(digest,name,mime,size,apk!=null?apk.getAbsolutePath():uri.toString());}
   public JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("mime",mime).put("size",size);}
  }
+ private final Object storageLock=new Object();private final java.util.concurrent.atomic.AtomicInteger fileGeneration=new java.util.concurrent.atomic.AtomicInteger();private final Map<String,String>uriIds=new HashMap<>();
  private final Context context;private final ContentResolver resolver;private final File inbox;
  private final Map<String,Source> catalogue=new LinkedHashMap<>();private final LinkedHashSet<String> selection=new LinkedHashSet<>();
  public LocalFiles(Context c){context=c.getApplicationContext();resolver=c.getContentResolver();inbox=new File(c.getFilesDir(),"local-inbox");inbox.mkdirs();}
  public synchronized JSONArray selected()throws Exception{JSONArray a=new JSONArray();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.put(s.json());}return a;}
  public synchronized List<Source> sources(){List<Source>a=new ArrayList<>();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.add(s);}return a;}
  public synchronized void select(String id,boolean on){if(!catalogue.containsKey(id))throw new IllegalArgumentException("UNKNOWN_FILE");List<String>ids=new ArrayList<>();if(id.startsWith("apk:")){String group=id.substring(0,id.lastIndexOf(':')+1);for(String key:catalogue.keySet())if(key.startsWith(group))ids.add(key);}else ids.add(id);if(on){Set<String>next=new LinkedHashSet<>(selection);next.addAll(ids);if(next.size()>LocalProtocol.MAX_FILES)throw new IllegalArgumentException("TOO_MANY_FILES");selection.clear();selection.addAll(next);}else selection.removeAll(ids);}
- public synchronized JSONArray addUris(List<Uri> uris,int flags)throws Exception{
-  JSONArray a=new JSONArray();for(Uri uri:uris){if(!"content".equals(uri.getScheme()))continue;if(selection.size()>=LocalProtocol.MAX_FILES)break;
+ public void cancelFileWork(){fileGeneration.incrementAndGet();}
+ public JSONArray addUris(List<Uri> uris,int flags)throws Exception{
+  int generation=fileGeneration.get();JSONArray a=new JSONArray();for(Uri uri:uris){if(!"content".equals(uri.getScheme()))continue;synchronized(this){if(selection.size()>=LocalProtocol.MAX_FILES)break;}
    if((flags&Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)!=0)try{resolver.takePersistableUriPermission(uri,flags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION));}catch(SecurityException ignored){}
    String name="file";long size=-1;try(Cursor c=resolver.query(uri,new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE},null,null,null)){if(c!=null&&c.moveToFirst()){name=c.getString(0);if(!c.isNull(1))size=c.getLong(1);}}
    if(size<0){try(android.content.res.AssetFileDescriptor fd=resolver.openAssetFileDescriptor(uri,"r")){if(fd!=null)size=fd.getLength();}}
-   if(size<0||size>LocalProtocol.MAX_FILE)throw new IOException("UNKNOWN_OR_EXCESSIVE_FILE_SIZE");
-   String id=UUID.randomUUID().toString();Source s=new Source(id,name,resolver.getType(uri),size,uri,null);catalogue.put(id,s);selection.add(id);a.put(s.json());
+   if(size<0){
+    size=0;try(InputStream in=resolver.openInputStream(uri)){if(in==null)throw new IOException("SOURCE_UNAVAILABLE");byte[]buffer=new byte[LocalProtocol.CHUNK];while(true){if(fileGeneration.get()!=generation||Thread.currentThread().isInterrupted())throw new IOException("CANCELLED");int n=in.read(buffer);if(n<0)break;size+=n;if(size>LocalProtocol.MAX_FILE)throw new IOException("FILE_SIZE_UNSUPPORTED");}}
+   }
+   if(size>LocalProtocol.MAX_FILE)throw new IOException("FILE_SIZE_UNSUPPORTED");String mime=resolver.getType(uri);
+   synchronized(this){if(fileGeneration.get()!=generation)throw new IOException("CANCELLED");String id=uriIds.get(uri.toString());if(id==null){id=UUID.randomUUID().toString();uriIds.put(uri.toString(),id);}Source s=new Source(id,name,mime,size,uri,null);catalogue.put(id,s);selection.add(id);a.put(s.json());}
   }return a;
  }
  public synchronized JSONArray list(String category,int page)throws Exception{
@@ -65,34 +70,49 @@ public final class LocalFiles {
   // Scoped-storage Downloads collections are created lazily when real data arrives.
  }
  private File path(String hash,String suffix)throws IOException{if(!LocalProtocol.hash(hash))throw new IOException("INVALID_FILE_ID");return new File(inbox,hash+suffix);}
- public synchronized long prepare(String id,String name,String mime,long size,String digest)throws Exception{
+ public long prepare(String id,String name,String mime,long size,String digest)throws Exception{synchronized(storageLock){return prepareLocked(id,name,mime,size,digest);}}
+ private long prepareLocked(String id,String name,String mime,long size,String digest)throws Exception{
   if(!LocalProtocol.hash(id)||!LocalProtocol.hash(digest)||size<0||size>LocalProtocol.MAX_FILE)throw new IOException("INVALID_OFFER");
-  if(new StatFs(inbox.getAbsolutePath()).getAvailableBytes()<Math.min(size,LocalProtocol.CHUNK)+16L*1024*1024)throw new IOException("STORAGE_FULL");
   File meta=path(id,".json"),part=path(id,".part");
   if(meta.isFile()){JSONObject o=read(meta);if(o.getLong("size")!=size||!o.getString("name").equals(LocalProtocol.safeName(name))||!o.getString("mime").equals(mime)||!LocalProtocol.secret(o.optString("sha256"),digest))throw new IOException("FILE_ID_CONFLICT");}
   else write(meta,new JSONObject().put("id",id).put("name",LocalProtocol.safeName(name)).put("mime",mime).put("size",size).put("sha256",digest));
+  if(publishedLocked(id)!=null)return size;
   long length=part.isFile()?part.length():0;if(length>size)throw new IOException("INVALID_PARTIAL");if(new StatFs(inbox.getAbsolutePath()).getAvailableBytes()<size-length+16L*1024*1024)throw new IOException("STORAGE_FULL");return length;
  }
- public synchronized String published(String id)throws Exception{File f=path(id,".done");if(!f.isFile())return null;String uri=read(f).getString("uri");try(InputStream in=resolver.openInputStream(Uri.parse(uri))){return in==null?null:uri;}catch(Exception e){return null;}}
- public synchronized long append(String id,long offset,byte[]data,int length)throws Exception{
+ public String published(String id)throws Exception{synchronized(storageLock){return publishedLocked(id);}}
+ private String publishedLocked(String id)throws Exception{File f=path(id,".done");if(!f.isFile())return null;JSONObject receipt=read(f),meta=read(path(id,".json"));
+  for(String key:new String[]{"name","mime","sha256"})if(!receipt.getString(key).equals(meta.getString(key)))throw new IOException("RECEIPT_METADATA_MISMATCH");
+  if(receipt.getLong("size")!=meta.getLong("size"))throw new IOException("RECEIPT_METADATA_MISMATCH");return receipt.getString("uri");}
+ public long append(String id,long offset,byte[]data,int length)throws Exception{synchronized(storageLock){return appendLocked(id,offset,data,length);}}
+ private long appendLocked(String id,long offset,byte[]data,int length)throws Exception{
   JSONObject meta=read(path(id,".json"));LocalProtocol.checkChunk(offset,length,meta.getLong("size"));File f=path(id,".part");if(f.length()!=offset)throw new IOException("OFFSET_MISMATCH");
   try(RandomAccessFile out=new RandomAccessFile(f,"rw")){out.seek(offset);out.write(data,0,length);out.getFD().sync();return out.length();}
  }
- public synchronized String finish(String id)throws Exception{
-  String previous=published(id);if(previous!=null)return previous;JSONObject m=read(path(id,".json"));File part=path(id,".part");if(!part.exists()&&m.getLong("size")==0)part.createNewFile();
-  if(part.length()!=m.getLong("size"))throw new IOException("INCOMPLETE_FILE");try(InputStream in=new FileInputStream(part)){if(!LocalProtocol.secret(LocalProtocol.sha(in),m.getString("sha256"))){part.delete();throw new IOException("HASH_MISMATCH");}}
+ public String finish(String id)throws Exception{return finish(id,()->true);}
+ public String finish(String id,java.util.function.BooleanSupplier active)throws Exception{synchronized(storageLock){return finishLocked(id,active);}}
+ private String finishLocked(String id,java.util.function.BooleanSupplier active)throws Exception{
+  if(!active.getAsBoolean())throw new IOException("CANCELLED");
+  JSONObject m=read(path(id,".json"));String previous=publishedLocked(id);
+  if(previous!=null){
+   try(InputStream in=resolver.openInputStream(Uri.parse(previous))){if(in==null||!LocalProtocol.secret(LocalProtocol.sha(in,active),m.getString("sha256")))throw new IOException("PUBLISHED_FILE_CHANGED");}
+   catch(Exception e){if("CANCELLED".equals(e.getMessage()))throw e;path(id,".done").delete();throw new IOException("PUBLISHED_FILE_CHANGED",e);}
+   path(id,".part").delete();return previous;
+  }
+  File part=path(id,".part");if(!part.exists()&&m.getLong("size")==0)part.createNewFile();
+  if(part.length()!=m.getLong("size"))throw new IOException("INCOMPLETE_FILE");try(InputStream in=new FileInputStream(part)){if(!LocalProtocol.secret(LocalProtocol.sha(in,active),m.getString("sha256"))){part.delete();throw new IOException("HASH_MISMATCH");}}
   ensureFolders();String name=m.getString("name"),mime=m.getString("mime"),category=LocalProtocol.category(mime);Uri uri;
-  if(broad()||legacyWritable()){File dir=new File(root(),category),dest=new File(dir,name);for(int n=1;dest.exists();n++)dest=new File(dir,n+"-"+name);File tmp=new File(dir,".qrferry-"+UUID.randomUUID()+".part");try(FileOutputStream out=new FileOutputStream(tmp);InputStream in=new FileInputStream(part)){copy(in,out);out.getFD().sync();}catch(Exception e){tmp.delete();throw e;}if(!tmp.renameTo(dest)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=Uri.fromFile(dest);android.media.MediaScannerConnection.scanFile(context,new String[]{dest.getAbsolutePath()},new String[]{mime},null);
+  if(broad()||legacyWritable()){File dir=new File(root(),category),dest=new File(dir,name);for(int n=1;dest.exists();n++)dest=new File(dir,n+"-"+name);File tmp=new File(dir,".qrferry-"+UUID.randomUUID()+".part");try(FileOutputStream out=new FileOutputStream(tmp);InputStream in=new FileInputStream(part)){copy(in,out,active);out.getFD().sync();}catch(Exception e){tmp.delete();throw e;}if(!tmp.renameTo(dest)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=Uri.fromFile(dest);android.media.MediaScannerConnection.scanFile(context,new String[]{dest.getAbsolutePath()},new String[]{mime},null);
   }else if(!tree().isEmpty()){
-   DocumentFile base=DocumentFile.fromTreeUri(context,Uri.parse(tree())).findFile("QRFerry").findFile(category);DocumentFile tmp=base.createFile(mime,".qrferry-"+UUID.randomUUID()+".part");if(tmp==null)throw new IOException("PUBLISH_FAILED");try(OutputStream out=resolver.openOutputStream(tmp.getUri());InputStream in=new FileInputStream(part)){if(out==null)throw new IOException("PUBLISH_FAILED");copy(in,out);}catch(Exception e){tmp.delete();throw e;}
+   DocumentFile base=DocumentFile.fromTreeUri(context,Uri.parse(tree())).findFile("QRFerry").findFile(category);DocumentFile tmp=base.createFile(mime,".qrferry-"+UUID.randomUUID()+".part");if(tmp==null)throw new IOException("PUBLISH_FAILED");try(OutputStream out=resolver.openOutputStream(tmp.getUri());InputStream in=new FileInputStream(part)){if(out==null)throw new IOException("PUBLISH_FAILED");copy(in,out,active);}catch(Exception e){tmp.delete();throw e;}
    String desired=name;for(int n=1;base.findFile(desired)!=null;n++)desired=n+"-"+name;if(!tmp.renameTo(desired)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=tmp.getUri();
   }else if(Build.VERSION.SDK_INT>=29){
    ContentValues v=new ContentValues();v.put(MediaStore.MediaColumns.DISPLAY_NAME,name);v.put(MediaStore.MediaColumns.MIME_TYPE,mime);v.put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/QRFerry/"+category);v.put(MediaStore.MediaColumns.IS_PENDING,1);uri=resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v);if(uri==null)throw new IOException("PUBLISH_FAILED");
-   try(OutputStream out=resolver.openOutputStream(uri);InputStream in=new FileInputStream(part)){if(out==null)throw new IOException("PUBLISH_FAILED");copy(in,out);}catch(Exception e){resolver.delete(uri,null,null);throw e;}ContentValues done=new ContentValues();done.put(MediaStore.MediaColumns.IS_PENDING,0);if(resolver.update(uri,done,null,null)!=1)throw new IOException("PUBLISH_FAILED");
+   try(OutputStream out=resolver.openOutputStream(uri);InputStream in=new FileInputStream(part)){if(out==null)throw new IOException("PUBLISH_FAILED");copy(in,out,active);}catch(Exception e){resolver.delete(uri,null,null);throw e;}ContentValues done=new ContentValues();done.put(MediaStore.MediaColumns.IS_PENDING,0);if(resolver.update(uri,done,null,null)!=1)throw new IOException("PUBLISH_FAILED");
   }else throw new IOException("STORAGE_ACCESS_REQUIRED");
-  write(path(id,".done"),new JSONObject().put("uri",uri.toString()));part.delete();return uri.toString();
+  write(path(id,".done"),new JSONObject().put("uri",uri.toString()).put("name",name).put("mime",mime).put("size",m.getLong("size")).put("sha256",m.getString("sha256")));part.delete();return uri.toString();
  }
- private static void copy(InputStream in,OutputStream out)throws IOException{byte[]b=new byte[LocalProtocol.CHUNK];for(int n;(n=in.read(b))!=-1;)out.write(b,0,n);out.flush();}
+ private static void copy(InputStream in,OutputStream out)throws IOException{copy(in,out,()->true);}
+ private static void copy(InputStream in,OutputStream out,java.util.function.BooleanSupplier active)throws IOException{byte[]b=new byte[LocalProtocol.CHUNK];while(true){if(!active.getAsBoolean())throw new IOException("CANCELLED");int n=in.read(b);if(n<0)break;out.write(b,0,n);}out.flush();}
  private static JSONObject read(File f)throws Exception{if(f.length()>8192)throw new IOException("INVALID_JOURNAL");try(InputStream in=new android.util.AtomicFile(f).openRead()){ByteArrayOutputStream out=new ByteArrayOutputStream();copy(in,out);return new JSONObject(out.toString("UTF-8"));}}
  private static void write(File f,JSONObject o)throws Exception{android.util.AtomicFile af=new android.util.AtomicFile(f);FileOutputStream out=null;try{out=af.startWrite();out.write(o.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));af.finishWrite(out);}catch(Exception e){if(out!=null)af.failWrite(out);throw e;}}
 }

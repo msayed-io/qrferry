@@ -9,11 +9,13 @@ import java.util.regex.Pattern;
 /** Bounded native framing. File bytes never cross the Capacitor bridge. */
 public final class LocalProtocol {
  public static final int VERSION=1, CHUNK=256*1024, MAX_CONTROL=64*1024, MAX_FILES=1000;
- public static final long MAX_FILE=1L<<40;
+ // Metadata crosses a JavaScript bridge; offsets remain signed native longs.
+ public static final long MAX_FILE=9007199254740991L;
  private static final Pattern HASH=Pattern.compile("[a-f0-9]{64}");
  public static boolean hash(String value){return value!=null&&HASH.matcher(value).matches();}
  public static String hex(byte[] bytes){StringBuilder s=new StringBuilder(bytes.length*2);for(byte b:bytes)s.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return s.toString();}
- public static String sha(InputStream in)throws Exception{MessageDigest d=MessageDigest.getInstance("SHA-256");byte[] b=new byte[CHUNK];for(int n;(n=in.read(b))!=-1;)d.update(b,0,n);return hex(d.digest());}
+ public static String sha(InputStream in)throws Exception{return sha(in,()->true);}
+ public static String sha(InputStream in,java.util.function.BooleanSupplier active)throws Exception{MessageDigest d=MessageDigest.getInstance("SHA-256");byte[]b=new byte[CHUNK];while(true){if(!active.getAsBoolean())throw new IOException("CANCELLED");int n=in.read(b);if(n<0)break;d.update(b,0,n);}return hex(d.digest());}
  public static boolean secret(String a,String b){return a!=null&&b!=null&&MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8),b.getBytes(StandardCharsets.UTF_8));}
  public static String safeName(String name){
   if(name==null)name="file";name=Normalizer.normalize(name,Normalizer.Form.NFC).replaceAll("[\\\\/\\p{Cntrl}\\u202a-\\u202e\\u2066-\\u2069]","_").trim();

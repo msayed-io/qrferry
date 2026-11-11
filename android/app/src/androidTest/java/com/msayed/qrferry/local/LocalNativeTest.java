@@ -96,4 +96,56 @@ public class LocalNativeTest {
   try{java.util.List<com.google.mlkit.vision.barcode.common.Barcode>codes=com.google.android.gms.tasks.Tasks.await(scanner.process(com.google.mlkit.vision.common.InputImage.fromBitmap(image,0)),20,TimeUnit.SECONDS);assertEquals(1,codes.size());assertEquals(raw,codes.get(0).getRawValue());}finally{scanner.close();image.recycle();}
  }
 
+ @Test public void journalMetadataCannotBeReboundToAnotherFile()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();LocalFiles files=new LocalFiles(context);
+  byte[]bytes={1,2,3,4};String digest=LocalProtocol.sha(new ByteArrayInputStream(bytes)),id=LocalProtocol.transferId(digest,"first.bin","application/octet-stream",4,UUID.randomUUID().toString());
+  try{
+   assertEquals(0,files.prepare(id,"first.bin","application/octet-stream",4,digest));
+   for(String[]change:new String[][]{{"other.bin","application/octet-stream",digest},{"first.bin","text/plain",digest},{"first.bin","application/octet-stream",String.join("",Collections.nCopies(64,"0"))}}){
+    try{files.prepare(id,change[0],change[1],4,change[2]);fail("An existing journal was rebound");}catch(IOException expected){assertEquals("FILE_ID_CONFLICT",expected.getMessage());}
+   }
+  }finally{new File(context.getFilesDir(),"local-inbox/"+id+".json").delete();}
+ }
+ @Test public void sparseJournalOffsetsBeyond4GiBAreNotTruncated()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();LocalFiles files=new LocalFiles(context);long offset=(1L<<32)+17;
+  String digest=String.join("",Collections.nCopies(64,"a")),id=LocalProtocol.transferId(digest,"large.bin","application/octet-stream",offset+4,UUID.randomUUID().toString());
+  File part=new File(context.getFilesDir(),"local-inbox/"+id+".part");
+  try{
+   try(RandomAccessFile file=new RandomAccessFile(part,"rw")){file.setLength(offset);}
+   assertEquals(offset,files.prepare(id,"large.bin","application/octet-stream",offset+4,digest));
+   assertEquals(offset+4,files.append(id,offset,new byte[]{1,2,3,4},4));assertEquals(offset+4,part.length());
+  }finally{part.delete();new File(context.getFilesDir(),"local-inbox/"+id+".json").delete();}
+ }
+ @Test public void cancellationRetainsPartialAndVerificationDoesNotLockUiMetadata()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();LocalFiles files=new LocalFiles(context);byte[]bytes=new byte[LocalProtocol.CHUNK+3];new java.security.SecureRandom().nextBytes(bytes);
+  String digest=LocalProtocol.sha(new ByteArrayInputStream(bytes)),id=LocalProtocol.transferId(digest,"cancelled.bin","application/octet-stream",bytes.length,UUID.randomUUID().toString());
+  ExecutorService worker=Executors.newFixedThreadPool(2);CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);java.util.concurrent.atomic.AtomicInteger checks=new java.util.concurrent.atomic.AtomicInteger();
+  try{
+   files.prepare(id,"cancelled.bin","application/octet-stream",bytes.length,digest);files.append(id,0,bytes,LocalProtocol.CHUNK);files.append(id,LocalProtocol.CHUNK,Arrays.copyOfRange(bytes,LocalProtocol.CHUNK,bytes.length),3);
+   Future<?> task=worker.submit(()->{try{files.finish(id,()->{if(checks.incrementAndGet()==2){entered.countDown();try{release.await(10,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}return false;}return true;});throw new AssertionError("Cancelled finalization published a file");}catch(IOException expected){assertEquals("CANCELLED",expected.getMessage());}catch(Exception e){throw new RuntimeException(e);}});
+   assertTrue(entered.await(3,TimeUnit.SECONDS));assertEquals(0,(int)worker.submit(()->files.selected().length()).get(2,TimeUnit.SECONDS));release.countDown();task.get(5,TimeUnit.SECONDS);
+   assertNull(files.published(id));assertEquals(bytes.length,files.prepare(id,"cancelled.bin","application/octet-stream",bytes.length,digest));
+  }finally{release.countDown();worker.shutdownNow();for(String suffix:new String[]{".json",".done",".part"})new File(context.getFilesDir(),"local-inbox/"+id+suffix).delete();}
+ }
+
+ @Test public void unknownLengthDocumentIsMeasuredAndReopenedNatively()throws Exception{
+  LocalFiles files=new LocalFiles(InstrumentationRegistry.getInstrumentation().getTargetContext());
+  files.addUris(Collections.singletonList(UnknownLengthProvider.URI),0);assertEquals(1,files.sources().size());LocalFiles.Source source=files.sources().get(0);assertEquals(UnknownLengthProvider.SIZE,source.size);
+  byte[]expected=new byte[UnknownLengthProvider.SIZE];for(int i=0;i<expected.length;i++)expected[i]=(byte)(i*73+19);
+  assertEquals(LocalProtocol.sha(new ByteArrayInputStream(expected)),files.hash(source));
+  files.addUris(Collections.singletonList(UnknownLengthProvider.URI),0);assertEquals("Selecting the same URI again should not duplicate it",1,files.sources().size());assertFalse(files.selected().toString().contains("content://"));
+ }
+ @Test public void committedReceiptIsReverifiedRatherThanTrustingAnEditedFile()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();LocalFiles files=new LocalFiles(context);byte[]data={1,2,3,4};String digest=LocalProtocol.sha(new ByteArrayInputStream(data)),name="receipt-"+System.nanoTime()+".bin",id=LocalProtocol.transferId(digest,name,"application/octet-stream",4,UUID.randomUUID().toString());String saved=null;
+  try{
+   files.prepare(id,name,"application/octet-stream",4,digest);files.append(id,0,data,4);saved=files.finish(id);assertEquals(saved,files.finish(id));
+   try(OutputStream out=context.getContentResolver().openOutputStream(android.net.Uri.parse(saved),"wt")){assertNotNull(out);out.write(new byte[]{4,3,2,1});}
+   try{files.finish(id);fail("An edited published file was reported as verified");}catch(IOException expected){assertEquals("PUBLISHED_FILE_CHANGED",expected.getMessage());}
+   assertNull(files.published(id));
+  }finally{
+   if(saved!=null){android.net.Uri uri=android.net.Uri.parse(saved);if("file".equals(uri.getScheme()))new File(uri.getPath()).delete();else context.getContentResolver().delete(uri,null,null);}
+   for(String suffix:new String[]{".json",".done",".part"})new File(context.getFilesDir(),"local-inbox/"+id+suffix).delete();
+  }
+ }
+
 }
