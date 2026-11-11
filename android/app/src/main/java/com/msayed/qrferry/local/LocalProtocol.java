@@ -22,6 +22,15 @@ public final class LocalProtocol {
   if(name.getBytes(StandardCharsets.UTF_8).length>180){int dot=name.lastIndexOf('.');String ext=dot>0&&name.length()-dot<=16?name.substring(dot):"";String base=ext.isEmpty()?name:name.substring(0,dot);while((base+ext).getBytes(StandardCharsets.UTF_8).length>180)base=base.substring(0,base.offsetByCodePoints(base.length(),-1));name=base+ext;}
   return name;
  }
+ /** An opaque file identity, separate from the byte-integrity digest. Native source
+  * identity keeps two different paths with equal bytes/names distinct, while a
+  * reselected URI can resume. No URI/path is included in the wire metadata. */
+ public static String transferId(String digest,String name,String mime,long size,String source)throws Exception{
+  if(!hash(digest)||size<0||size>MAX_FILE||source==null||source.isEmpty())throw new IOException("INVALID_SOURCE_IDENTITY");
+  ByteArrayOutputStream bytes=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(bytes);
+  for(String value:new String[]{"QRFerry-native-file-1",digest,safeName(name),mime==null?"application/octet-stream":mime,Long.toString(size),source}){byte[]encoded=value.getBytes(StandardCharsets.UTF_8);out.writeInt(encoded.length);out.write(encoded);}
+  return sha(new ByteArrayInputStream(bytes.toByteArray()));
+ }
  public static String category(String mime){if(mime==null)return "Files";if(mime.startsWith("image/"))return "Images";if(mime.startsWith("video/"))return "Videos";if(mime.startsWith("audio/"))return "Audio";return "Files";}
  public static void writeControl(DataOutputStream out,String json)throws IOException{byte[] b=json.getBytes(StandardCharsets.UTF_8);if(b.length>MAX_CONTROL)throw new IOException("CONTROL_TOO_LARGE");out.writeInt(b.length);out.write(b);out.flush();}
  public static String readControl(DataInputStream in)throws IOException{int n=in.readInt();if(n<2||n>MAX_CONTROL)throw new IOException("INVALID_CONTROL_LENGTH");byte[] b=new byte[n];in.readFully(b);return new String(b,StandardCharsets.UTF_8);}

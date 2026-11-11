@@ -58,7 +58,7 @@ public class LocalTransferPlugin extends Plugin {
  @PluginMethod public void hideNativeView(PluginCall call){main.post(()->{hideOverlay();call.resolve();});}
  private void hideOverlay(){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(this::hideOverlay);return;}overlayQr=false;if(scanner!=null){scanner.close();scanner=null;}if(overlay!=null){if(overlay.getParent()instanceof ViewGroup)((ViewGroup)overlay.getParent()).removeView(overlay);overlay=null;}}
  @PluginMethod public void pause(PluginCall call){worker.execute(()->{engine.pause(Boolean.TRUE.equals(call.getBoolean("paused",true)));resolve(call);});}
- @PluginMethod public void sendSelected(PluginCall call){engine.pump();resolve(call);}
+ @PluginMethod public void sendSelected(PluginCall call){engine.sendSelected();resolve(call);}
  @PluginMethod public void sendMessage(PluginCall call){worker.execute(()->{try{engine.message(call.getString("text",""));resolve(call);}catch(Exception e){call.reject("MESSAGE_NOT_SENT",e);}});}
  @PluginMethod public void disconnect(PluginCall call){main.post(()->{hideOverlay();engine.disconnect();getContext().stopService(new Intent(getContext(),LocalTransferService.class));resolve(call);});}
  @Override protected void handleOnPause(){main.post(this::hideOverlay);}
