@@ -190,4 +190,24 @@ public class LocalNativeTest {
   }finally{release.countDown();stalled.close();sender.shutdown();receiver.shutdown();worker.shutdownNow();}
  }
 
+ @Test public void publicationRecoversWithoutDuplicatingAfterEveryCommitBoundary()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  for(String boundary:new String[]{"allocated","copied","external-published","receipt"}){
+   byte[]data=new byte[8193];new java.security.SecureRandom().nextBytes(data);String digest=LocalProtocol.sha(new ByteArrayInputStream(data)),name="publication-"+System.nanoTime()+".bin",id=LocalProtocol.transferId(digest,name,"application/octet-stream",data.length,UUID.randomUUID().toString());String expectedUri=null;
+   LocalFiles interrupted=new LocalFiles(context,phase->{if(phase.equals(boundary))throw new IOException("SIMULATED_PROCESS_EXIT");});
+   try{
+    interrupted.prepare(id,name,"application/octet-stream",data.length,digest);interrupted.append(id,0,data,data.length);
+    try{interrupted.finish(id);fail("Fault injection boundary was not reached: "+boundary);}catch(IOException expected){assertEquals("SIMULATED_PROCESS_EXIT",expected.getMessage());}
+    File journal=new File(context.getFilesDir(),"local-inbox/"+id+".txn");assertTrue(journal.isFile());JSONObject tx;
+    try(InputStream in=new android.util.AtomicFile(journal).openRead();ByteArrayOutputStream text=new ByteArrayOutputStream()){byte[]buffer=new byte[4096];for(int n;(n=in.read(buffer))!=-1;)text.write(buffer,0,n);tx=new JSONObject(text.toString("UTF-8"));}
+    expectedUri=tx.getString(tx.getString("kind").equals("file")?"destination":"uri");
+    LocalFiles recovered=new LocalFiles(context);assertEquals("Recovery allocated a different output after "+boundary,expectedUri,recovered.finish(id));assertEquals(expectedUri,recovered.finish(id));assertFalse(journal.exists());
+    try(InputStream in=context.getContentResolver().openInputStream(android.net.Uri.parse(expectedUri))){assertEquals(digest,LocalProtocol.sha(in));}
+   }finally{
+    if(expectedUri!=null){android.net.Uri uri=android.net.Uri.parse(expectedUri);if("file".equals(uri.getScheme()))new File(uri.getPath()).delete();else context.getContentResolver().delete(uri,null,null);}
+    for(String suffix:new String[]{".json",".done",".part",".txn"})new android.util.AtomicFile(new File(context.getFilesDir(),"local-inbox/"+id+suffix)).delete();
+   }
+  }
+ }
+
 }

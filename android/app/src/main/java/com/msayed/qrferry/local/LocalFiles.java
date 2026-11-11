@@ -20,9 +20,10 @@ public final class LocalFiles {
   public JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("mime",mime).put("size",size);}
  }
  private final Object storageLock=new Object();private final java.util.concurrent.atomic.AtomicInteger fileGeneration=new java.util.concurrent.atomic.AtomicInteger();private final Map<String,String>uriIds=new HashMap<>();
- private final Context context;private final ContentResolver resolver;private final File inbox;
+ private final Context context;private final ContentResolver resolver;private final File inbox;private final LocalPublication publication;
  private final Map<String,Source> catalogue=new LinkedHashMap<>();private final LinkedHashSet<String> selection=new LinkedHashSet<>();
- public LocalFiles(Context c){context=c.getApplicationContext();resolver=c.getContentResolver();inbox=new File(c.getFilesDir(),"local-inbox");inbox.mkdirs();}
+ public LocalFiles(Context c){this(c,phase->{});}
+ LocalFiles(Context c,LocalPublication.Checkpoint checkpoint){context=c.getApplicationContext();resolver=c.getContentResolver();inbox=new File(c.getFilesDir(),"local-inbox");inbox.mkdirs();publication=new LocalPublication(context,inbox,checkpoint);}
  public synchronized JSONArray selected()throws Exception{JSONArray a=new JSONArray();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.put(s.json());}return a;}
  public synchronized List<Source> sources(){List<Source>a=new ArrayList<>();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.add(s);}return a;}
  public synchronized void select(String id,boolean on){if(!catalogue.containsKey(id))throw new IllegalArgumentException("UNKNOWN_FILE");List<String>ids=new ArrayList<>();if(id.startsWith("apk:")){String group=id.substring(0,id.lastIndexOf(':')+1);for(String key:catalogue.keySet())if(key.startsWith(group))ids.add(key);}else ids.add(id);if(on){Set<String>next=new LinkedHashSet<>(selection);next.addAll(ids);if(next.size()>LocalProtocol.MAX_FILES)throw new IllegalArgumentException("TOO_MANY_FILES");selection.clear();selection.addAll(next);}else selection.removeAll(ids);}
@@ -74,7 +75,7 @@ public final class LocalFiles {
  private long prepareLocked(String id,String name,String mime,long size,String digest)throws Exception{
   if(!LocalProtocol.hash(id)||!LocalProtocol.hash(digest)||size<0||size>LocalProtocol.MAX_FILE)throw new IOException("INVALID_OFFER");
   File meta=path(id,".json"),part=path(id,".part");
-  if(meta.isFile()){JSONObject o=read(meta);if(o.getLong("size")!=size||!o.getString("name").equals(LocalProtocol.safeName(name))||!o.getString("mime").equals(mime)||!LocalProtocol.secret(o.optString("sha256"),digest))throw new IOException("FILE_ID_CONFLICT");}
+  if(meta.isFile()||new File(meta+".bak").isFile()){JSONObject o=read(meta);if(o.getLong("size")!=size||!o.getString("name").equals(LocalProtocol.safeName(name))||!o.getString("mime").equals(mime)||!LocalProtocol.secret(o.optString("sha256"),digest))throw new IOException("FILE_ID_CONFLICT");}
   else write(meta,new JSONObject().put("id",id).put("name",LocalProtocol.safeName(name)).put("mime",mime).put("size",size).put("sha256",digest));
   if(publishedLocked(id)!=null)return size;
   long length=part.isFile()?part.length():0;if(length>size)throw new IOException("INVALID_PARTIAL");if(new StatFs(inbox.getAbsolutePath()).getAvailableBytes()<size-length+16L*1024*1024)throw new IOException("STORAGE_FULL");return length;
@@ -95,22 +96,17 @@ public final class LocalFiles {
   JSONObject m=read(path(id,".json"));String previous=publishedLocked(id);
   if(previous!=null){
    try(InputStream in=resolver.openInputStream(Uri.parse(previous))){if(in==null||!LocalProtocol.secret(LocalProtocol.sha(in,active),m.getString("sha256")))throw new IOException("PUBLISHED_FILE_CHANGED");}
-   catch(Exception e){if("CANCELLED".equals(e.getMessage()))throw e;path(id,".done").delete();throw new IOException("PUBLISHED_FILE_CHANGED",e);}
-   path(id,".part").delete();return previous;
+   catch(Exception e){if("CANCELLED".equals(e.getMessage()))throw e;new android.util.AtomicFile(path(id,".done")).delete();publication.clear(id);throw new IOException("PUBLISHED_FILE_CHANGED",e);}
+   path(id,".part").delete();publication.clear(id);return previous;
   }
   File part=path(id,".part");if(!part.exists()&&m.getLong("size")==0)part.createNewFile();
   if(part.length()!=m.getLong("size"))throw new IOException("INCOMPLETE_FILE");try(InputStream in=new FileInputStream(part)){if(!LocalProtocol.secret(LocalProtocol.sha(in,active),m.getString("sha256"))){part.delete();throw new IOException("HASH_MISMATCH");}}
-  ensureFolders();String name=m.getString("name"),mime=m.getString("mime"),category=LocalProtocol.category(mime);Uri uri;
-  if(broad()||legacyWritable()){File dir=new File(root(),category),dest=new File(dir,name);for(int n=1;dest.exists();n++)dest=new File(dir,n+"-"+name);File tmp=new File(dir,".qrferry-"+UUID.randomUUID()+".part");try(FileOutputStream out=new FileOutputStream(tmp);InputStream in=new FileInputStream(part)){copy(in,out,active);out.getFD().sync();}catch(Exception e){tmp.delete();throw e;}if(!tmp.renameTo(dest)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=Uri.fromFile(dest);android.media.MediaScannerConnection.scanFile(context,new String[]{dest.getAbsolutePath()},new String[]{mime},null);
-  }else if(!tree().isEmpty()){
-   DocumentFile base=DocumentFile.fromTreeUri(context,Uri.parse(tree())).findFile("QRFerry").findFile(category);DocumentFile tmp=base.createFile(mime,".qrferry-"+UUID.randomUUID()+".part");if(tmp==null)throw new IOException("PUBLISH_FAILED");try(OutputStream out=resolver.openOutputStream(tmp.getUri());InputStream in=new FileInputStream(part)){if(out==null)throw new IOException("PUBLISH_FAILED");copy(in,out,active);}catch(Exception e){tmp.delete();throw e;}
-   String desired=name;for(int n=1;base.findFile(desired)!=null;n++)desired=n+"-"+name;if(!tmp.renameTo(desired)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=tmp.getUri();
-  }else if(Build.VERSION.SDK_INT>=29){
-   ContentValues v=new ContentValues();v.put(MediaStore.MediaColumns.DISPLAY_NAME,name);v.put(MediaStore.MediaColumns.MIME_TYPE,mime);v.put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/QRFerry/"+category);v.put(MediaStore.MediaColumns.IS_PENDING,1);uri=resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v);if(uri==null)throw new IOException("PUBLISH_FAILED");
-   try(OutputStream out=resolver.openOutputStream(uri);InputStream in=new FileInputStream(part)){if(out==null)throw new IOException("PUBLISH_FAILED");copy(in,out,active);}catch(Exception e){resolver.delete(uri,null,null);throw e;}ContentValues done=new ContentValues();done.put(MediaStore.MediaColumns.IS_PENDING,0);if(resolver.update(uri,done,null,null)!=1)throw new IOException("PUBLISH_FAILED");
-  }else throw new IOException("STORAGE_ACCESS_REQUIRED");
-  write(path(id,".done"),new JSONObject().put("uri",uri.toString()).put("name",name).put("mime",mime).put("size",m.getLong("size")).put("sha256",m.getString("sha256")));part.delete();return uri.toString();
+  ensureFolders();String name=m.getString("name"),mime=m.getString("mime");
+  Uri uri=publication.publish(id,m,part,broad()||legacyWritable(),tree(),active);
+  write(path(id,".done"),new JSONObject().put("uri",uri.toString()).put("name",name).put("mime",mime).put("size",m.getLong("size")).put("sha256",m.getString("sha256")));
+  publication.receiptWritten();part.delete();publication.clear(id);return uri.toString();
  }
+
  private static void copy(InputStream in,OutputStream out)throws IOException{copy(in,out,()->true);}
  private static void copy(InputStream in,OutputStream out,java.util.function.BooleanSupplier active)throws IOException{byte[]b=new byte[LocalProtocol.CHUNK];while(true){if(!active.getAsBoolean())throw new IOException("CANCELLED");int n=in.read(b);if(n<0)break;out.write(b,0,n);}out.flush();}
  private static JSONObject read(File f)throws Exception{if(f.length()>8192)throw new IOException("INVALID_JOURNAL");try(InputStream in=new android.util.AtomicFile(f).openRead()){ByteArrayOutputStream out=new ByteArrayOutputStream();copy(in,out);return new JSONObject(out.toString("UTF-8"));}}
