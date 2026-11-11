@@ -1,0 +1,109 @@
+package com.msayed.qrferry.local;
+
+import static org.junit.Assert.*;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.is;
+
+import android.content.Context;
+import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.WebView;
+import androidx.camera.core.CameraInfo;
+import androidx.camera.core.CameraState;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.content.FileProvider;
+import androidx.lifecycle.Lifecycle;
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+import com.msayed.qrferry.MainActivity;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+/** Actual packaged WebView, Capacitor commands, Android consent dialog and CameraX.
+ * The older API24/29 native-only jobs deliberately do not run this modern-WebView suite. */
+@RunWith(AndroidJUnit4.class)
+public class LocalUiTest {
+ private interface Condition{boolean ready()throws Exception;}
+ private static void until(String message,Condition condition,long timeout)throws Exception{
+  long deadline=System.currentTimeMillis()+timeout;
+  while(System.currentTimeMillis()<deadline){if(condition.ready())return;Thread.sleep(50);}
+  fail(message);
+ }
+ private static String js(WebView view,String expression)throws Exception{
+  CountDownLatch done=new CountDownLatch(1);AtomicReference<String>result=new AtomicReference<>();
+  InstrumentationRegistry.getInstrumentation().runOnMainSync(()->view.evaluateJavascript(expression,value->{result.set(value);done.countDown();}));
+  assertTrue("WebView evaluation did not return",done.await(5,TimeUnit.SECONDS));return result.get();
+ }
+ private static PreviewView preview(View view){
+  if(view instanceof PreviewView)return (PreviewView)view;
+  if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){PreviewView found=preview(group.getChildAt(i));if(found!=null)return found;}}
+  return null;
+ }
+ private static void dialog(String english,String arabic)throws Exception{
+  until("Native consent dialog did not appear",()->{try{onView(withText(anyOf(is(english),is(arabic)))).check(matches(isDisplayed()));return true;}catch(androidx.test.espresso.NoMatchingViewException pending){return false;}},15000);
+ }
+ private static void openCameraConsent(WebView view)throws Exception{
+  until("Camera consent button is unavailable",()->"true".equals(js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Open camera for this session')||b.textContent.includes('فتح الكاميرا لهذه الجلسة'));return !!b&&!b.disabled})()")),15000);
+  assertEquals("true",js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Open camera for this session')||b.textContent.includes('فتح الكاميرا لهذه الجلسة'));if(!b||b.disabled)return false;b.click();return true})()"));
+  dialog("Open the camera for this session?","فتح الكاميرا لهذه الجلسة؟");
+ }
+ @Test public void nativeEntryConsentCameraGeometryAndPauseRelease()throws Exception{
+  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();boolean previouslyAsked=context.getSharedPreferences("local-files",0).getBoolean("asked",false);
+  context.getSharedPreferences("local-files",0).edit().putBoolean("asked",false).commit();
+  File source=new File(context.getCacheDir(),"native-camera-consent-"+System.nanoTime()+".bin");try(FileOutputStream out=new FileOutputStream(source)){out.write(new byte[]{1,2,3,4});}
+  LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();String selectedId=null;
+  try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
+   AtomicReference<WebView>reference=new AtomicReference<>();scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
+   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode'))")),45000);
+   assertEquals("true",js(view,"(()=>{document.querySelector('.brand-mode').click();return true})()"));
+   dialog("Access to your files","الوصول إلى ملفاتك");
+   onView(withText(anyOf(is("Choose specific files"),is("اختيار ملفات محددة")))).perform(click());
+   until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
+   assertEquals("false",js(view,"Boolean(document.querySelector('.local-notice'))"));
+   assertTrue(context.getSharedPreferences("local-files",0).getBoolean("asked",false));
+   selectedId=engine.files.addUris(Collections.singletonList(FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source)),0).getJSONObject(0).getString("id");engine.changed();
+   assertEquals("true",js(view,"(()=>{document.querySelector('.local-actions button').click();return true})()"));
+   until("Real native selection did not reach Send",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='send' && !document.querySelector('.local-send-action button')?.disabled")),15000);
+   assertEquals("true",js(view,"(()=>{document.querySelector('.local-send-action button').click();return true})()"));
+   until("Send did not open the scanner page",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='scan'")),15000);
+   assertEquals("false",js(view,"Boolean(document.querySelector('.bridge-composer'))"));assertFalse(engine.snapshot().getBoolean("started"));
+   openCameraConsent(view);onView(withText(anyOf(is("Cancel"),is("إلغاء")))).perform(click());
+   scenario.onActivity(activity->assertNull("Camera opened despite cancellation",preview(activity.getWindow().getDecorView())));
+   openCameraConsent(view);onView(withText(anyOf(is("Open camera"),is("فتح الكاميرا")))).perform(click());
+   until("CameraX preview never streamed",()->{AtomicBoolean streaming=new AtomicBoolean();scenario.onActivity(activity->{PreviewView p=preview(activity.getWindow().getDecorView());streaming.set(p!=null&&p.getPreviewStreamState().getValue()==PreviewView.StreamState.STREAMING);});return streaming.get();},30000);
+   JSONObject bounds=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const r=document.querySelector('.local-native-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth}})())")+"]").getString(0));
+   scenario.onActivity(activity->{
+    PreviewView p=preview(activity.getWindow().getDecorView());assertNotNull(p);int[]web=new int[2],nativeView=new int[2];view.getLocationOnScreen(web);p.getLocationOnScreen(nativeView);double scale=view.getWidth()/bounds.optDouble("viewport");
+    assertEquals("Native preview X must align with the real DOM surface",web[0]+bounds.optDouble("x")*scale,nativeView[0],2.0);
+    assertEquals("Native preview Y must not duplicate the system inset",web[1]+bounds.optDouble("y")*scale,nativeView[1],2.0);
+    assertEquals(bounds.optDouble("width")*scale,p.getWidth(),2.0);assertEquals(bounds.optDouble("height")*scale,p.getHeight(),2.0);
+   });
+   ProcessCameraProvider provider=ProcessCameraProvider.getInstance(context).get(10,TimeUnit.SECONDS);AtomicReference<List<CameraInfo>>cameras=new AtomicReference<>();InstrumentationRegistry.getInstrumentation().runOnMainSync(()->cameras.set(provider.getAvailableCameraInfos()));
+   scenario.moveToState(Lifecycle.State.CREATED);
+   until("Native camera view survived activity pause",()->{AtomicBoolean removed=new AtomicBoolean();scenario.onActivity(activity->removed.set(preview(activity.getWindow().getDecorView())==null));return removed.get();},5000);
+   until("Camera hardware remained open after pause",()->{AtomicBoolean closed=new AtomicBoolean(true);InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{for(CameraInfo camera:cameras.get()){CameraState state=camera.getCameraState().getValue();if(state!=null&&state.getType()!=CameraState.Type.CLOSED)closed.set(false);}});return closed.get();},15000);
+   scenario.moveToState(Lifecycle.State.RESUMED);
+   until("Camera reopening control stayed disabled",()->"true".equals(js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Open camera for this session')||b.textContent.includes('فتح الكاميرا لهذه الجلسة'));return !!b&&!b.disabled})()")),15000);
+   openCameraConsent(view);onView(withText(anyOf(is("Cancel"),is("إلغاء")))).perform(click());
+  }finally{
+   engine.disconnect();if(selectedId!=null)engine.files.select(selectedId,false);source.delete();context.getSharedPreferences("local-files",0).edit().putBoolean("asked",previouslyAsked).commit();
+  }
+ }
+}
