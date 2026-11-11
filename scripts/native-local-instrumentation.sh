@@ -33,8 +33,14 @@ if [ "$api" -ge 35 ]; then
   # reviewed against the app's own History/Privacy capsules, not against prose.
   shots=android/app/build/reports/local-shots
   rm -rf "$shots"; mkdir -p "$shots"
-  adb exec-out run-as com.msayed.qrferry cat cache/shots.zip > /tmp/local-shots.zip 2>/dev/null && \
-   unzip -qo /tmp/local-shots.zip -d "$shots" >/dev/null 2>&1 || true
+  adb shell run-as com.msayed.qrferry ls -l cache 2>&1 | tail -4 || true
+  adb exec-out run-as com.msayed.qrferry cat cache/shots.zip > /tmp/local-shots.zip 2>/tmp/shots.err || true
+  if [ ! -s /tmp/local-shots.zip ]; then
+    echo "run-as copy failed: $(head -2 /tmp/shots.err | tr '\n' ' ')"
+    # Some emulator images only expose the sandbox through the shell's own run-as.
+    adb shell "run-as com.msayed.qrferry sh -c 'cat cache/shots.zip | base64'" | tr -d '\r' | base64 -d > /tmp/local-shots.zip 2>/dev/null || true
+  fi
+  unzip -qo /tmp/local-shots.zip -d "$shots" 2>&1 | head -2 || true
   echo "screenshots: $(ls "$shots" | wc -l)"
 else
   # API 24/29 cover the native subsystem only: their bundled WebView cannot run
