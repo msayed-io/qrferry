@@ -54,26 +54,35 @@ public class LocalUiTest {
   assertTrue("WebView evaluation did not return",done.await(5,TimeUnit.SECONDS));return result.get();
  }
  /** Real device pixels for every screen, shipped with the CI artifact so the
-  *  chrome can be reviewed against the app's own History/Privacy pages.
-  *  The bytes are written through the shell's stdin because scoped storage hides
-  *  the app's external directory from `adb pull` on Android 11 and later. */
- private static final String SHOT_DIR="/data/local/tmp/qrferry-shots";
+  *  chrome can be reviewed against the app's own History/Privacy pages. They are
+  *  written inside the app sandbox and packed into one zip, which the CI script
+  *  copies out with `run-as`: scoped storage otherwise hides them from adb. */
+ private static final java.util.List<File> shotFiles=new java.util.ArrayList<>();
  private static int shotIndex;
  private static void shot(String name)throws Exception{
-  android.app.UiAutomation automation=InstrumentationRegistry.getInstrumentation().getUiAutomation();
-  android.graphics.Bitmap bitmap=automation.takeScreenshot();
+  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  android.graphics.Bitmap bitmap=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
   assertNotNull("Screenshot failed: "+name,bitmap);
   try{
-   drain(automation.executeShellCommand("mkdir -p "+SHOT_DIR));
-   android.os.ParcelFileDescriptor pipe=automation.executeShellCommand("cat > "+SHOT_DIR+"/"+String.format("%02d-%s.png",++shotIndex,name));
-   try(FileOutputStream out=new FileOutputStream(pipe.getFileDescriptor())){
+   File dir=new File(context.getCacheDir(),"shots");if(!dir.exists()&&!dir.mkdirs())fail("Cannot create "+dir);
+   File target=new File(dir,String.format("%02d-%s.png",++shotIndex,name));
+   try(FileOutputStream out=new FileOutputStream(target)){
     assertTrue("Cannot write screenshot "+name,bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));
-   }finally{pipe.close();}
+   }
+   shotFiles.add(target);
   }finally{bitmap.recycle();}
  }
- private static void drain(android.os.ParcelFileDescriptor pipe)throws Exception{
-  try(java.io.InputStream in=new java.io.FileInputStream(pipe.getFileDescriptor())){while(in.read()!=-1){/* consume */}}
-  finally{pipe.close();}
+ /** Packs every captured screen into one archive for the CI artifact. */
+ @org.junit.AfterClass public static void packShots()throws Exception{
+  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  File archive=new File(context.getCacheDir(),"shots.zip");
+  try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(new FileOutputStream(archive))){
+   for(File file:shotFiles){
+    zip.putNextEntry(new java.util.zip.ZipEntry(file.getName()));
+    try(java.io.InputStream in=new java.io.FileInputStream(file)){byte[] buffer=new byte[8192];int read;while((read=in.read(buffer))!=-1)zip.write(buffer,0,read);}
+    zip.closeEntry();
+   }
+  }
  }
  private static PreviewView preview(View view){
   if(view instanceof PreviewView)return (PreviewView)view;
