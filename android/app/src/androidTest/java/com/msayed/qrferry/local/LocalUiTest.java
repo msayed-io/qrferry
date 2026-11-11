@@ -60,6 +60,9 @@ public class LocalUiTest {
  private static final java.util.List<File> shotFiles=new java.util.ArrayList<>();
  private static int shotIndex;
  private static void shot(String name)throws Exception{
+  // A route change settles a frame or two after the DOM updates; capturing too
+  // early photographs the previous screen.
+  Thread.sleep(500);
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   android.graphics.Bitmap bitmap=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
   assertNotNull("Screenshot failed: "+name,bitmap);
