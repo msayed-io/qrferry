@@ -33,7 +33,7 @@ if [ "$api" -ge 35 ]; then
   # reviewed against the app's own History/Privacy capsules, not against prose.
   shots=android/app/build/reports/local-shots
   rm -rf "$shots"; mkdir -p "$shots"
-  adb pull /sdcard/Android/data/com.msayed.qrferry/files/shots/. "$shots" >/dev/null 2>&1 || true
+  adb pull /data/local/tmp/qrferry-shots/. "$shots" >/dev/null 2>&1 || true
   echo "screenshots: $(ls "$shots" | wc -l)"
 else
   # API 24/29 cover the native subsystem only: their bundled WebView cannot run

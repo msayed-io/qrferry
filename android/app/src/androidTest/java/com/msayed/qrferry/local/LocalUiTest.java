@@ -54,16 +54,26 @@ public class LocalUiTest {
   assertTrue("WebView evaluation did not return",done.await(5,TimeUnit.SECONDS));return result.get();
  }
  /** Real device pixels for every screen, shipped with the CI artifact so the
-  *  chrome can be reviewed against the app's own History/Privacy pages. */
+  *  chrome can be reviewed against the app's own History/Privacy pages.
+  *  The bytes are written through the shell's stdin because scoped storage hides
+  *  the app's external directory from `adb pull` on Android 11 and later. */
+ private static final String SHOT_DIR="/data/local/tmp/qrferry-shots";
  private static int shotIndex;
  private static void shot(String name)throws Exception{
-  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
-  android.graphics.Bitmap bitmap=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+  android.app.UiAutomation automation=InstrumentationRegistry.getInstrumentation().getUiAutomation();
+  android.graphics.Bitmap bitmap=automation.takeScreenshot();
   assertNotNull("Screenshot failed: "+name,bitmap);
-  File dir=new File(context.getExternalFilesDir(null),"shots");if(!dir.exists()&&!dir.mkdirs())fail("Cannot create "+dir);
-  try(FileOutputStream out=new FileOutputStream(new File(dir,String.format("%02d-%s.png",++shotIndex,name)))){
-   assertTrue("Cannot write screenshot "+name,bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));
+  try{
+   drain(automation.executeShellCommand("mkdir -p "+SHOT_DIR));
+   android.os.ParcelFileDescriptor pipe=automation.executeShellCommand("cat > "+SHOT_DIR+"/"+String.format("%02d-%s.png",++shotIndex,name));
+   try(FileOutputStream out=new FileOutputStream(pipe.getFileDescriptor())){
+    assertTrue("Cannot write screenshot "+name,bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));
+   }finally{pipe.close();}
   }finally{bitmap.recycle();}
+ }
+ private static void drain(android.os.ParcelFileDescriptor pipe)throws Exception{
+  try(java.io.InputStream in=new java.io.FileInputStream(pipe.getFileDescriptor())){while(in.read()!=-1){/* consume */}}
+  finally{pipe.close();}
  }
  private static PreviewView preview(View view){
   if(view instanceof PreviewView)return (PreviewView)view;
