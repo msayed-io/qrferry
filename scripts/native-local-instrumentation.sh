@@ -28,20 +28,20 @@ if [ "$api" -ge 35 ]; then
   run_suite com.msayed.qrferry.ChromePolicyTest,com.msayed.qrferry.FloatingChromeTest,com.msayed.qrferry.SpecularRimTest,com.msayed.qrferry.NativeIntegrationTest,com.msayed.qrferry.local.LocalNativeTest,com.msayed.qrferry.local.LocalRecoveryProcessTest || exit $?
   adb install -r -g "$apk" || exit $?
   grant_all_files
-  run_suite com.msayed.qrferry.local.LocalUiTest || exit $?
-  # Real device pixels of every local screen travel with the report: the chrome is
-  # reviewed against the app's own History/Privacy capsules, not against prose.
+  # The packaged UI suite runs through `am instrument`, not through Gradle: the
+  # Gradle task uninstalls the app when it finishes, and with it the sandbox that
+  # holds the device screenshots of every local screen.
+  test_apk=android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+  adb install -r "$test_apk" >/dev/null || exit $?
+  ui_out=$(adb shell am instrument -w -e class com.msayed.qrferry.local.LocalUiTest \
+    com.msayed.qrferry.test/androidx.test.runner.AndroidJUnitRunner)
+  echo "$ui_out" | tail -25
   shots=android/app/build/reports/local-shots
   rm -rf "$shots"; mkdir -p "$shots"
-  adb shell run-as com.msayed.qrferry ls -l cache 2>&1 | tail -4 || true
-  adb exec-out run-as com.msayed.qrferry cat cache/shots.zip > /tmp/local-shots.zip 2>/tmp/shots.err || true
-  if [ ! -s /tmp/local-shots.zip ]; then
-    echo "run-as copy failed: $(head -2 /tmp/shots.err | tr '\n' ' ')"
-    # Some emulator images only expose the sandbox through the shell's own run-as.
-    adb shell "run-as com.msayed.qrferry sh -c 'cat cache/shots.zip | base64'" | tr -d '\r' | base64 -d > /tmp/local-shots.zip 2>/dev/null || true
-  fi
-  unzip -qo /tmp/local-shots.zip -d "$shots" 2>&1 | head -2 || true
+  adb exec-out run-as com.msayed.qrferry cat cache/shots.zip > /tmp/local-shots.zip 2>/dev/null || true
+  if [ -s /tmp/local-shots.zip ]; then unzip -qo /tmp/local-shots.zip -d "$shots" >/dev/null 2>&1 || true; fi
   echo "screenshots: $(ls "$shots" | wc -l)"
+  echo "$ui_out" | grep -qE '^OK \(' || exit 1
 else
   # API 24/29 cover the native subsystem only: their bundled WebView cannot run
   # the modern packaged UI suite.
