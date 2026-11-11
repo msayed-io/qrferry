@@ -20,11 +20,11 @@ public final class LocalEngine implements AutoCloseable {
  private final Map<String,JSONObject> transfers=new LinkedHashMap<>();private final List<JSONObject>messages=new ArrayList<>();
  private final ConcurrentHashMap<String,Integer> incoming=new ConcurrentHashMap<>(),finalizing=new ConcurrentHashMap<>();
  private final ConcurrentHashMap<String,BlockingQueue<JSONObject>> responses=new ConcurrentHashMap<>();
- private final AtomicBoolean pumping=new AtomicBoolean(),clientRunning=new AtomicBoolean();private final AtomicInteger connectionVersion=new AtomicInteger();private volatile int retries;private volatile boolean peerPaused;private final Set<String> sent=ConcurrentHashMap.newKeySet();
+ private final AtomicInteger pumpOwner=new AtomicInteger(-1),clientOwner=new AtomicInteger(-1);private final ConcurrentHashMap<Integer,Socket>pendingConnections=new ConcurrentHashMap<>();private final AtomicInteger connectionVersion=new AtomicInteger();private volatile int retries;private volatile boolean peerPaused;private final Set<String> sent=ConcurrentHashMap.newKeySet();
  private final AtomicInteger epoch=new AtomicInteger();private volatile String phase="idle",error="",role="",method="",peer="",ticket="";
  private volatile boolean authenticated,started,paused,outgoingRequested;private volatile long revision,bytes,lastProgress;
  private volatile LocalPairing pairing;private volatile Network route;private volatile LocalIdentity identity;private volatile SSLServerSocket server;
- private volatile SSLSocket socket;private volatile DataOutputStream output;private volatile String receiverTicket="",receiverPeer="";
+ private volatile SSLSocket socket;private volatile DataOutputStream output;private volatile String receiverTicket="",receiverPeer="",pendingTicket="",pendingPeer="";
  private final String myPeer=UUID.randomUUID().toString();
  public LocalEngine(Context context){files=new LocalFiles(context);wifi=new LocalNetwork(context);clock.scheduleAtFixedRate(this::heartbeat,10,10,TimeUnit.SECONDS);}
  private synchronized void heartbeat(){
@@ -37,72 +37,113 @@ public final class LocalEngine implements AutoCloseable {
  public void changed(){JSONObject s;synchronized(this){revision++;s=snapshot();}for(Listener l:listeners)l.changed(s);}
  private void state(String p){phase=p;error="";changed();}public void fail(String code){error=code;phase=started?"paused":"error";changed();}
  public boolean busy(){return !Arrays.asList("idle","error","closed").contains(phase);}
- public void receive(String requested){reset();role="receive";state("preparing");int g=epoch.get();wifi.receive(requested,new LocalNetwork.Receiver(){
-  public void ready(String host,String ssid,String password,String chosen){if(epoch.get()!=g)return;io.execute(()->{try{listen(host,ssid,password,chosen,g);}catch(Exception e){if(epoch.get()==g)fail(code(e));}});}
-  public void failed(String code){if(epoch.get()==g)fail(code);}
+ public synchronized void receive(String requested){reset();role="receive";state("preparing");int g=epoch.get();wifi.receive(requested,new LocalNetwork.Receiver(){
+  public void ready(String host,String ssid,String password,String chosen){synchronized(LocalEngine.this){if(epoch.get()!=g||io.isShutdown())return;io.execute(()->{try{listen(host,ssid,password,chosen,g);}catch(Exception e){failSession(g,code(e));}});}}
+  public void failed(String code){failSession(g,code);}
  });}
  void listen(String host,String ssid,String password,String chosen,int g)throws Exception{
-  if(epoch.get()!=g)return;LocalIdentity fresh=new LocalIdentity(UUID.randomUUID().toString());SSLServerSocket listening=(SSLServerSocket)fresh.server.getServerSocketFactory().createServerSocket(0,4);listening.setEnabledProtocols(protocols(listening.getSupportedProtocols()));
-  synchronized(this){if(epoch.get()!=g){listening.close();fresh.close();return;}identity=fresh;server=listening;pairing=new LocalPairing(UUID.randomUUID().toString(),host,listening.getLocalPort(),fresh.fingerprint,LocalPairing.token(),ssid,password,chosen,System.currentTimeMillis()+5*60*1000);method=chosen;state("waiting");}
+  if(epoch.get()!=g)return;
+  LocalIdentity fresh=new LocalIdentity(UUID.randomUUID().toString());SSLServerSocket listening;
+  try{listening=(SSLServerSocket)fresh.server.getServerSocketFactory().createServerSocket(0,4);}catch(Exception e){fresh.close();throw e;}
+  listening.setEnabledProtocols(protocols(listening.getSupportedProtocols()));
+  LocalPairing offer=new LocalPairing(UUID.randomUUID().toString(),host,listening.getLocalPort(),fresh.fingerprint,LocalPairing.token(),ssid,password,chosen,System.currentTimeMillis()+5*60*1000);
+  synchronized(this){if(epoch.get()!=g){listening.close();fresh.close();return;}identity=fresh;server=listening;pairing=offer;method=chosen;state("waiting");}
   while(epoch.get()==g&&!listening.isClosed()){
-   SSLSocket candidate=null;try{candidate=(SSLSocket)listening.accept();if(authenticated){candidate.close();continue;}candidate.setSoTimeout(15000);candidate.startHandshake();DataInputStream in=new DataInputStream(candidate.getInputStream());DataOutputStream out=new DataOutputStream(candidate.getOutputStream());JSONObject hello=new JSONObject(LocalProtocol.readControl(in));
-    String supplied=hello.optString("credential"),id=hello.optString("peer");boolean first=receiverTicket.isEmpty();
-    if(!hello.optString("type").equals("hello")||hello.optInt("v")!=1||!hello.optString("session").equals(pairing.session)||!id.matches("[a-f0-9-]{36}")||(first?(System.currentTimeMillis()>pairing.expires||!LocalProtocol.secret(supplied,pairing.secret)):(!LocalProtocol.secret(supplied,receiverTicket)||!receiverPeer.equals(id))))throw new IOException("PAIRING_REJECTED");
-    String proposed=first?LocalPairing.token():receiverTicket;
+   SSLSocket candidate=null;
+   try{
+    candidate=(SSLSocket)listening.accept();
+    synchronized(this){if(epoch.get()!=g){candidate.close();break;}if(authenticated){candidate.close();continue;}pendingConnections.put(g,candidate);}
+    candidate.setSoTimeout(15000);candidate.startHandshake();DataInputStream in=new DataInputStream(candidate.getInputStream());DataOutputStream out=new DataOutputStream(candidate.getOutputStream());
+    JSONObject hello=new JSONObject(LocalProtocol.readControl(in));String id=hello.optString("peer"),proposed=authorizeHello(hello,offer,g);
     LocalProtocol.writeControl(out,new JSONObject().put("type","welcome").put("v",1).put("ticket",proposed).put("peer",myPeer).toString());
-    JSONObject confirm=new JSONObject(LocalProtocol.readControl(in));if(!confirm.optString("type").equals("confirm")||!LocalProtocol.secret(confirm.optString("ticket"),proposed))throw new IOException("PAIRING_REJECTED");
-    if(first){receiverPeer=id;receiverTicket=proposed;}
+    JSONObject confirm=new JSONObject(LocalProtocol.readControl(in));
+    if(!confirm.optString("type").equals("confirm")||!LocalProtocol.secret(confirm.optString("ticket"),proposed))throw new IOException("PAIRING_REJECTED");
+    confirmPeer(id,proposed,offer,g);
     LocalProtocol.writeControl(out,new JSONObject().put("type","ready").toString());
-    if(epoch.get()!=g){candidate.close();break;}activate(candidate,out,id,g);candidate=null;sendOn(new JSONObject().put("type","pause").put("value",paused),g,connectionVersion.get());readLoop(in,g);
-   }catch(Exception e){if(epoch.get()!=g)break;if(authenticated){String reason=code(e);try{send(new JSONObject().put("type","error").put("code",reason));}catch(Exception ignored){}lost(g);error=reason;changed();}}
-   finally{if(candidate!=null)try{candidate.close();}catch(Exception ignored){}}
+    activate(candidate,out,id,g);pendingConnections.remove(g,candidate);candidate=null;
+    sendOn(new JSONObject().put("type","pause").put("value",paused),g,connectionVersion.get());readLoop(in,g);
+   }catch(Exception e){if(epoch.get()!=g)break;if(authenticated){String reason=code(e);try{sendOn(new JSONObject().put("type","error").put("code",reason),g,connectionVersion.get());}catch(Exception ignored){}connectionError(g,reason);}}
+   finally{if(candidate!=null){pendingConnections.remove(g,candidate);try{candidate.close();}catch(Exception ignored){}}}
   }
  }
- public String pairingCode()throws Exception{LocalPairing p=pairing;if(p==null||!role.equals("receive")||authenticated||!receiverTicket.isEmpty()||p.expires<System.currentTimeMillis())throw new IOException("QR_NOT_READY");return p.encode();}
- public void join(String raw)throws Exception{
-  LocalPairing p=LocalPairing.decode(raw);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");reset();role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
-  wifi.connect(p,new LocalNetwork.Sender(){public void ready(Network n){if(epoch.get()!=g)return;route=n;connect(g);}public void failed(String code){if(epoch.get()==g){closeSocket();fail(code);}}});
+ private synchronized String authorizeHello(JSONObject hello,LocalPairing offer,int g)throws Exception{
+  if(epoch.get()!=g)throw new IOException("CANCELLED");String id=hello.optString("peer"),supplied=hello.optString("credential");boolean first=receiverTicket.isEmpty();
+  if(!hello.optString("type").equals("hello")||hello.optInt("v")!=1||!hello.optString("session").equals(offer.session)||!id.matches("[a-f0-9-]{36}"))throw new IOException("PAIRING_REJECTED");
+  if(!first){if(!receiverPeer.equals(id)||!LocalProtocol.secret(supplied,receiverTicket))throw new IOException("PAIRING_REJECTED");return receiverTicket;}
+  boolean original=LocalProtocol.secret(supplied,offer.secret),pending=id.equals(pendingPeer)&&!pendingTicket.isEmpty()&&LocalProtocol.secret(supplied,pendingTicket);
+  if(System.currentTimeMillis()>offer.expires||(!original&&!pending))throw new IOException("PAIRING_REJECTED");
+  if(!id.equals(pendingPeer)||pendingTicket.isEmpty()){pendingPeer=id;pendingTicket=LocalPairing.token();}return pendingTicket;
  }
- private synchronized void connect(int g){if(io.isShutdown()||epoch.get()!=g||!clientRunning.compareAndSet(false,true))return;io.execute(()->{Socket raw=null;SSLSocket candidate=null;boolean retry=false;try{if(epoch.get()!=g)return;
-  raw=new Socket();if(route!=null)route.bindSocket(raw);raw.connect(new InetSocketAddress(pairing.host,pairing.port),15000);
-  SSLSocket s=candidate=(SSLSocket)LocalIdentity.client(pairing.pin).getSocketFactory().createSocket(raw,pairing.host,pairing.port,true);s.setEnabledProtocols(protocols(s.getSupportedProtocols()));s.setSoTimeout(15000);s.startHandshake();
-  DataInputStream in=new DataInputStream(s.getInputStream());DataOutputStream out=new DataOutputStream(s.getOutputStream());
-  LocalProtocol.writeControl(out,new JSONObject().put("type","hello").put("v",1).put("session",pairing.session).put("credential",ticket.isEmpty()?pairing.secret:ticket).put("peer",myPeer).toString());
-  JSONObject welcome=new JSONObject(LocalProtocol.readControl(in));if(!welcome.optString("type").equals("welcome")||!welcome.optString("ticket").matches("[A-Za-z0-9_-]{43}"))throw new IOException("INVALID_HANDSHAKE");ticket=welcome.getString("ticket");
-  LocalProtocol.writeControl(out,new JSONObject().put("type","confirm").put("ticket",ticket).toString());
-  if(!new JSONObject(LocalProtocol.readControl(in)).optString("type").equals("ready"))throw new IOException("INVALID_HANDSHAKE");
-  if(epoch.get()!=g){s.close();return;}activate(s,out,welcome.getString("peer"),g);sendOn(new JSONObject().put("type","pause").put("value",paused),g,connectionVersion.get());pump();readLoop(in,g);
- }catch(Exception e){retry=e instanceof EOFException||e instanceof java.net.SocketException||e instanceof java.net.SocketTimeoutException;if(epoch.get()==g){lost(g);error=code(e);changed();}}finally{if(candidate!=null)try{candidate.close();}catch(Exception ignored){}else if(raw!=null)try{raw.close();}catch(Exception ignored){}clientRunning.set(false);if(retry)reconnectLater(g);}});}
+ private synchronized void confirmPeer(String id,String proposed,LocalPairing offer,int g)throws IOException{
+  if(epoch.get()!=g)throw new IOException("CANCELLED");
+  if(receiverTicket.isEmpty()){
+   if(System.currentTimeMillis()>offer.expires||!pendingPeer.equals(id)||!LocalProtocol.secret(pendingTicket,proposed))throw new IOException("PAIRING_REJECTED");
+   receiverPeer=id;receiverTicket=proposed;pendingPeer="";pendingTicket="";
+  }else if(!receiverPeer.equals(id)||!LocalProtocol.secret(receiverTicket,proposed))throw new IOException("PAIRING_REJECTED");
+ }
+ public String pairingCode()throws Exception{LocalPairing p=pairing;if(p==null||!role.equals("receive")||authenticated||!receiverTicket.isEmpty()||p.expires<System.currentTimeMillis())throw new IOException("QR_NOT_READY");return p.encode();}
+ public synchronized void join(String raw)throws Exception{
+  LocalPairing p=LocalPairing.decode(raw);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");reset();role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
+  wifi.connect(p,new LocalNetwork.Sender(){public void ready(Network n){synchronized(LocalEngine.this){if(epoch.get()!=g)return;route=n;connect(g);}}public void failed(String code){connectionError(g,code);}});
+ }
+ private synchronized void connect(int g){
+  if(io.isShutdown()||epoch.get()!=g||clientOwner.get()==g||pairing==null)return;
+  final LocalPairing offer=pairing;final Network network=route;final String credential=ticket.isEmpty()?offer.secret:ticket;clientOwner.set(g);
+  io.execute(()->{
+   Socket raw=null;SSLSocket candidate=null;boolean retry=false;
+   try{
+    raw=new Socket();synchronized(this){if(epoch.get()!=g)return;pendingConnections.put(g,raw);}
+    if(network!=null)network.bindSocket(raw);raw.connect(new InetSocketAddress(offer.host,offer.port),15000);
+    SSLSocket connection=candidate=(SSLSocket)LocalIdentity.client(offer.pin).getSocketFactory().createSocket(raw,offer.host,offer.port,true);
+    connection.setEnabledProtocols(protocols(connection.getSupportedProtocols()));connection.setSoTimeout(15000);connection.startHandshake();
+    DataInputStream in=new DataInputStream(connection.getInputStream());DataOutputStream out=new DataOutputStream(connection.getOutputStream());
+    LocalProtocol.writeControl(out,new JSONObject().put("type","hello").put("v",1).put("session",offer.session).put("credential",credential).put("peer",myPeer).toString());
+    JSONObject welcome=new JSONObject(LocalProtocol.readControl(in));
+    if(!welcome.optString("type").equals("welcome")||welcome.optInt("v")!=1||!welcome.optString("ticket").matches("[A-Za-z0-9_-]{43}")||!welcome.optString("peer").matches("[a-f0-9-]{36}"))throw new IOException("INVALID_HANDSHAKE");
+    String proposed=welcome.getString("ticket");synchronized(this){if(epoch.get()!=g)throw new IOException("CANCELLED");ticket=proposed;}
+    LocalProtocol.writeControl(out,new JSONObject().put("type","confirm").put("ticket",proposed).toString());
+    if(!new JSONObject(LocalProtocol.readControl(in)).optString("type").equals("ready"))throw new IOException("INVALID_HANDSHAKE");
+    activate(connection,out,welcome.getString("peer"),g);pendingConnections.remove(g,raw);
+    sendOn(new JSONObject().put("type","pause").put("value",paused),g,connectionVersion.get());pump();readLoop(in,g);
+   }catch(Exception e){retry=e instanceof EOFException||e instanceof java.net.SocketException||e instanceof java.net.SocketTimeoutException;connectionError(g,code(e));}
+   finally{
+    if(candidate!=null)try{candidate.close();}catch(Exception ignored){}else if(raw!=null)try{raw.close();}catch(Exception ignored){}
+    if(raw!=null)pendingConnections.remove(g,raw);clientOwner.compareAndSet(g,-1);if(retry)reconnectLater(g);
+   }
+  });
+ }
  private synchronized void reconnectLater(int g){
-  if(epoch.get()!=g||clock.isShutdown()||authenticated||paused||ticket.isEmpty()||retries>=3)return;
+  if(epoch.get()!=g||clock.isShutdown()||authenticated||paused||(ticket.isEmpty()&&(pairing==null||pairing.expires<System.currentTimeMillis()))||retries>=3)return;
   retries++;clock.schedule(()->connect(g),Math.min(8,1<<retries),TimeUnit.SECONDS);
  }
  private synchronized void activate(SSLSocket s,DataOutputStream out,String id,int g)throws Exception{if(epoch.get()!=g)throw new IOException("CANCELLED");closeSocket();socket=s;output=out;s.setSoTimeout(90000);authenticated=true;peer=id;state(started?"transferring":"paired");}
  private void readLoop(DataInputStream in,int g)throws Exception{
-  while(epoch.get()==g&&authenticated){JSONObject m=new JSONObject(LocalProtocol.readControl(in));String type=m.getString("type"),id=m.optString("id");
+  while(epoch.get()==g&&authenticated){JSONObject m=new JSONObject(LocalProtocol.readControl(in));if(epoch.get()!=g||!authenticated)throw new IOException("CANCELLED");String type=m.getString("type"),id=m.optString("id");
    switch(type){
-    case "pause":peerPaused=m.getBoolean("value");phase=peerPaused||paused?"paused":started?"transferring":"paired";changed();if(!peerPaused&&!paused)pump();break;
-    case "ping":send(new JSONObject().put("type","pong"));break;case "pong":break;
+    case "pause":pauseFromPeer(m.getBoolean("value"),g);break;
+    case "ping":reply(new JSONObject().put("type","pong"),g);break;case "pong":break;
     case "offer":{
      if(!LocalProtocol.hash(id))throw new IOException("INVALID_FILE_ID");long size=m.getLong("size");String name=LocalProtocol.safeName(m.getString("name")),mime=m.optString("mime","application/octet-stream");if(mime.length()>200)throw new IOException("INVALID_MIME");
      synchronized(this){if(transfers.size()>=LocalProtocol.MAX_FILES&&!transfers.containsKey(id))throw new IOException("TOO_MANY_FILES");}
-     if(finalizing.containsKey(id)){send(new JSONObject().put("type","pending").put("id",id));break;}if(!finalizing.isEmpty())throw new IOException("TRANSFER_BUSY");
-     long offset=files.prepare(id,name,mime,size,m.getString("sha256"));String completed=files.published(id);incoming.put(id,g);record(id,name,size,"in",completed==null?"receiving":"verifying",completed==null?offset:size);
-     if(completed!=null){finalizeIncoming(id,g);send(new JSONObject().put("type","pending").put("id",id));}
-     else send(new JSONObject().put("type","accept").put("id",id).put("offset",offset));break;
+     if(finalizing.containsKey(id)){reply(new JSONObject().put("type","pending").put("id",id),g);break;}if(!finalizing.isEmpty())throw new IOException("TRANSFER_BUSY");
+     long offset=files.prepare(id,name,mime,size,m.getString("sha256"));String completed=files.published(id);recordIncoming(id,name,size,completed==null?"receiving":"verifying",completed==null?offset:size,g);
+     if(completed!=null){finalizeIncoming(id,g);reply(new JSONObject().put("type","pending").put("id",id),g);}
+     else reply(new JSONObject().put("type","accept").put("id",id).put("offset",offset),g);break;
     }
     case "chunk":{
-     requireIncoming(id,g);long offset=m.getLong("offset");int count=m.getInt("length");if(!LocalProtocol.hash(id)||count<1||count>LocalProtocol.CHUNK)throw new IOException("INVALID_CHUNK");byte[]data=new byte[count];in.readFully(data);long end=files.append(id,offset,data,count);started=true;bytes+=count;progress(id,end);phase="transferring";send(new JSONObject().put("type","ack").put("id",id).put("offset",end));break;
+     requireIncoming(id,g);long offset=m.getLong("offset");int count=m.getInt("length");if(!LocalProtocol.hash(id)||count<1||count>LocalProtocol.CHUNK)throw new IOException("INVALID_CHUNK");byte[]data=new byte[count];in.readFully(data);long end=files.append(id,offset,data,count);receivedChunk(id,end,count,g);reply(new JSONObject().put("type","ack").put("id",id).put("offset",end),g);break;
     }
     case "finish":finalizeIncoming(id,g);break;
-    case "pending":case "accept":case "ack":case "complete":case "reject":{BlockingQueue<JSONObject> q=responses.get(id);if(q!=null&&!q.offer(m))throw new IOException("UNEXPECTED_RESPONSE");break;}
-    case "message":{String text=m.getString("text");if(!authenticated||!started||text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>16000||!id.matches("[a-f0-9-]{36}"))throw new IOException("INVALID_MESSAGE");synchronized(this){boolean exists=false;for(JSONObject item:messages)if(id.equals(item.optString("id")))exists=true;if(!exists){if(messages.size()>=500)messages.remove(0);messages.add(new JSONObject().put("id",id).put("text",text).put("direction","in").put("status","received").put("time",System.currentTimeMillis()));}}send(new JSONObject().put("type","messageAck").put("id",id));changed();break;}
-    case "messageAck":synchronized(this){for(JSONObject item:messages)if(id.equals(item.optString("id")))item.put("status","delivered");}changed();break;
+    case "pending":case "accept":case "ack":case "complete":case "reject":{synchronized(this){checkEpoch(g);BlockingQueue<JSONObject> q=responses.get(id);if(q!=null&&!q.offer(m))throw new IOException("UNEXPECTED_RESPONSE");}break;}
+    case "message":{String text=m.getString("text");if(!authenticated||!started||text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>16000||!id.matches("[a-f0-9-]{36}"))throw new IOException("INVALID_MESSAGE");synchronized(this){checkEpoch(g);boolean exists=false;for(JSONObject item:messages)if(id.equals(item.optString("id")))exists=true;if(!exists){if(messages.size()>=500)messages.remove(0);messages.add(new JSONObject().put("id",id).put("text",text).put("direction","in").put("status","received").put("time",System.currentTimeMillis()));}}reply(new JSONObject().put("type","messageAck").put("id",id),g);changed();break;}
+    case "messageAck":synchronized(this){checkEpoch(g);for(JSONObject item:messages)if(id.equals(item.optString("id")))item.put("status","delivered");}changed();break;
     case "error":throw new IOException(m.optString("code","PEER_ERROR"));
     case "close":throw new IOException("PEER_DISCONNECTED");default:throw new IOException("UNKNOWN_FRAME");
    }
   }
  }
+ private void reply(JSONObject json,int g)throws Exception{sendOn(json,g,connectionVersion.get());}
+ private synchronized void pauseFromPeer(boolean value,int g)throws Exception{checkEpoch(g);peerPaused=value;phase=peerPaused||paused?"paused":started?"transferring":"paired";changed();if(!peerPaused&&!paused)pump();}
  private void requireIncoming(String id,int g)throws IOException{if(!Integer.valueOf(g).equals(incoming.get(id))||finalizing.containsKey(id))throw new IOException("FILE_NOT_ACCEPTED");}
  private synchronized void finalizeIncoming(String id,int g)throws Exception{
   if(epoch.get()!=g||io.isShutdown())throw new IOException("CANCELLED");requireIncoming(id,g);finalizing.put(id,g);
@@ -110,7 +151,7 @@ public final class LocalEngine implements AutoCloseable {
   io.execute(()->{
    try{
     files.finish(id,()->epoch.get()==g&&!Thread.currentThread().isInterrupted());
-    synchronized(this){if(epoch.get()!=g)return;finalizing.remove(id,g);incoming.remove(id,g);started=true;complete(id);phase="transferring";changed();}
+    synchronized(this){if(epoch.get()!=g)return;finalizing.remove(id,g);incoming.remove(id,g);started=true;complete(id,g);phase="transferring";changed();}
     // The file stays committed even if the final ACK is lost. A re-offer reads
     // the receipt; never discard a committed file because a socket closed.
     try{sendOn(new JSONObject().put("type","complete").put("id",id),g,connectionVersion.get());}catch(Exception disconnected){}
@@ -119,39 +160,52 @@ public final class LocalEngine implements AutoCloseable {
    }
   });
  }
- private synchronized void record(String id,String name,long size,String direction,String status,long offset)throws Exception{transfers.put(id,new JSONObject().put("id",id).put("name",name).put("size",size).put("direction",direction).put("status",status).put("bytes",offset));changed();}
- private synchronized void progress(String id,long offset)throws Exception{JSONObject f=transfers.get(id);if(f==null)throw new IOException("UNKNOWN_TRANSFER");f.put("bytes",offset);long now=android.os.SystemClock.elapsedRealtime();if(now-lastProgress>=100){lastProgress=now;changed();}}
- private synchronized void accepted(String id,long offset)throws Exception{JSONObject f=transfers.get(id);if(f==null)throw new IOException("UNKNOWN_TRANSFER");f.put("bytes",offset).put("resumeOffset",offset).put("status","sending");changed();}
- private synchronized void awaitingCommit(String id)throws Exception{JSONObject f=transfers.get(id);if(f!=null)f.put("status","awaiting-commit");changed();}
- private synchronized void complete(String id)throws Exception{JSONObject f=transfers.get(id);if(f!=null)f.put("bytes",f.getLong("size")).put("status","complete");changed();}
- public void sendSelected(){outgoingRequested=true;pump();}
- public synchronized void pump(){if((!role.equals("send")&&!outgoingRequested)||io.isShutdown()||!authenticated||paused||peerPaused||!pumping.compareAndSet(false,true))return;int g=epoch.get(),version=connectionVersion.get();io.execute(()->{try{
+ private void checkEpoch(int g)throws IOException{if(epoch.get()!=g)throw new IOException("CANCELLED");}
+ private void checkConnection(int g,int version)throws IOException{checkEpoch(g);if(connectionVersion.get()!=version||!authenticated)throw new IOException("DISCONNECTED");}
+ private synchronized void recordIncoming(String id,String name,long size,String status,long offset,int g)throws Exception{checkEpoch(g);incoming.put(id,g);record(id,name,size,"in",status,offset,g);}
+ private synchronized void receivedChunk(String id,long offset,int count,int g)throws Exception{checkEpoch(g);started=true;bytes+=count;phase="transferring";progress(id,offset,g);}
+ private synchronized void acknowledgedChunk(String id,long offset,int count,int g,int version)throws Exception{checkConnection(g,version);started=true;bytes+=count;retries=0;phase="transferring";progress(id,offset,g);}
+ private synchronized void markSent(String id,int g,int version)throws Exception{checkConnection(g,version);sent.add(id);started=true;complete(id,g);}
+ private synchronized void preparingSource(int g,int version)throws Exception{checkConnection(g,version);state(started?"transferring":"preparing-files");}
+ private synchronized void record(String id,String name,long size,String direction,String status,long offset,int g)throws Exception{checkEpoch(g);transfers.put(id,new JSONObject().put("id",id).put("name",name).put("size",size).put("direction",direction).put("status",status).put("bytes",offset));changed();}
+ private synchronized void progress(String id,long offset,int g)throws Exception{checkEpoch(g);JSONObject f=transfers.get(id);if(f==null)throw new IOException("UNKNOWN_TRANSFER");f.put("bytes",offset);long now=android.os.SystemClock.elapsedRealtime();if(now-lastProgress>=100){lastProgress=now;changed();}}
+ private synchronized void accepted(String id,long offset,int g,int version)throws Exception{checkConnection(g,version);JSONObject f=transfers.get(id);if(f==null)throw new IOException("UNKNOWN_TRANSFER");f.put("bytes",offset).put("resumeOffset",offset).put("status","sending");changed();}
+ private synchronized void awaitingCommit(String id,int g,int version)throws Exception{checkConnection(g,version);JSONObject f=transfers.get(id);if(f!=null)f.put("status","awaiting-commit");changed();}
+ private synchronized void complete(String id,int g)throws Exception{checkEpoch(g);JSONObject f=transfers.get(id);if(f!=null)f.put("bytes",f.getLong("size")).put("status","complete");changed();}
+ public synchronized void sendSelected(){outgoingRequested=true;pump();}
+ public synchronized void pump(){if((!role.equals("send")&&!outgoingRequested)||io.isShutdown()||!authenticated||paused||peerPaused||pumpOwner.get()==epoch.get())return;int g=epoch.get(),version=connectionVersion.get();pumpOwner.set(g);io.execute(()->{try{
   for(LocalFiles.Source source:files.sources()){
-   if(!authenticated||epoch.get()!=g||paused)break;state(started?"transferring":"preparing-files");String digest=hashSource(source,g),id=source.transferId(digest);if(epoch.get()!=g||connectionVersion.get()!=version)throw new IOException("DISCONNECTED");if(sent.contains(id))continue;
+   if(!authenticated||epoch.get()!=g||paused)break;preparingSource(g,version);String digest=hashSource(source,g),id=source.transferId(digest);if(epoch.get()!=g||connectionVersion.get()!=version)throw new IOException("DISCONNECTED");if(sent.contains(id))continue;
    BlockingQueue<JSONObject> q=new ArrayBlockingQueue<>(4);responses.put(id,q);
    try{
-    record(id,source.name,source.size,"out","offering",0);sendOn(new JSONObject().put("type","offer").put("id",id).put("name",source.name).put("mime",source.mime).put("size",source.size).put("sha256",digest),g,version);JSONObject answer=await(q,g,version);
-    if(answer.getString("type").equals("complete")){sent.add(id);started=true;complete(id);continue;}
-    if(!answer.getString("type").equals("accept"))throw new IOException("TRANSFER_REJECTED");long offset=answer.getLong("offset");if(offset<0||offset>source.size)throw new IOException("INVALID_RESUME_OFFSET");accepted(id,offset);
+    record(id,source.name,source.size,"out","offering",0,g);sendOn(new JSONObject().put("type","offer").put("id",id).put("name",source.name).put("mime",source.mime).put("size",source.size).put("sha256",digest),g,version);JSONObject answer=await(q,g,version);
+    if(answer.getString("type").equals("complete")){markSent(id,g,version);continue;}
+    if(!answer.getString("type").equals("accept"))throw new IOException("TRANSFER_REJECTED");long offset=answer.getLong("offset");if(offset<0||offset>source.size)throw new IOException("INVALID_RESUME_OFFSET");accepted(id,offset,g,version);
     try(InputStream in=files.open(source)){
      LocalProtocol.skipFully(in,offset);byte[]buffer=new byte[LocalProtocol.CHUNK];
      while(offset<source.size){if(epoch.get()!=g||!authenticated||connectionVersion.get()!=version)throw new IOException("DISCONNECTED");while((paused||peerPaused)&&epoch.get()==g&&authenticated&&connectionVersion.get()==version)Thread.sleep(100);if(epoch.get()!=g||!authenticated||connectionVersion.get()!=version)throw new IOException("DISCONNECTED");int want=(int)Math.min(buffer.length,source.size-offset),n=0;while(n<want){int read=in.read(buffer,n,want-n);if(read<0)throw new EOFException("SOURCE_CHANGED");n+=read;}
-      sendChunk(id,offset,buffer,n,g,version);JSONObject ack=await(q,g,version);if(!ack.getString("type").equals("ack")||ack.getLong("offset")!=offset+n)throw new IOException("INVALID_ACK");offset+=n;bytes+=n;retries=0;started=true;phase="transferring";progress(id,offset);
+      sendChunk(id,offset,buffer,n,g,version);JSONObject ack=await(q,g,version);if(!ack.getString("type").equals("ack")||ack.getLong("offset")!=offset+n)throw new IOException("INVALID_ACK");offset+=n;acknowledgedChunk(id,offset,n,g,version);
      }
     }
-    sendOn(new JSONObject().put("type","finish").put("id",id),g,version);awaitingCommit(id);JSONObject done=await(q,g,version);if(!done.getString("type").equals("complete"))throw new IOException("TRANSFER_NOT_COMMITTED");started=true;sent.add(id);complete(id);
-   }finally{responses.remove(id);}
+    sendOn(new JSONObject().put("type","finish").put("id",id),g,version);awaitingCommit(id,g,version);JSONObject done=await(q,g,version);if(!done.getString("type").equals("complete"))throw new IOException("TRANSFER_NOT_COMMITTED");markSent(id,g,version);
+   }finally{responses.remove(id,q);}
   }
-  if(epoch.get()==g&&connectionVersion.get()==version&&authenticated&&!paused&&!peerPaused)state(started?"complete":"paired");
- }catch(Exception e){if(epoch.get()==g&&connectionVersion.get()==version){error=code(e);phase="paused";changed();}}finally{pumping.set(false);if(epoch.get()==g&&authenticated&&connectionVersion.get()!=version&&!paused&&!peerPaused)pump();}});}
+  finishPump(g,version);
+ }catch(Exception e){failPump(e,g,version);}finally{pumpOwner.compareAndSet(g,-1);if(epoch.get()==g&&authenticated&&connectionVersion.get()!=version&&!paused&&!peerPaused)pump();}});}
  private String hashSource(LocalFiles.Source source,int g)throws Exception{java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");long size=0;try(InputStream in=files.open(source)){byte[]buffer=new byte[LocalProtocol.CHUNK];for(int n;(n=in.read(buffer))!=-1;){if(epoch.get()!=g)throw new IOException("CANCELLED");size+=n;digest.update(buffer,0,n);}}if(size!=source.size)throw new IOException("SOURCE_CHANGED");return source.hash=LocalProtocol.hex(digest.digest());}
  private JSONObject await(BlockingQueue<JSONObject> q,int g,int version)throws Exception{long end=android.os.SystemClock.elapsedRealtime()+300000;while(epoch.get()==g&&connectionVersion.get()==version&&authenticated&&android.os.SystemClock.elapsedRealtime()<end){JSONObject m=q.poll(1,TimeUnit.SECONDS);if(m!=null&&epoch.get()==g&&connectionVersion.get()==version&&authenticated){if(m.optString("type").equals("pending")){end=android.os.SystemClock.elapsedRealtime()+300000;continue;}return m;}}throw new IOException("ACK_TIMEOUT_OR_DISCONNECTED");}
- public void pause(boolean value){if(!value)retries=0;paused=value;try{if(authenticated)send(new JSONObject().put("type","pause").put("value",value));}catch(Exception e){error="CONNECTION_LOST";}state(value?"paused":authenticated?"transferring":"connecting");if(!value){if(authenticated)pump();else if(role.equals("send")&&pairing!=null)connect(epoch.get());}}
+ public void pause(boolean value){
+  int g,version;boolean notify;
+  synchronized(this){g=epoch.get();version=connectionVersion.get();if(!value)retries=0;paused=value;notify=authenticated;state(value?"paused":authenticated?(started?"transferring":"paired"):"connecting");}
+  if(notify)try{sendOn(new JSONObject().put("type","pause").put("value",value),g,version);}catch(Exception e){connectionError(g,"CONNECTION_LOST");}
+  synchronized(this){if(epoch.get()!=g)return;if(!value){if(authenticated)pump();else if(role.equals("send")&&pairing!=null)connect(g);}}
+ }
  public void message(String text)throws Exception{
-  if(!authenticated||!started)throw new IOException("NO_ACTIVE_TRANSFER_SESSION");text=text.trim();if(text.isEmpty()||text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>16000)throw new IOException("MESSAGE_TOO_LARGE");String id=UUID.randomUUID().toString();
+  text=text.trim();if(text.isEmpty()||text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>16000)throw new IOException("MESSAGE_TOO_LARGE");
+  String id=UUID.randomUUID().toString();int g,version;
   JSONObject row=new JSONObject().put("id",id).put("text",text).put("direction","out").put("status","sending").put("time",System.currentTimeMillis());
-  synchronized(this){if(messages.size()>=500)messages.remove(0);messages.add(row);}changed();
-  try{send(new JSONObject().put("type","message").put("id",id).put("text",text));synchronized(this){if(row.optString("status").equals("sending"))row.put("status","sent");}}
+  synchronized(this){if(!authenticated||!started)throw new IOException("NO_ACTIVE_TRANSFER_SESSION");g=epoch.get();version=connectionVersion.get();if(messages.size()>=500)messages.remove(0);messages.add(row);}changed();
+  try{sendOn(new JSONObject().put("type","message").put("id",id).put("text",text),g,version);synchronized(this){if(row.optString("status").equals("sending"))row.put("status","sent");}}
   catch(Exception e){synchronized(this){row.put("status","failed");}throw e;}finally{changed();}
  }
  private void send(JSONObject json)throws Exception{sendOn(json,epoch.get(),connectionVersion.get());}
@@ -167,11 +221,15 @@ public final class LocalEngine implements AutoCloseable {
    try{LocalProtocol.writeControl(out,new JSONObject().put("type","chunk").put("id",id).put("offset",offset).put("length",n).toString());out.write(data,0,n);out.flush();}finally{writeDeadline=0;}
   }
  }
+ private synchronized void failSession(int g,String reason){if(epoch.get()==g)fail(reason);}
+ private synchronized void connectionError(int g,String reason){if(epoch.get()!=g)return;closeSocket();phase="paused";error=reason;changed();}
+ private synchronized void finishPump(int g,int version){if(epoch.get()==g&&connectionVersion.get()==version&&authenticated&&!paused&&!peerPaused)state(started?"complete":"paired");}
+ private synchronized void failPump(Exception e,int g,int version){if(epoch.get()==g&&connectionVersion.get()==version){error=code(e);phase="paused";changed();}}
  private synchronized void lost(int g){if(epoch.get()!=g)return;closeSocket();phase="paused";error="CONNECTION_LOST";changed();}
  private void closeSocket(){connectionVersion.incrementAndGet();authenticated=false;SSLSocket old=socket;socket=null;output=null;if(old!=null)try{old.close();}catch(Exception ignored){}}
- private void closeTransport(){closeSocket();SSLServerSocket old=server;server=null;if(old!=null)try{old.close();}catch(Exception ignored){}wifi.close();LocalIdentity id=identity;identity=null;if(id!=null)id.close();}
- public synchronized void reset(){epoch.incrementAndGet();files.cancelFileWork();closeTransport();pairing=null;route=null;ticket="";receiverTicket="";receiverPeer="";started=false;paused=false;outgoingRequested=false;peerPaused=false;retries=0;role="";peer="";method="";sent.clear();responses.clear();incoming.clear();finalizing.clear();synchronized(this){transfers.clear();messages.clear();bytes=0;}state("idle");}
- public void disconnect(){reset();state("closed");}
+ private void closeTransport(){closeSocket();for(Socket pending:pendingConnections.values())try{pending.close();}catch(Exception ignored){}pendingConnections.clear();SSLServerSocket old=server;server=null;if(old!=null)try{old.close();}catch(Exception ignored){}wifi.close();LocalIdentity id=identity;identity=null;if(id!=null)id.close();}
+ public synchronized void reset(){epoch.incrementAndGet();files.cancelFileWork();closeTransport();pairing=null;route=null;ticket="";receiverTicket="";receiverPeer="";pendingTicket="";pendingPeer="";started=false;paused=false;outgoingRequested=false;peerPaused=false;retries=0;role="";peer="";method="";sent.clear();responses.clear();incoming.clear();finalizing.clear();synchronized(this){transfers.clear();messages.clear();bytes=0;}state("idle");}
+ public synchronized void disconnect(){reset();state("closed");}
  public synchronized void shutdown(){disconnect();clock.shutdownNow();io.shutdownNow();}
  @Override public void close(){disconnect();}
  private static String[]protocols(String[]supported){List<String>a=new ArrayList<>();for(String p:supported)if(p.equals("TLSv1.2")||p.equals("TLSv1.3"))a.add(p);return a.toArray(new String[0]);}

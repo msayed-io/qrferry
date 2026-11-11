@@ -3,6 +3,7 @@ import static org.junit.Assert.*;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.*;
+import org.json.JSONObject;
 import org.junit.runner.RunWith;
 import java.io.*;
 import java.util.*;
@@ -146,6 +147,47 @@ public class LocalNativeTest {
    if(saved!=null){android.net.Uri uri=android.net.Uri.parse(saved);if("file".equals(uri.getScheme()))new File(uri.getPath()).delete();else context.getContentResolver().delete(uri,null,null);}
    for(String suffix:new String[]{".json",".done",".part"})new File(context.getFilesDir(),"local-inbox/"+id+suffix).delete();
   }
+ }
+
+ @Test public void interruptedWelcomeRetainsTicketAndConfirmedQrCannotBeReused()throws Exception{
+  LocalEngine receiver=new LocalEngine(InstrumentationRegistry.getInstrumentation().getTargetContext());ExecutorService worker=Executors.newSingleThreadExecutor();
+  try{
+   java.lang.reflect.Field role=LocalEngine.class.getDeclaredField("role"),field=LocalEngine.class.getDeclaredField("pairing");role.setAccessible(true);field.setAccessible(true);role.set(receiver,"receive");
+   Future<?>serving=worker.submit(()->{try{receiver.listen("127.0.0.1","","","lan",0);}catch(Exception e){throw new RuntimeException(e);}});
+   long deadline=System.currentTimeMillis()+15000;while(field.get(receiver)==null&&System.currentTimeMillis()<deadline)Thread.sleep(25);LocalPairing offer=(LocalPairing)field.get(receiver);assertNotNull(offer);
+   String peer=UUID.randomUUID().toString(),ticket;
+   try(SSLSocket client=(SSLSocket)LocalIdentity.client(offer.pin).getSocketFactory().createSocket("127.0.0.1",offer.port)){
+    client.setSoTimeout(5000);client.startHandshake();LocalProtocol.writeControl(new DataOutputStream(client.getOutputStream()),hello(offer,peer,offer.secret).toString());
+    ticket=new JSONObject(LocalProtocol.readControl(new DataInputStream(client.getInputStream()))).getString("ticket");
+   }
+   assertFalse(receiver.snapshot().getBoolean("authenticated"));assertFalse(receiver.snapshot().getBoolean("started"));
+   try(SSLSocket client=(SSLSocket)LocalIdentity.client(offer.pin).getSocketFactory().createSocket("127.0.0.1",offer.port)){
+    client.setSoTimeout(5000);client.startHandshake();DataOutputStream out=new DataOutputStream(client.getOutputStream());DataInputStream in=new DataInputStream(client.getInputStream());LocalProtocol.writeControl(out,hello(offer,peer,ticket).toString());
+    assertEquals(ticket,new JSONObject(LocalProtocol.readControl(in)).getString("ticket"));LocalProtocol.writeControl(out,new JSONObject().put("type","confirm").put("ticket",ticket).toString());assertEquals("ready",new JSONObject(LocalProtocol.readControl(in)).getString("type"));
+    deadline=System.currentTimeMillis()+3000;while(!receiver.snapshot().getBoolean("authenticated")&&System.currentTimeMillis()<deadline)Thread.sleep(10);assertTrue(receiver.snapshot().getBoolean("authenticated"));assertFalse(receiver.snapshot().getBoolean("started"));assertFalse(receiver.snapshot().getBoolean("qrReady"));
+   }
+   deadline=System.currentTimeMillis()+3000;while(receiver.snapshot().getBoolean("authenticated")&&System.currentTimeMillis()<deadline)Thread.sleep(10);
+   try(SSLSocket client=(SSLSocket)LocalIdentity.client(offer.pin).getSocketFactory().createSocket("127.0.0.1",offer.port)){
+    client.setSoTimeout(3000);client.startHandshake();LocalProtocol.writeControl(new DataOutputStream(client.getOutputStream()),hello(offer,UUID.randomUUID().toString(),offer.secret).toString());
+    try{LocalProtocol.readControl(new DataInputStream(client.getInputStream()));fail("Consumed QR authorized a second peer");}catch(IOException expected){}
+   }
+   receiver.disconnect();serving.get(5,TimeUnit.SECONDS);
+  }finally{receiver.shutdown();worker.shutdownNow();}
+ }
+ private static JSONObject hello(LocalPairing offer,String peer,String credential)throws Exception{return new JSONObject().put("type","hello").put("v",1).put("session",offer.session).put("peer",peer).put("credential",credential);}
+ @Test public void cancelledHandshakeDoesNotBlockTheNextSession()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();LocalEngine receiver=new LocalEngine(context),sender=new LocalEngine(context);ExecutorService worker=Executors.newFixedThreadPool(2);
+  java.net.ServerSocket stalled=new java.net.ServerSocket(0);CountDownLatch accepted=new CountDownLatch(1),release=new CountDownLatch(1);
+  try{
+   Future<?>old=worker.submit(()->{try(java.net.Socket socket=stalled.accept()){accepted.countDown();release.await(15,TimeUnit.SECONDS);}catch(Exception e){throw new RuntimeException(e);}});
+   java.lang.reflect.Field role=LocalEngine.class.getDeclaredField("role"),field=LocalEngine.class.getDeclaredField("pairing");role.setAccessible(true);field.setAccessible(true);role.set(sender,"send");role.set(receiver,"receive");
+   field.set(sender,new LocalPairing(UUID.randomUUID().toString(),"127.0.0.1",stalled.getLocalPort(),String.join("",Collections.nCopies(64,"a")),LocalPairing.token(),"","","lan",System.currentTimeMillis()+60000));
+   java.lang.reflect.Method connect=LocalEngine.class.getDeclaredMethod("connect",int.class);connect.setAccessible(true);connect.invoke(sender,0);assertTrue(accepted.await(5,TimeUnit.SECONDS));sender.reset();
+   Future<?>serving=worker.submit(()->{try{receiver.listen("127.0.0.1","","","lan",0);}catch(Exception e){throw new RuntimeException(e);}});
+   long deadline=System.currentTimeMillis()+15000;while(field.get(receiver)==null&&System.currentTimeMillis()<deadline)Thread.sleep(25);assertNotNull(field.get(receiver));role.set(sender,"send");field.set(sender,field.get(receiver));connect.invoke(sender,1);release.countDown();old.get(5,TimeUnit.SECONDS);
+   deadline=System.currentTimeMillis()+15000;while(!sender.snapshot().getBoolean("authenticated")&&System.currentTimeMillis()<deadline)Thread.sleep(25);assertTrue("A cancelled client task blocked the new session",sender.snapshot().getBoolean("authenticated"));assertFalse(sender.snapshot().getBoolean("started"));
+   receiver.disconnect();serving.get(5,TimeUnit.SECONDS);
+  }finally{release.countDown();stalled.close();sender.shutdown();receiver.shutdown();worker.shutdownNow();}
  }
 
 }
