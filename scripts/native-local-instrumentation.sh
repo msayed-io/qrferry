@@ -7,16 +7,18 @@ trap 'adb logcat -d > "$reports/local-logcat.txt" || true' EXIT
 # Establish runtime grants before the instrumentation process starts. Closing a
 # UiAutomation shell descriptor immediately does not wait for pm grant to finish.
 adb install -r -g "$apk" || exit $?
+grant_all_files
 # An idle emulator dims its display, and the dim scrim changes every pixel the
 # optical assertions sample. Keep the panel on and undimmed for the whole run.
 adb shell svc power stayon true >/dev/null 2>&1
 adb shell settings put system screen_off_timeout 2147483647 >/dev/null 2>&1
 adb shell settings put system screen_dim_timeout 2147483647 >/dev/null 2>&1
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
-# "All files access" is an app-op, not a runtime permission. Grant it before the
-# suite so the automatic storage prompt on Send cannot open a system screen in
-# the middle of an interaction test.
-adb shell appops set com.msayed.qrferry MANAGE_EXTERNAL_STORAGE allow >/dev/null 2>&1 || true
+# "All files access" is an app-op, not a runtime permission, and `adb install -r`
+# resets app-ops. It is therefore re-applied after EVERY install: otherwise the
+# automatic storage prompt on Send opens a system settings screen in the middle
+# of an interaction test and steals focus from the WebView.
+grant_all_files(){ adb shell appops set com.msayed.qrferry MANAGE_EXTERNAL_STORAGE allow >/dev/null 2>&1 || true; }
 api=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
 run_suite(){ android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$1"; }
 if [ "$api" -ge 35 ]; then
@@ -25,6 +27,7 @@ if [ "$api" -ge 35 ]; then
   # cannot steal focus from its consent dialogs.
   run_suite com.msayed.qrferry.ChromePolicyTest,com.msayed.qrferry.FloatingChromeTest,com.msayed.qrferry.SpecularRimTest,com.msayed.qrferry.NativeIntegrationTest,com.msayed.qrferry.local.LocalNativeTest,com.msayed.qrferry.local.LocalRecoveryProcessTest || exit $?
   adb install -r -g "$apk" || exit $?
+  grant_all_files
   run_suite com.msayed.qrferry.local.LocalUiTest || exit $?
 else
   # API 24/29 cover the native subsystem only: their bundled WebView cannot run

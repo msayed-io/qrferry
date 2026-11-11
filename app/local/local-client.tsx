@@ -99,6 +99,14 @@ export function LocalClient() {
     catch (e) { setError(errorCode(e)); }
     finally { setBusy(false); }
   }, [apply, native]);
+  /** Automatic prompts must never block the screen: a system settings page can
+   *  stay open for minutes, so `busy` is reserved for user-initiated actions. */
+  const ask = useCallback((action: () => Promise<unknown>) => {
+    if (!native) return;
+    void action()
+      .then(result => { if (result && typeof result === 'object' && 'revision' in result) apply(result as LocalState); })
+      .catch(e => setError(errorCode(e)));
+  }, [apply, native]);
   useEffect(() => {
     if (!native) return;
     let dead = false;
@@ -135,30 +143,30 @@ export function LocalClient() {
     if (!native || current !== 'send' || askedStorage.current || typeof state.storageReady !== 'boolean') return;
     if (state.storageReady) return;
     askedStorage.current = true;
-    void run(() => NativeLocal.requestStorage());
-  }, [current, native, run, state.storageReady]);
+    ask(() => NativeLocal.requestStorage());
+  }, [ask, current, native, state.storageReady]);
   // Android 13+ falls back to the official photo/video/audio dialog when the
   // all-files screen was declined; apps need neither.
   useEffect(() => {
     if (!native || current !== 'send' || category === 'apps' || askedMedia.current) return;
     if (state.media === undefined || state.media) return;
     askedMedia.current = true;
-    void run(() => NativeLocal.requestMedia());
-  }, [category, current, native, run, state.media]);
+    ask(() => NativeLocal.requestMedia());
+  }, [ask, category, current, native, state.media]);
   // Nearby devices: the official dialog is opened by Prepare itself.
   useEffect(() => {
     if (!native || current !== 'setup' || askedNearby.current || typeof state.nearby !== 'boolean') return;
     if (state.nearby) return;
     askedNearby.current = true;
-    void run(() => NativeLocal.requestNearby());
-  }, [current, native, run, state.nearby]);
+    ask(() => NativeLocal.requestNearby());
+  }, [ask, current, native, state.nearby]);
   // Receiving is automatic: entering Receive starts the best available link.
   useEffect(() => {
     if (!native || current !== 'receive') { if (current !== 'receive') autoReceive.current = false; return; }
     if (autoReceive.current || busy || state.qrReady || state.authenticated || state.phase === 'preparing') return;
     autoReceive.current = true;
-    void run(() => NativeLocal.startReceive({ method: 'auto' }));
-  }, [busy, current, native, run, state.authenticated, state.phase, state.qrReady]);
+    ask(() => NativeLocal.startReceive({ method: 'auto' }));
+  }, [ask, busy, current, native, state.authenticated, state.phase, state.qrReady]);
   useEffect(() => {
     if (!native || !foreground || current !== 'receive' || !state.qrReady || !surface.current) return;
     let live = true;
