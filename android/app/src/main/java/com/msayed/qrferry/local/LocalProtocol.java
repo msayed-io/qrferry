@@ -33,6 +33,13 @@ public final class LocalProtocol {
   for(String value:new String[]{"QRFerry-native-file-1",digest,safeName(name),mime==null?"application/octet-stream":mime,Long.toString(size),source}){byte[]encoded=value.getBytes(StandardCharsets.UTF_8);out.writeInt(encoded.length);out.write(encoded);}
   return sha(new ByteArrayInputStream(bytes.toByteArray()));
  }
+ /** UI label: the platform display name without its technical extension. The
+  * real name (with extension) is still what is stored and transferred. */
+ public static String label(String name){
+  String safe=safeName(name);int dot=safe.lastIndexOf('.');
+  if(dot>0&&dot<safe.length()-1&&safe.length()-dot<=9&&safe.substring(dot+1).matches("[A-Za-z0-9]+"))return safe.substring(0,dot);
+  return safe;
+ }
  public static String category(String mime){if(mime==null)return "Files";if(mime.startsWith("image/"))return "Images";if(mime.startsWith("video/"))return "Videos";if(mime.startsWith("audio/"))return "Audio";return "Files";}
  public static void writeControl(DataOutputStream out,String json)throws IOException{byte[] b=json.getBytes(StandardCharsets.UTF_8);if(b.length>MAX_CONTROL)throw new IOException("CONTROL_TOO_LARGE");out.writeInt(b.length);out.write(b);out.flush();}
  public static String readControl(DataInputStream in)throws IOException{int n=in.readInt();if(n<2||n>MAX_CONTROL)throw new IOException("INVALID_CONTROL_LENGTH");byte[] b=new byte[n];in.readFully(b);return new String(b,StandardCharsets.UTF_8);}

@@ -14,14 +14,16 @@ import java.util.*;
 /** Native catalogue, URI grants, staging, integrity verification and publication. */
 public final class LocalFiles {
  public static final class Source {
-  public final String id,name,mime;public final long size;final Uri uri;final File apk;public volatile String hash;
-  Source(String id,String name,String mime,long size,Uri uri,File apk){this.id=id;this.name=LocalProtocol.safeName(name);this.mime=mime==null?"application/octet-stream":mime;this.size=size;this.uri=uri;this.apk=apk;}
+  public final String id,name,label,mime;public final long size;final Uri uri;final File apk;public volatile String hash;
+  Source(String id,String name,String mime,long size,Uri uri,File apk){this(id,name,LocalProtocol.label(name),mime,size,uri,apk);}
+  Source(String id,String name,String label,String mime,long size,Uri uri,File apk){this.id=id;this.name=LocalProtocol.safeName(name);this.label=label==null?LocalProtocol.label(this.name):label;this.mime=mime==null?"application/octet-stream":mime;this.size=size;this.uri=uri;this.apk=apk;}
   public String transferId(String digest)throws Exception{return LocalProtocol.transferId(digest,name,mime,size,apk!=null?apk.getAbsolutePath():uri.toString());}
-  public JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("mime",mime).put("size",size);}
+  public JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("label",label).put("mime",mime).put("size",size);}
  }
  private final Object storageLock=new Object();private final java.util.concurrent.atomic.AtomicInteger fileGeneration=new java.util.concurrent.atomic.AtomicInteger();private final Map<String,String>uriIds=new HashMap<>();
  private final Context context;private final ContentResolver resolver;private final File inbox;private final LocalPublication publication;
  private final Map<String,Source> catalogue=new LinkedHashMap<>();private final LinkedHashSet<String> selection=new LinkedHashSet<>();
+ private final Map<String,String> thumbs=new LinkedHashMap<String,String>(64,.75f,true){protected boolean removeEldestEntry(Map.Entry<String,String> eldest){return size()>160;}};
  public LocalFiles(Context c){this(c,phase->{});}
  LocalFiles(Context c,LocalPublication.Checkpoint checkpoint){context=c.getApplicationContext();resolver=c.getContentResolver();inbox=new File(c.getFilesDir(),"local-inbox");inbox.mkdirs();publication=new LocalPublication(context,inbox,checkpoint);}
  public synchronized JSONArray selected()throws Exception{JSONArray a=new JSONArray();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.put(s.json());}return a;}
@@ -60,7 +62,7 @@ public final class LocalFiles {
   switch(category){case "images":collection=MediaStore.Images.Media.EXTERNAL_CONTENT_URI;break;case "videos":collection=MediaStore.Video.Media.EXTERNAL_CONTENT_URI;break;case "audio":collection=MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;break;default:collection=MediaStore.Files.getContentUri("external");filter=MediaStore.Files.FileColumns.MEDIA_TYPE+"=0 AND "+MediaStore.MediaColumns.SIZE+">0";}
   JSONArray a=new JSONArray();String[]cols={MediaStore.MediaColumns._ID,MediaStore.MediaColumns.DISPLAY_NAME,MediaStore.MediaColumns.MIME_TYPE,MediaStore.MediaColumns.SIZE};
   try(Cursor c=resolver.query(collection,cols,filter,null,MediaStore.MediaColumns.DATE_ADDED+" DESC")){
-   if(c!=null&&c.moveToPosition(page*60))do{long size=c.getLong(3);if(size<0||size>LocalProtocol.MAX_FILE)continue;Uri uri=ContentUris.withAppendedId(collection,c.getLong(0));String id=category+":"+c.getLong(0);Source s=new Source(id,c.getString(1),c.getString(2),size,uri,null);catalogue.put(id,s);a.put(s.json().put("selected",selection.contains(id)));}while(a.length()<60&&c.moveToNext());
+   if(c!=null&&c.moveToPosition(page*60))do{long size=c.getLong(3);if(size<0||size>LocalProtocol.MAX_FILE)continue;Uri uri=ContentUris.withAppendedId(collection,c.getLong(0));String id=category+":"+c.getLong(0);Source s=new Source(id,c.getString(1),c.getString(2),size,uri,null);catalogue.put(id,s);a.put(row(s).put("selected",selection.contains(id)));}while(a.length()<60&&c.moveToNext());
   }return a;
  }
  private JSONArray apps(int page)throws Exception{
@@ -69,8 +71,13 @@ public final class LocalFiles {
   JSONArray result=new JSONArray();Set<String>seen=new HashSet<>();int index=0;
   for(ResolveInfo r:apps){ApplicationInfo info=r.activityInfo.applicationInfo;if(!seen.add(info.packageName))continue;if(index++<page*30)continue;if(result.length()>=60)break;
    String label=r.loadLabel(context.getPackageManager()).toString();List<String>paths=new ArrayList<>();paths.add(info.sourceDir);if(info.splitSourceDirs!=null)Collections.addAll(paths,info.splitSourceDirs);
-   for(int i=0;i<paths.size();i++){File file=new File(paths.get(i));String id="apk:"+info.packageName+":"+i;Source s=new Source(id,label+"-"+(i==0?"base":"split-"+i)+".apk","application/vnd.android.package-archive",file.length(),null,file);catalogue.put(id,s);result.put(s.json().put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));}
+   for(int i=0;i<paths.size();i++){File file=new File(paths.get(i));String id="apk:"+info.packageName+":"+i;String appLabel=paths.size()>1&&i>0?label+" ("+(i)+")":label;Source s=new Source(id,label+"-"+(i==0?"base":"split-"+i)+".apk",appLabel,"application/vnd.android.package-archive",file.length(),null,file);catalogue.put(id,s);result.put(row(s).put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));}
   }return result;
+ }
+ /** UI-only thumbnail for a catalogue row, cached and bounded. */
+ synchronized JSONObject row(Source s)throws Exception{
+  JSONObject json=s.json();if(!thumbs.containsKey(s.id))thumbs.put(s.id,LocalThumbs.of(context,s));
+  String thumb=thumbs.get(s.id);if(thumb!=null)json.put("thumb",thumb);return json;
  }
  public InputStream open(Source s)throws IOException{InputStream in=s.apk!=null?new FileInputStream(s.apk):resolver.openInputStream(s.uri);if(in==null)throw new IOException("SOURCE_UNAVAILABLE");return in;}
  public String hash(Source s)throws Exception{try(InputStream in=open(s)){return s.hash=LocalProtocol.sha(in);}}
