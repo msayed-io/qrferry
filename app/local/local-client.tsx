@@ -322,7 +322,7 @@ export function LocalClient() {
         <h2>{tx('ضع رمز QR داخل الإطار', 'Place the QR code inside the frame')}</h2>
         <p role="status">{state.phase === 'connecting' ? tx('جارٍ الاتصال والتحقق…', 'Connecting and verifying…') : state.phase === 'preparing-files' ? tx('تم التحقق. تجهيز الملفات…', 'Verified. Preparing files…') : scanning ? tx('ابحث عن رمز المستقبل. تُقرأ الرموز محليًا فقط.', 'Look for the receiver’s code. Codes are decoded locally only.') : tx('سيطلب Android إذن الكاميرا إن لم يكن ممنوحًا.', 'Android asks for camera permission if it is not granted.')}</p>
         <div className="lf-row">
-          <button type="button" className="glass cap tinted lf-big" disabled={!native || busy || scanning} onClick={() => void openScanner()}><DesignIcon name="qr" style={{ width: 18, height: 18 }} />{tx('فتح الكاميرا', 'Open camera')}</button>
+          <button type="button" className="glass cap tinted lf-big" disabled={!native || busy || scanning} hidden={scanning} onClick={() => void openScanner()}><DesignIcon name="qr" style={{ width: 18, height: 18 }} />{tx('فتح الكاميرا', 'Open camera')}</button>
           {scanning && <button type="button" className="glass cap lf-big" onClick={closeCamera}>{tx('إغلاق', 'Close')}</button>}
         </div>
       </div>
