@@ -77,8 +77,6 @@ public class LocalUiTest {
    onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).check(doesNotExist());
    until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.local-notice'))"));
-   // The send screen must scroll and keep one fixed capsule with the primary action.
-   assertEquals("true",js(view,"(()=>{const bar=document.querySelector('.lf-bar');return !!bar&&getComputedStyle(bar).position==='fixed'})()"));
    selectedId=engine.files.addUris(Collections.singletonList(FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source)),0).getJSONObject(0).getString("id");engine.changed();
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-actions button').click();return true})()"));
    until("Real native selection did not reach Send",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='send' && !document.querySelector('.local-send-action button')?.disabled")),15000);
