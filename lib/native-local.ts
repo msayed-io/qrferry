@@ -16,6 +16,7 @@ interface LocalPlugin {
  addListener(event:'lifecycle',listener:(state:{active:boolean})=>void):Promise<PluginListenerHandle>;
  listFiles(options:{category:string}):Promise<{files:LocalFile[]}>;
  clearSelection():Promise<LocalState>;
+ thumbnails(options:{ids:string[]}):Promise<{thumbs:Record<string,string>}>;
  selectFile(options:{id:string;selected:boolean}):Promise<LocalState>;
  pickFiles(options:{mime:string}):Promise<LocalState>;
  requestStorage():Promise<LocalState>;

@@ -56,6 +56,9 @@ function errorCode(e: unknown) { return e instanceof Error ? e.message : 'LOCAL_
 function size(value: number) { if (value < 0) return '—'; const units = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (value >= 1024 && i < 4) { value /= 1024; i++; } return `${value.toLocaleString(undefined, { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`; }
 function bounds(el: HTMLElement): NativeBounds { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, viewport: innerWidth }; }
 
+/** Pictures are fetched for the first screenful of rows, never for all. */
+const THUMB_ROWS = 48;
+
 /** Per app run: a leftover native selection is dropped once, at boot. */
 let selectionReset = false;
 
@@ -85,8 +88,9 @@ export function LocalClient() {
   const [state, setState] = useState<LocalState>(emptyLocalState);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [category, setCategory] = useState('apps');
   const [catalogue, setCatalogue] = useState<LocalFile[]>([]), [sheetOpen, setSheetOpen] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [draft, setDraft] = useState(''), [scanning, setScanning] = useState(false), [qrShown, setQrShown] = useState(false), [foreground, setForeground] = useState(true);
-  const surface = useRef<HTMLDivElement>(null), request = useRef(0), autoCamera = useRef(false);
+  const surface = useRef<HTMLDivElement>(null), qrSurface = useRef<HTMLDivElement>(null), request = useRef(0), autoCamera = useRef(false);
   // One automatic attempt per screen entry. Every prompt behind these refs is an
   // official Android dialog/screen; the rows stay as an explicit retry.
   const askedStorage = useRef(false), askedNearby = useRef(false), autoReceive = useRef(false), askedMedia = useRef(false);
@@ -143,13 +147,26 @@ export function LocalClient() {
     if (!native || current !== 'send') return;
     let dead = false;
     const id = ++request.current;
-    // The whole catalogue arrives at once from the native layer; a unique id is
-    // the key, so no row can ever repeat and there is no "load more" step.
+    setListLoading(true);
+    // The catalogue is pure metadata and arrives in one fast call; pictures are
+    // fetched afterwards in small batches so the list never waits for bitmaps.
     void NativeLocal.listFiles({ category }).then(v => {
       if (dead || id !== request.current) return;
       const seen = new Set<string>();
-      setCatalogue(v.files.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true))));
-    }).catch(e => { if (!dead) setError(errorCode(e)); });
+      const rows = v.files.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
+      setCatalogue(rows); setListLoading(false);
+      const ids = rows.slice(0, THUMB_ROWS).map(f => f.id);
+      void (async () => {
+        for (let at = 0; at < ids.length; at += 12) {
+          if (dead || id !== request.current) return;
+          try {
+            const { thumbs } = await NativeLocal.thumbnails({ ids: ids.slice(at, at + 12) });
+            if (dead || id !== request.current) return;
+            setCatalogue(previous => previous.map(f => (thumbs[f.id] ? { ...f, thumb: thumbs[f.id] } : f)));
+          } catch { return; }
+        }
+      })();
+    }).catch(e => { if (!dead) { setListLoading(false); setError(errorCode(e)); } });
     return () => { dead = true; };
   }, [category, current, native]);
   // The official prompts are asked on every visit, never cached.
@@ -190,17 +207,19 @@ export function LocalClient() {
     ask(() => NativeLocal.startReceive({ method: 'auto' }));
   }, [ask, busy, current, native, state.authenticated, state.phase, state.qrReady]);
   useEffect(() => {
-    if (!native || !foreground || current !== 'receive' || !state.qrReady || !surface.current) return;
+    if (!native || !foreground || current !== 'receive' || !state.qrReady || !qrSurface.current) return;
     let live = true;
-    void NativeLocal.showPairingCode(bounds(surface.current)).then(() => { if (live) setQrShown(true); }).catch(e => setError(errorCode(e)));
+    if (!qrSurface.current) return;
+    void NativeLocal.showPairingCode(bounds(qrSurface.current)).then(() => { if (live) setQrShown(true); }).catch(e => setError(errorCode(e)));
     return () => { live = false; setQrShown(false); void NativeLocal.hideNativeView(); };
   }, [current, native, state.qrReady, foreground]);
   useEffect(() => {
-    if (!native || !surface.current) return;
+    const node = current === 'receive' ? qrSurface.current : surface.current;
+    if (!native || !node) return;
     let frame = 0;
-    const update = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (surface.current) void NativeLocal.updateNativeView(bounds(surface.current)).catch(() => {}); }); };
+    const update = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (node.isConnected) void NativeLocal.updateNativeView(bounds(node)).catch(() => {}); }); };
     const observer = new ResizeObserver(update);
-    observer.observe(surface.current);
+    observer.observe(node);
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, { passive: true });
     update();
@@ -279,17 +298,20 @@ export function LocalClient() {
         {categories.map(c => <button type="button" key={c.id} role="tab" aria-selected={category === c.id} className={category === c.id ? 'on' : ''} onClick={() => setCategory(c.id)}>{ar ? c.ar : c.en}</button>)}
       </div>
       {catalogue.length > 0 && <p className="lf-count" role="status">{new Intl.NumberFormat(ar ? 'ar-EG' : 'en-US').format(catalogue.length)} {tx('عنصرًا في هذا التصنيف', 'items in this category')}</p>}
+      {native && state.storageReady === false && <button type="button" className="lf-perm-banner" data-perm="storage" onClick={() => void run(() => NativeLocal.requestStorage())}>
+        <DesignIcon name="shield" style={{ width: 18, height: 18 }} />
+        <span>{tx('الوصول لكل الملفات غير ممنوح — التطبيق يرى ملفاته فقط.', 'All files access is not granted — the app only sees its own files.')}</span>
+        <b>{tx('منح', 'Allow')}</b>
+      </button>}
       <section className="card lf-list" aria-live="polite">
-        {native && state.storageReady === false && <button type="button" className="lf-li lf-perm" data-perm="storage" onClick={() => void run(() => NativeLocal.requestStorage())}>
-          <span className="lf-ic"><DesignIcon name="folder" style={{ width: 20, height: 20 }} /></span>
-          <span className="lf-gr"><b>{tx('الوصول إلى الملفات', 'File access')}</b><small>{state.sdk && state.sdk >= 30 ? tx('يفتح Android شاشة «الوصول إلى كل الملفات»', 'Android opens “All files access”') : tx('ستظهر نافذة Android الرسمية', 'The official Android dialog appears')}</small></span>
-          <span className="glass cap lf-small">{tx('منح', 'Allow')}</span>
-        </button>}
+
+        {listLoading && <div className="lf-empty lf-loading" data-loading=""><DesignIcon name="folder" style={{ width: 26, height: 26 }} /><p>{tx('جارٍ قراءة الملفات من الجهاز…', 'Reading files from this device…')}</p></div>}
+
         {catalogue.length ? catalogue.map(f => <button type="button" data-file-row="" className={`lf-li ${selected.has(f.id) ? 'sel' : ''}`} key={f.id} aria-pressed={selected.has(f.id)} disabled={busy} onClick={() => void run(() => NativeLocal.selectFile({ id: f.id, selected: !selected.has(f.id) }))}>
           <span className="lf-ic">{f.thumb ? <img src={f.thumb} alt="" loading="lazy" /> : <DesignIcon name="apps" style={{ width: 20, height: 20 }} />}</span>
           <span className="lf-gr"><b>{displayLabel(f)}</b><small>{size(f.size)}{f.splitCount && f.splitCount > 1 ? ` · ${f.splitCount} APK` : ''}</small></span>
           <span className={`lf-ck ${selected.has(f.id) ? 'on' : ''}`}><DesignIcon name="ok" style={{ width: 15, height: 15 }} /></span>
-        </button>) : <div className="lf-empty"><DesignIcon name="folder" style={{ width: 30, height: 30 }} /><p>{tx('لا توجد عناصر في هذا التصنيف. استخدم زر التصفح لاختيار ملفات من جهازك.', 'Nothing in this category. Use Browse to choose files from your device.')}</p></div>}
+        </button>) : <div className="lf-empty" hidden={listLoading}><DesignIcon name="folder" style={{ width: 30, height: 30 }} /><p>{tx('لا توجد عناصر في هذا التصنيف. استخدم زر التصفح لاختيار ملفات من جهازك.', 'Nothing in this category. Use Browse to choose files from your device.')}</p></div>}
       </section>
       <div className="lf-bar">
         <div className="glass lf-bx">
@@ -331,7 +353,7 @@ export function LocalClient() {
 
     {current === 'receive' && <>
       <div className="lf-qr-wrap" ref={surface}>
-        <div className="local-native-surface lf-qr" aria-label={tx('رمز الاقتران الأصلي', 'Native pairing QR')}>
+        <div className="local-native-surface lf-qr" ref={qrSurface} aria-label={tx('رمز الاقتران الأصلي', 'Native pairing QR')}>
           {/* While the link is being prepared this plate is a quiet
               placeholder; the live code is drawn by the native layer into
               exactly this box. */}

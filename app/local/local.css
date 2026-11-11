@@ -1,6 +1,6 @@
 /* Local transfer mode. Geometry mirrors the reference layouts; material, physical
    rim, springs and progressive blur are the app's own design system. */
-.local-page{min-width:0;padding:calc(env(safe-area-inset-top,0px) + 14px) 0 24px}
+.local-page{min-width:0;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 24px}
 /* The home actions must end above the floating tab bar, not under it. */
 .local-page[data-screen=home]{padding-bottom:calc(176px + env(safe-area-inset-bottom,0px))}
 /* Send and Prepare scroll: the catalogue is long and the action bar floats above
@@ -61,7 +61,9 @@
 .lf-empty p{margin:0}
 
 /* ---- send: segmented control replaces any nested horizontal scroller ---- */
-.lf-seg{display:flex;gap:2px;padding:4px;height:48px;border-radius:999px;margin:10px 0 16px}
+.lf-seg{display:flex;gap:2px;padding:4px;height:48px;border-radius:999px;margin:10px 0 16px;
+  background:var(--fill);box-shadow:0 0 0 .5px var(--sep);overflow:hidden}
+.lf-seg [data-qf-rim]{display:none}
 .lf-seg button{flex:1;min-width:0;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--label2);padding:0 4px;transition:color .2s,background .2s}
 .lf-seg button[aria-selected=true]{color:var(--label);background:var(--fill)}
 .lf-more{display:block;margin:12px auto 0}
@@ -92,7 +94,9 @@
 .lf-sheet h2{font-size:17px;font-weight:600;text-align:center}
 .lf-sheet p{color:var(--label2);font-size:13.5px;line-height:1.6;text-align:center;margin:8px 0 4px;min-height:44px}
 .lf-qr-wrap{flex:1;min-height:0;display:grid;place-items:center;padding:8px 0 0}
-.lf-qr{width:min(52vw,200px);aspect-ratio:1;border-radius:22px;background:#fff;color:#141014;margin:0 auto;padding:8px}
+.lf-qr{width:min(52vw,190px);height:min(52vw,190px);min-width:0;min-height:0;
+  border-radius:20px;background:#fff;color:#141014;margin:0 auto;padding:0;overflow:hidden;
+  display:grid;place-items:center}
 .lf-qr>p{color:#4a3d45;padding:0 6px;font-size:11.5px;line-height:1.35}
 .lf-bx-compact{gap:10px;height:64px;padding:8px}
 .lf-act{height:48px;padding:0 20px;border-radius:24px;white-space:nowrap;flex:none;max-width:100%}
@@ -153,3 +157,13 @@
 .lf-remove{width:34px;height:34px;flex:none;color:var(--label2)}
 .lf-dialog-foot{padding-top:14px;display:flex}
 .lf-dialog-foot .lf-act{flex:1}
+
+/* Access banner: it states the real state instead of pretending the catalogue is
+   empty, and it is the only way Android can widen the scope. */
+.lf-perm-banner{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 10px;padding:12px 14px;
+  border:0;border-radius:18px;background:var(--fill);color:var(--label);font:inherit;font-size:13px;
+  text-align:start;box-shadow:0 0 0 .5px var(--sep)}
+.lf-perm-banner>svg{flex:none;color:var(--tint)}
+.lf-perm-banner>span{flex:1;min-width:0;line-height:1.45;color:var(--label2)}
+.lf-perm-banner>b{flex:none;font-size:13px;font-weight:700;color:var(--tint)}
+.lf-loading{opacity:.8}

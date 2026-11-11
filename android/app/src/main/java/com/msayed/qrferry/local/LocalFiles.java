@@ -20,7 +20,7 @@ public final class LocalFiles {
   public String transferId(String digest)throws Exception{return LocalProtocol.transferId(digest,name,mime,size,apk!=null?apk.getAbsolutePath():uri.toString());}
   public JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("label",label).put("mime",mime).put("size",size);}
  }
- private static final int THUMB_ROWS=300;
+ private static final int THUMB_BATCH=12;
  private final Object storageLock=new Object();private final java.util.concurrent.atomic.AtomicInteger fileGeneration=new java.util.concurrent.atomic.AtomicInteger();private final Map<String,String>uriIds=new HashMap<>();
  private final Context context;private final ContentResolver resolver;private final File inbox;private final LocalPublication publication;
  private final Map<String,Source> catalogue=new LinkedHashMap<>();private final LinkedHashSet<String> selection=new LinkedHashSet<>();
@@ -71,9 +71,10 @@ public final class LocalFiles {
   JSONArray a=new JSONArray();String[]cols={MediaStore.MediaColumns._ID,MediaStore.MediaColumns.DISPLAY_NAME,MediaStore.MediaColumns.MIME_TYPE,MediaStore.MediaColumns.SIZE};
   try(Cursor c=resolver.query(collection,cols,filter,null,MediaStore.MediaColumns.DATE_ADDED+" DESC")){
    if(c!=null&&c.moveToPosition(page*60))do{long size=c.getLong(3);if(size<0||size>LocalProtocol.MAX_FILE)continue;Uri uri=ContentUris.withAppendedId(collection,c.getLong(0));String id=category+":"+c.getLong(0);Source s=new Source(id,c.getString(1),c.getString(2),size,uri,null);catalogue.put(id,s);
-    // Thumbnails are bounded: rows past the budget keep the placeholder icon so a
-    // large gallery still arrives in one payload without hundreds of bitmaps.
-    a.put((a.length()<THUMB_ROWS?row(s):s.json()).put("selected",selection.contains(id)));}while(a.length()<LocalProtocol.MAX_FILES&&c.moveToNext());
+    // No bitmap work here: decoding a gallery of thumbnails inside the listing
+    // call is what made the catalogue take seconds. Rows are pure metadata and
+    // the UI fetches pictures separately, in small batches.
+    a.put(s.json().put("selected",selection.contains(id)));}while(a.length()<LocalProtocol.MAX_FILES&&c.moveToNext());
   }return a;
  }
  private JSONArray apps(int page)throws Exception{
@@ -99,13 +100,23 @@ public final class LocalFiles {
     for(int i=0;i<paths.size();i++){
      File file=new File(paths.get(i));if(!file.isFile())continue;String id="apk:"+info.packageName+":"+i;String appLabel=paths.size()>1&&i>0?label+" ("+i+")":label;
      Source s=new Source(id,label+"-"+(i==0?"base":"split-"+i)+".apk",appLabel,"application/vnd.android.package-archive",file.length(),null,file);
-     catalogue.put(id,s);result.put((result.length()<THUMB_ROWS?row(s):s.json()).put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));
+     catalogue.put(id,s);result.put(s.json().put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));
     }
    }catch(Exception skip){/* skip this package only */}
   }
   return result;
  }
  /** UI-only thumbnail for a catalogue row, cached and bounded. */
+ /** Pictures for the rows the user can actually see, a few at a time. */
+ synchronized org.json.JSONObject thumbnails(org.json.JSONArray ids)throws Exception{
+  org.json.JSONObject out=new org.json.JSONObject();if(ids==null)return out;
+  for(int i=0;i<ids.length()&&i<THUMB_BATCH;i++){
+   String id=ids.optString(i,"");if(id.isEmpty())continue;Source source=catalogue.get(id);if(source==null)continue;
+   try{if(!thumbs.containsKey(id))thumbs.put(id,LocalThumbs.of(context,source));String thumb=thumbs.get(id);if(thumb!=null)out.put(id,thumb);}
+   catch(Exception ignored){/* a row without a picture keeps its placeholder icon */}
+  }
+  return out;
+ }
  synchronized JSONObject row(Source s)throws Exception{
   JSONObject json=s.json();if(!thumbs.containsKey(s.id))thumbs.put(s.id,LocalThumbs.of(context,s));
   String thumb=thumbs.get(s.id);if(thumb!=null)json.put("thumb",thumb);return json;

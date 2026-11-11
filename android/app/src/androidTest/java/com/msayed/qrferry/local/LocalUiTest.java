@@ -87,6 +87,11 @@ public class LocalUiTest {
    }
   }
  }
+ private static android.widget.ImageView qrView(View view){
+  if(view instanceof android.widget.ImageView && ((android.widget.ImageView)view).getDrawable()!=null)return (android.widget.ImageView)view;
+  if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){android.widget.ImageView found=qrView(group.getChildAt(i));if(found!=null)return found;}}
+  return null;
+ }
  private static PreviewView preview(View view){
   if(view instanceof PreviewView)return (PreviewView)view;
   if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){PreviewView found=preview(group.getChildAt(i));if(found!=null)return found;}}
@@ -184,6 +189,22 @@ public class LocalUiTest {
    until("Receive did not open",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='receive'")),15000);
    until("Receive code surface missing",()->"true".equals(js(view,"Boolean(document.querySelector('.lf-qr'))")),15000);
    shot("receive");
+   // The code plate is a fixed small square, and when the native code does appear
+   // it must be exactly that square: it used to be sized to the page-filling
+   // wrapper, which is why the white card grew to half the screen.
+   JSONObject plate=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const r=document.querySelector('.lf-qr').getBoundingClientRect();return {width:r.width,height:r.height,viewport:innerWidth}})())")+"]").getString(0));
+   assertTrue("The code plate must stay small",plate.optDouble("width")<plate.optDouble("viewport")*0.65);
+   assertEquals("The code plate must be square",plate.optDouble("width"),plate.optDouble("height"),1.0);
+   boolean drawn=false;
+   for(long deadline=System.currentTimeMillis()+20000;System.currentTimeMillis()<deadline&&!drawn;Thread.sleep(200)){
+    AtomicBoolean found=new AtomicBoolean(false);scenario.onActivity(activity->found.set(qrView(activity.getWindow().getDecorView())!=null));drawn=found.get();
+   }
+   if(drawn)scenario.onActivity(activity->{
+    android.widget.ImageView qr=qrView(activity.getWindow().getDecorView());assertNotNull("Native code view is missing",qr);
+    double scale=view.getWidth()/plate.optDouble("viewport");
+    assertEquals("The code view must match the plate width",plate.optDouble("width")*scale,qr.getWidth(),4.0);
+    assertEquals("The code view must match the plate height",plate.optDouble("height")*scale,qr.getHeight(),4.0);
+   });
    // Static page: the code never drags, and its plate is not bigger than the code.
    assertEquals("false",js(view,"(()=>{const p=document.querySelector('.local-page');const s=getComputedStyle(p);return (s.overflowY==='auto'||s.overflowY==='scroll')||p.scrollHeight>p.clientHeight+8})()"));
    assertEquals("true",js(view,"(()=>{const q=document.querySelector('.lf-qr').getBoundingClientRect();const w=document.querySelector('.lf-qr-wrap').getBoundingClientRect();return Math.abs(q.width-q.height)<2&&q.width<=w.width+1&&q.width<innerWidth*0.8})()"));
