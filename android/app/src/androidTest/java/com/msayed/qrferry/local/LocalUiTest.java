@@ -146,9 +146,8 @@ public class LocalUiTest {
    assertEquals("true",js(view,"(()=>{const b=document.querySelector('.brand-mode');if(b)b.click();return true})()"));
    until("Native home did not mount",()->"true".equals(js(view,"(()=>{const p=document.querySelector('.local-page');if(!p||!p.dataset.screen)return false;if(p.dataset.screen==='home')return true;const x=document.querySelector('.support-exit');if(x)x.click();return false})()")),25000);
    // Home carries the app's own brand capsule; child screens the app toolbar.
-   assertEquals("true",js(view,"(()=>{const h=document.querySelector('header.lf-home-header');if(!h)return false;
-   // 18 is the app's top blur layer (floating-chrome.css): the capsules must float above it.
-   return Boolean(h.querySelector('.brand'))&&Boolean(h.querySelector('button'))&&Number(getComputedStyle(h).zIndex)>18}()"));
+   // 18 is the app's top blur layer (floating-chrome.css): capsules float above it.
+   assertEquals("true",js(view,"(()=>{const h=document.querySelector('header.lf-home-header');if(!h)return false;return Boolean(h.querySelector('.brand'))&&Boolean(h.querySelector('button'))&&Number(getComputedStyle(h).zIndex)>18}()"));
    // Receive goes through Prepare, exactly like the home action does.
    assertEquals("true",js(view,"(()=>{document.querySelectorAll('.local-actions button')[1].click();return true})()"));
    until("Prepare did not open",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='setup'")),15000);
