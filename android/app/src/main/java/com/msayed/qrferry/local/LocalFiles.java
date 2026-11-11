@@ -27,6 +27,18 @@ public final class LocalFiles {
  public synchronized JSONArray selected()throws Exception{JSONArray a=new JSONArray();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.put(s.json());}return a;}
  public synchronized List<Source> sources(){List<Source>a=new ArrayList<>();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.add(s);}return a;}
  public synchronized void select(String id,boolean on){if(!catalogue.containsKey(id))throw new IllegalArgumentException("UNKNOWN_FILE");List<String>ids=new ArrayList<>();if(id.startsWith("apk:")){String group=id.substring(0,id.lastIndexOf(':')+1);for(String key:catalogue.keySet())if(key.startsWith(group))ids.add(key);}else ids.add(id);if(on){Set<String>next=new LinkedHashSet<>(selection);next.addAll(ids);if(next.size()>LocalProtocol.MAX_FILES)throw new IllegalArgumentException("TOO_MANY_FILES");selection.clear();selection.addAll(next);}else selection.removeAll(ids);}
+ synchronized JSONArray recoverySources()throws Exception{
+  JSONArray rows=new JSONArray();for(Source source:sources()){JSONObject row=source.json();if(source.apk!=null)row.put("apk",source.apk.getAbsolutePath());else row.put("uri",source.uri.toString());rows.put(row);}return rows;
+ }
+ synchronized void restoreSources(JSONArray rows)throws Exception{
+  if(rows.length()>LocalProtocol.MAX_FILES)throw new IOException("TOO_MANY_FILES");
+  for(int i=0;i<rows.length();i++){
+   JSONObject row=rows.getJSONObject(i);String id=row.getString("id");long size=row.getLong("size");if(size<0||size>LocalProtocol.MAX_FILE)continue;
+   Uri uri=row.has("uri")?Uri.parse(row.getString("uri")):null;File apk=row.has("apk")?new File(row.getString("apk")):null;
+   if(uri!=null&&!"content".equals(uri.getScheme())||uri==null&&apk==null)continue;
+   Source source=new Source(id,row.getString("name"),row.getString("mime"),size,uri,apk);catalogue.put(id,source);selection.add(id);if(uri!=null)uriIds.put(uri.toString(),id);
+  }
+ }
  public void cancelFileWork(){fileGeneration.incrementAndGet();}
  int fileWorkGeneration(){return fileGeneration.get();}
  public JSONArray addUris(List<Uri> uris,int flags)throws Exception{return addUris(uris,flags,fileWorkGeneration());}

@@ -11,5 +11,17 @@ if [ "$api" -ge 35 ]; then
   # modern WebView. API 24 below covers the native subsystem, not its old WebView.
   android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest
 else
-  android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.msayed.qrferry.local.LocalNativeTest
-fi
+  android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.msayed.qrferry.local.LocalNativeTest,com.msayed.qrferry.local.LocalRecoveryProcessTest
+fi || exit $?
+# Recovery must work from disk, not from a surviving in-process engine: write the
+# record in one instrumentation process, force-stop the app, then restore in a
+# second process. Both phases are native-only, so every API level runs them.
+recovery=com.msayed.qrferry.local.LocalRecoveryProcessTest#recoversMetadataAndDurableBytesWithoutRestoringTrust
+android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class="$recovery" \
+  -Pandroid.testInstrumentationRunnerArguments.recoveryStage=checkpoint || exit $?
+adb shell am force-stop com.msayed.qrferry || exit $?
+android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class="$recovery" \
+  -Pandroid.testInstrumentationRunnerArguments.recoveryStage=restore || exit $?

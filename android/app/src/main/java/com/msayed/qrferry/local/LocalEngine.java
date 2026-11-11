@@ -25,19 +25,44 @@ public final class LocalEngine implements AutoCloseable {
  private volatile boolean authenticated,started,paused,outgoingRequested;private volatile long revision,bytes,lastProgress;
  private volatile LocalPairing pairing;private volatile Network route;private volatile LocalIdentity identity;private volatile SSLServerSocket server;
  private volatile SSLSocket socket;private volatile DataOutputStream output;private volatile String receiverTicket="",receiverPeer="",pendingTicket="",pendingPeer="";
+ private final LocalRecovery recovery;private volatile boolean recovered;
  private final String myPeer=UUID.randomUUID().toString();
- public LocalEngine(Context context){files=new LocalFiles(context);wifi=new LocalNetwork(context);clock.scheduleAtFixedRate(this::heartbeat,10,10,TimeUnit.SECONDS);}
+ public LocalEngine(Context context){this(context,false);}
+ LocalEngine(Context context,boolean persistent){
+  files=new LocalFiles(context);wifi=new LocalNetwork(context);recovery=persistent?new LocalRecovery(context):null;
+  if(recovery!=null){JSONObject saved=recovery.read();if(saved!=null)try{
+   files.restoreSources(saved.optJSONArray("sources")==null?new JSONArray():saved.getJSONArray("sources"));revision=saved.optLong("revision",0)+1;
+   String previous=saved.optString("phase");role=saved.optString("role");
+   if(!role.isEmpty()&&!previous.equals("closed")&&!previous.equals("idle")){
+    recovered=true;phase="recovery";paused=true;method=saved.optString("method");started=saved.optBoolean("started");bytes=saved.optLong("bytes");
+    JSONArray rows=saved.optJSONArray("files");if(rows!=null)for(int i=0;i<Math.min(rows.length(),LocalProtocol.MAX_FILES);i++){JSONObject row=rows.getJSONObject(i);if(!row.optString("status").equals("complete"))row.put("status","paused");transfers.put(row.getString("id"),row);}
+    JSONArray chat=saved.optJSONArray("messages");if(chat!=null)for(int i=Math.max(0,chat.length()-500);i<chat.length();i++){JSONObject row=chat.getJSONObject(i);if(row.optString("status").equals("sending")||row.optString("status").equals("sent"))row.put("status","failed");messages.add(row);}
+   }else role="";
+  }catch(Exception invalid){error="RECOVERY_UNAVAILABLE";role="";phase="idle";recovered=false;transfers.clear();messages.clear();}}
+  clock.scheduleAtFixedRate(this::heartbeat,10,10,TimeUnit.SECONDS);
+ }
+ void checkpointRecovery(){if(recovery!=null){changed();recovery.flush();}}
+ /** OS/service interruption preserves the recoverable record but destroys transport trust. */
+ public synchronized void suspend(){
+  epoch.incrementAndGet();files.cancelFileWork();closeTransport();pairing=null;route=null;ticket="";receiverTicket="";receiverPeer="";pendingTicket="";pendingPeer="";incoming.clear();finalizing.clear();responses.clear();
+  if(!role.isEmpty()){recovered=true;paused=true;phase="recovery";}changed();if(recovery!=null)recovery.flush();
+ }
+ private void newSession(String nextRole){
+  boolean keep=recovered&&role.equals(nextRole);Map<String,JSONObject>previousFiles=keep?new LinkedHashMap<>(transfers):null;List<JSONObject>previousChat=keep?new ArrayList<>(messages):null;
+  reset();if(keep){transfers.putAll(previousFiles);messages.addAll(previousChat);}
+ }
+
  private synchronized void heartbeat(){
   if(writeDeadline!=0&&android.os.SystemClock.elapsedRealtime()>writeDeadline)lost(epoch.get());
   if(authenticated){if(pingPending.compareAndSet(false,true))io.execute(()->{try{send(new JSONObject().put("type","ping"));for(String id:finalizing.keySet())send(new JSONObject().put("type","pending").put("id",id));}catch(Exception ignored){}finally{pingPending.set(false);}});}
   else if(pairing!=null&&role.equals("receive")&&pairing.expires<System.currentTimeMillis()&&receiverTicket.isEmpty()){fail("PAIRING_EXPIRED");closeTransport();}
  }
  public void subscribe(Listener l){listeners.add(l);l.changed(snapshot());}public void unsubscribe(Listener l){listeners.remove(l);}
- public synchronized JSONObject snapshot(){try{JSONArray list=new JSONArray();for(JSONObject f:transfers.values())list.put(new JSONObject(f.toString()));JSONArray chat=new JSONArray();for(JSONObject m:messages)chat.put(new JSONObject(m.toString()));return new JSONObject().put("revision",revision).put("phase",phase).put("error",error).put("role",role).put("method",method).put("authenticated",authenticated).put("started",started).put("paused",paused||peerPaused).put("peer",peer).put("selected",files.selected()).put("files",list).put("messages",chat).put("qrReady",pairing!=null&&role.equals("receive")&&!authenticated&&receiverTicket.isEmpty()&&pairing.expires>System.currentTimeMillis()).put("expires",pairing==null?0:pairing.expires).put("bytes",bytes);}catch(Exception e){return new JSONObject();}}
- public void changed(){JSONObject s;synchronized(this){revision++;s=snapshot();}for(Listener l:listeners)l.changed(s);}
+ public synchronized JSONObject snapshot(){try{JSONArray list=new JSONArray();for(JSONObject f:transfers.values())list.put(new JSONObject(f.toString()));JSONArray chat=new JSONArray();for(JSONObject m:messages)chat.put(new JSONObject(m.toString()));return new JSONObject().put("revision",revision).put("recovered",recovered).put("recoveryWarning",recovery!=null&&recovery.failed()).put("phase",phase).put("error",error).put("role",role).put("method",method).put("authenticated",authenticated).put("started",started).put("paused",paused||peerPaused).put("peer",peer).put("selected",files.selected()).put("files",list).put("messages",chat).put("qrReady",pairing!=null&&role.equals("receive")&&!authenticated&&receiverTicket.isEmpty()&&pairing.expires>System.currentTimeMillis()).put("expires",pairing==null?0:pairing.expires).put("bytes",bytes);}catch(Exception e){return new JSONObject();}}
+ public void changed(){JSONObject s;synchronized(this){revision++;s=snapshot();if(recovery!=null)try{recovery.save(s,files.recoverySources());}catch(Exception ignored){}}for(Listener l:listeners)l.changed(s);}
  private void state(String p){phase=p;error="";changed();}public void fail(String code){error=code;phase=started?"paused":"error";changed();}
- public boolean busy(){return !Arrays.asList("idle","error","closed").contains(phase);}
- public synchronized void receive(String requested){reset();role="receive";state("preparing");int g=epoch.get();wifi.receive(requested,new LocalNetwork.Receiver(){
+ public boolean busy(){return !Arrays.asList("idle","error","closed","recovery").contains(phase);}
+ public synchronized void receive(String requested){newSession("receive");role="receive";state("preparing");int g=epoch.get();wifi.receive(requested,new LocalNetwork.Receiver(){
   public void ready(String host,String ssid,String password,String chosen){synchronized(LocalEngine.this){if(epoch.get()!=g||io.isShutdown())return;io.execute(()->{try{listen(host,ssid,password,chosen,g);}catch(Exception e){failSession(g,code(e));}});}}
   public void failed(String code){failSession(g,code);}
  });}
@@ -83,7 +108,7 @@ public final class LocalEngine implements AutoCloseable {
  }
  public String pairingCode()throws Exception{LocalPairing p=pairing;if(p==null||!role.equals("receive")||authenticated||!receiverTicket.isEmpty()||p.expires<System.currentTimeMillis())throw new IOException("QR_NOT_READY");return p.encode();}
  public synchronized void join(String raw)throws Exception{
-  LocalPairing p=LocalPairing.decode(raw);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");reset();role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
+  LocalPairing p=LocalPairing.decode(raw);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");newSession("send");role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
   wifi.connect(p,new LocalNetwork.Sender(){public void ready(Network n){synchronized(LocalEngine.this){if(epoch.get()!=g)return;route=n;connect(g);}}public void failed(String code){connectionError(g,code);}});
  }
  private synchronized void connect(int g){
@@ -228,9 +253,9 @@ public final class LocalEngine implements AutoCloseable {
  private synchronized void lost(int g){if(epoch.get()!=g)return;closeSocket();phase="paused";error="CONNECTION_LOST";changed();}
  private void closeSocket(){connectionVersion.incrementAndGet();authenticated=false;SSLSocket old=socket;socket=null;output=null;if(old!=null)try{old.close();}catch(Exception ignored){}}
  private void closeTransport(){closeSocket();for(Socket pending:pendingConnections.values())try{pending.close();}catch(Exception ignored){}pendingConnections.clear();SSLServerSocket old=server;server=null;if(old!=null)try{old.close();}catch(Exception ignored){}wifi.close();LocalIdentity id=identity;identity=null;if(id!=null)id.close();}
- public synchronized void reset(){epoch.incrementAndGet();files.cancelFileWork();closeTransport();pairing=null;route=null;ticket="";receiverTicket="";receiverPeer="";pendingTicket="";pendingPeer="";started=false;paused=false;outgoingRequested=false;peerPaused=false;retries=0;role="";peer="";method="";sent.clear();responses.clear();incoming.clear();finalizing.clear();synchronized(this){transfers.clear();messages.clear();bytes=0;}state("idle");}
+ public synchronized void reset(){recovered=false;epoch.incrementAndGet();files.cancelFileWork();closeTransport();pairing=null;route=null;ticket="";receiverTicket="";receiverPeer="";pendingTicket="";pendingPeer="";started=false;paused=false;outgoingRequested=false;peerPaused=false;retries=0;role="";peer="";method="";sent.clear();responses.clear();incoming.clear();finalizing.clear();synchronized(this){transfers.clear();messages.clear();bytes=0;}state("idle");}
  public synchronized void disconnect(){reset();state("closed");}
- public synchronized void shutdown(){disconnect();clock.shutdownNow();io.shutdownNow();}
+ public synchronized void shutdown(){disconnect();clock.shutdownNow();io.shutdownNow();if(recovery!=null)recovery.close();}
  @Override public void close(){disconnect();}
  private static String[]protocols(String[]supported){List<String>a=new ArrayList<>();for(String p:supported)if(p.equals("TLSv1.2")||p.equals("TLSv1.3"))a.add(p);return a.toArray(new String[0]);}
  private static String code(Exception e){if(e instanceof SecurityException)return "FILE_ACCESS_REQUIRED";String s=e.getMessage();return s!=null&&s.matches("[A-Z0-9_]{3,80}")?s:e instanceof javax.net.ssl.SSLException?"TLS_VERIFICATION_FAILED":e instanceof java.net.SocketTimeoutException?"NETWORK_TIMEOUT":"LOCAL_TRANSFER_FAILED";}

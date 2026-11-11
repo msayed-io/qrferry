@@ -3,6 +3,7 @@ export interface LocalFile { id: string; name: string; mime?: string; size: numb
 export interface LocalTransfer extends LocalFile { direction: 'in'|'out'; status: string; bytes: number }
 export interface LocalMessage { id: string; text: string; direction: 'in'|'out'; status: string; time: number }
 export interface LocalState {
+ recovered?: boolean; recoveryWarning?: boolean;
  revision: number; phase: string; error: string; role: string; method: string; authenticated: boolean; started: boolean;
  paused: boolean; peer: string; selected: LocalFile[]; files: LocalTransfer[]; messages: LocalMessage[];
  qrReady: boolean; expires: number; bytes: number; native?: boolean; sdk?: number; allFiles?: boolean; storageAsked?: boolean; destination?: string;

@@ -49,3 +49,8 @@
 .local-transfer-row progress { display:block; width:100%; height:5px; margin:12px 0 8px; accent-color:var(--tint); border:0; border-radius:999px; overflow:hidden; background:var(--fill); }.local-transfer-row progress::-webkit-progress-bar { background:var(--fill); }.local-transfer-row progress::-webkit-progress-value { background:var(--tint); border-radius:999px; }
 .local-transfer-controls { display:flex; justify-content:center; margin:20px 0; }.local-timeline { padding-bottom:100px; }.local-timeline small { font-size:11px; }
 .local-page:not(.local-session) { padding-bottom:100px; }
+
+/* Restored-session notice: same card language as the rest of the local mode. */
+.local-recovery{display:grid;gap:12px;border-color:color-mix(in srgb,var(--ink,#eaf2ff) 14%,transparent)}
+.local-recovery h2{font-size:1.05rem;margin:0}
+.local-recovery p{margin:0;line-height:1.6;opacity:.86}
