@@ -53,12 +53,13 @@ public final class LocalFiles {
  }
  public InputStream open(Source s)throws IOException{InputStream in=s.apk!=null?new FileInputStream(s.apk):resolver.openInputStream(s.uri);if(in==null)throw new IOException("SOURCE_UNAVAILABLE");return in;}
  public String hash(Source s)throws Exception{try(InputStream in=open(s)){return s.hash=LocalProtocol.sha(in);}}
+ public boolean legacyWritable(){return Build.VERSION.SDK_INT<=28&&androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)==android.content.pm.PackageManager.PERMISSION_GRANTED;}
  public boolean broad(){return Build.VERSION.SDK_INT>=30&&Environment.isExternalStorageManager();}
  public String tree(){return context.getSharedPreferences("local-files",0).getString("tree","");}
  public void tree(Uri uri){resolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);context.getSharedPreferences("local-files",0).edit().putString("tree",uri.toString()).apply();}
  private File root(){return new File(Environment.getExternalStorageDirectory(),"QRFerry");}
  public void ensureFolders()throws IOException{
-  if(broad()||Build.VERSION.SDK_INT<=28){for(String n:new String[]{"Audio","Videos","Images","Files"}){File f=new File(root(),n);if(!f.isDirectory()&&!f.mkdirs())throw new IOException("STORAGE_ACCESS_REQUIRED");}}
+  if(broad()||legacyWritable()){for(String n:new String[]{"Audio","Videos","Images","Files"}){File f=new File(root(),n);if(!f.isDirectory()&&!f.mkdirs())throw new IOException("STORAGE_ACCESS_REQUIRED");}}
   else if(!tree().isEmpty()){DocumentFile r=DocumentFile.fromTreeUri(context,Uri.parse(tree()));if(r==null||!r.canWrite())throw new IOException("STORAGE_ACCESS_REQUIRED");DocumentFile base=r.findFile("QRFerry");if(base==null)base=r.createDirectory("QRFerry");if(base==null)throw new IOException("CANNOT_CREATE_FOLDER");for(String n:new String[]{"Audio","Videos","Images","Files"})if(base.findFile(n)==null&&base.createDirectory(n)==null)throw new IOException("CANNOT_CREATE_FOLDER");}
   // Scoped-storage Downloads collections are created lazily when real data arrives.
  }
@@ -80,7 +81,7 @@ public final class LocalFiles {
   String previous=published(id);if(previous!=null)return previous;JSONObject m=read(path(id,".json"));File part=path(id,".part");if(!part.exists()&&m.getLong("size")==0)part.createNewFile();
   if(part.length()!=m.getLong("size"))throw new IOException("INCOMPLETE_FILE");try(InputStream in=new FileInputStream(part)){if(!LocalProtocol.secret(LocalProtocol.sha(in),id)){part.delete();throw new IOException("HASH_MISMATCH");}}
   ensureFolders();String name=m.getString("name"),mime=m.getString("mime"),category=LocalProtocol.category(mime);Uri uri;
-  if(broad()||Build.VERSION.SDK_INT<=28){File dir=new File(root(),category),dest=new File(dir,name);for(int n=1;dest.exists();n++)dest=new File(dir,n+"-"+name);File tmp=new File(dir,".qrferry-"+UUID.randomUUID()+".part");try(FileOutputStream out=new FileOutputStream(tmp);InputStream in=new FileInputStream(part)){copy(in,out);out.getFD().sync();}catch(Exception e){tmp.delete();throw e;}if(!tmp.renameTo(dest)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=Uri.fromFile(dest);android.media.MediaScannerConnection.scanFile(context,new String[]{dest.getAbsolutePath()},new String[]{mime},null);
+  if(broad()||legacyWritable()){File dir=new File(root(),category),dest=new File(dir,name);for(int n=1;dest.exists();n++)dest=new File(dir,n+"-"+name);File tmp=new File(dir,".qrferry-"+UUID.randomUUID()+".part");try(FileOutputStream out=new FileOutputStream(tmp);InputStream in=new FileInputStream(part)){copy(in,out);out.getFD().sync();}catch(Exception e){tmp.delete();throw e;}if(!tmp.renameTo(dest)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=Uri.fromFile(dest);android.media.MediaScannerConnection.scanFile(context,new String[]{dest.getAbsolutePath()},new String[]{mime},null);
   }else if(!tree().isEmpty()){
    DocumentFile base=DocumentFile.fromTreeUri(context,Uri.parse(tree())).findFile("QRFerry").findFile(category);DocumentFile tmp=base.createFile(mime,".qrferry-"+UUID.randomUUID()+".part");if(tmp==null)throw new IOException("PUBLISH_FAILED");try(OutputStream out=resolver.openOutputStream(tmp.getUri());InputStream in=new FileInputStream(part)){if(out==null)throw new IOException("PUBLISH_FAILED");copy(in,out);}catch(Exception e){tmp.delete();throw e;}
    String desired=name;for(int n=1;base.findFile(desired)!=null;n++)desired=n+"-"+name;if(!tmp.renameTo(desired)){tmp.delete();throw new IOException("PUBLISH_FAILED");}uri=tmp.getUri();
@@ -91,6 +92,6 @@ public final class LocalFiles {
   write(path(id,".done"),new JSONObject().put("uri",uri.toString()));part.delete();return uri.toString();
  }
  private static void copy(InputStream in,OutputStream out)throws IOException{byte[]b=new byte[LocalProtocol.CHUNK];for(int n;(n=in.read(b))!=-1;)out.write(b,0,n);out.flush();}
- private static JSONObject read(File f)throws Exception{if(f.length()>8192)throw new IOException("INVALID_JOURNAL");try(InputStream in=new FileInputStream(f)){ByteArrayOutputStream out=new ByteArrayOutputStream();copy(in,out);return new JSONObject(out.toString("UTF-8"));}}
+ private static JSONObject read(File f)throws Exception{if(f.length()>8192)throw new IOException("INVALID_JOURNAL");try(InputStream in=new android.util.AtomicFile(f).openRead()){ByteArrayOutputStream out=new ByteArrayOutputStream();copy(in,out);return new JSONObject(out.toString("UTF-8"));}}
  private static void write(File f,JSONObject o)throws Exception{android.util.AtomicFile af=new android.util.AtomicFile(f);FileOutputStream out=null;try{out=af.startWrite();out.write(o.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));af.finishWrite(out);}catch(Exception e){if(out!=null)af.failWrite(out);throw e;}}
 }

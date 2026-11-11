@@ -37,7 +37,7 @@ public class LocalNativeTest {
  }
  @Test public void fullNativeSessionTransfersCommitsAndAcknowledgesMessages()throws Exception{
   android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
-  if(android.os.Build.VERSION.SDK_INT<=28){InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant "+context.getPackageName()+" android.permission.WRITE_EXTERNAL_STORAGE").close();}
+  if(android.os.Build.VERSION.SDK_INT<=28)assertEquals("Grant storage before starting instrumentation",android.content.pm.PackageManager.PERMISSION_GRANTED,androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.WRITE_EXTERNAL_STORAGE));
   byte[]payload=new byte[2*LocalProtocol.CHUNK+31];new java.security.SecureRandom().nextBytes(payload);String hash=LocalProtocol.sha(new ByteArrayInputStream(payload));
   java.io.File source=new java.io.File(context.getCacheDir(),"native-session-"+System.nanoTime()+".bin");try(FileOutputStream out=new FileOutputStream(source)){out.write(payload);}
   android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source);
@@ -57,6 +57,14 @@ public class LocalNativeTest {
    if(saved.startsWith("file:"))new File(android.net.Uri.parse(saved).getPath()).delete();else context.getContentResolver().delete(android.net.Uri.parse(saved),null,null);
    receiver.disconnect();serving.get(5,TimeUnit.SECONDS);
   }finally{sender.shutdown();receiver.shutdown();serverThread.shutdownNow();source.delete();for(String suffix:new String[]{".json",".done",".part"})new File(context.getFilesDir(),"local-inbox/"+hash+suffix).delete();}
+ }
+
+ @Test public void bundledScannerDecodesLocalQrBitmap()throws Exception{
+  LocalPairing pairing=new LocalPairing(UUID.randomUUID().toString(),"192.168.49.1",12345,String.join("",Collections.nCopies(64,"a")),LocalPairing.token(),"DIRECT-QF","temporary-password","direct",System.currentTimeMillis()+60000);
+  String raw=pairing.encode();com.google.zxing.common.BitMatrix qr=new com.google.zxing.MultiFormatWriter().encode(raw,com.google.zxing.BarcodeFormat.QR_CODE,768,768);
+  android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(768,768,android.graphics.Bitmap.Config.ARGB_8888);for(int y=0;y<768;y++)for(int x=0;x<768;x++)image.setPixel(x,y,qr.get(x,y)?android.graphics.Color.BLACK:android.graphics.Color.WHITE);
+  com.google.mlkit.vision.barcode.BarcodeScanner scanner=com.google.mlkit.vision.barcode.BarcodeScanning.getClient(new com.google.mlkit.vision.barcode.BarcodeScannerOptions.Builder().setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE).build());
+  try{java.util.List<com.google.mlkit.vision.barcode.common.Barcode>codes=com.google.android.gms.tasks.Tasks.await(scanner.process(com.google.mlkit.vision.common.InputImage.fromBitmap(image,0)),20,TimeUnit.SECONDS);assertEquals(1,codes.size());assertEquals(raw,codes.get(0).getRawValue());}finally{scanner.close();image.recycle();}
  }
 
 }
