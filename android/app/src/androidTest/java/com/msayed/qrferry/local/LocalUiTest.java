@@ -128,11 +128,13 @@ public class LocalUiTest {
    assertEquals("true",js(view,"(()=>{const seg=document.querySelector('.lf-seg');const bar=document.querySelector('.lf-bar');if(!seg||!bar)return false;const s=getComputedStyle(seg);return s.overflowX!=='auto'&&s.overflowY!=='auto'&&getComputedStyle(bar).position==='fixed'})()"));
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-send-action button').click();return true})()"));
    until("Send did not open the scanner page",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='scan'")),15000);
-   shot("scan");
    assertEquals("false",js(view,"Boolean(document.querySelector('.bridge-composer'))"));assertFalse(engine.snapshot().getBoolean("started"));
    // Entering the scan screen requests the platform camera permission and opens
    // the bundled scanner directly; no app-made consent card exists any more.
    until("CameraX preview never streamed",()->{AtomicBoolean streaming=new AtomicBoolean();scenario.onActivity(activity->{PreviewView p=preview(activity.getWindow().getDecorView());streaming.set(p!=null&&p.getPreviewStreamState().getValue()==PreviewView.StreamState.STREAMING);});return streaming.get();},30000);
+   // Captured once the camera is live: a capture taken during the surface swap
+   // returns the frame that was still on screen.
+   shot("scan");
    assertEquals("true",js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('إغلاق')||b.textContent.includes('Close'));if(!b)return false;b.click();return true})()"));
    // Release travels JS -> bridge -> UI thread, so give it a frame budget
    // instead of asserting synchronously on the very next statement.
