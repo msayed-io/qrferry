@@ -39,12 +39,7 @@ jobs:
           api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
-          script: |
-            set +e
-            android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.msayed.qrferry.local.LocalNativeTest
-            result=$?
-            adb logcat -d > android/app/build/reports/local-logcat.txt
-            exit $result
+          script: bash scripts/native-local-instrumentation.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

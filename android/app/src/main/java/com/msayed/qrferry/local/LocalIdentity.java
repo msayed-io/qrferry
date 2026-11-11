@@ -17,7 +17,11 @@ public final class LocalIdentity implements AutoCloseable {
   alias="qrferry-local-"+session;store=KeyStore.getInstance("AndroidKeyStore");store.load(null);
   KeyPairGenerator generator=KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA,"AndroidKeyStore");
   generator.initialize(new KeyGenParameterSpec.Builder(alias,KeyProperties.PURPOSE_SIGN|KeyProperties.PURPOSE_VERIFY)
-   .setKeySize(2048).setDigests(KeyProperties.DIGEST_SHA256,KeyProperties.DIGEST_SHA512)
+   // Conscrypt supplies the TLS transcript digest/padding itself. Authorize its
+   // raw RSA signing upcall; this does NOT disable TLS hashing or certificate pinning.
+   // https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder
+   .setKeySize(2048).setDigests(KeyProperties.DIGEST_NONE,KeyProperties.DIGEST_SHA256,KeyProperties.DIGEST_SHA384,KeyProperties.DIGEST_SHA512)
+   .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1,KeyProperties.SIGNATURE_PADDING_RSA_PSS)
    .setCertificateSubject(new X500Principal("CN=QRFerry local session"))
    .setCertificateSerialNumber(new BigInteger(120,new SecureRandom()))

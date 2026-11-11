@@ -35,10 +35,10 @@ public final class LocalEngine implements AutoCloseable {
   public void failed(String code){if(epoch.get()==g)fail(code);}
  });}
  void listen(String host,String ssid,String password,String chosen,int g)throws Exception{
-  if(epoch.get()!=g)return;LocalIdentity fresh=new LocalIdentity(UUID.randomUUID().toString());if(epoch.get()!=g){fresh.close();return;}identity=fresh;server=(SSLServerSocket)identity.server.getServerSocketFactory().createServerSocket(0,4);server.setEnabledProtocols(protocols(server.getSupportedProtocols()));
-  pairing=new LocalPairing(UUID.randomUUID().toString(),host,server.getLocalPort(),identity.fingerprint,LocalPairing.token(),ssid,password,chosen,System.currentTimeMillis()+5*60*1000);method=chosen;state("waiting");
-  while(epoch.get()==g&&!server.isClosed()){
-   SSLSocket candidate=null;try{candidate=(SSLSocket)server.accept();if(authenticated){candidate.close();continue;}candidate.setSoTimeout(15000);candidate.startHandshake();DataInputStream in=new DataInputStream(candidate.getInputStream());DataOutputStream out=new DataOutputStream(candidate.getOutputStream());JSONObject hello=new JSONObject(LocalProtocol.readControl(in));
+  if(epoch.get()!=g)return;LocalIdentity fresh=new LocalIdentity(UUID.randomUUID().toString());SSLServerSocket listening=(SSLServerSocket)fresh.server.getServerSocketFactory().createServerSocket(0,4);listening.setEnabledProtocols(protocols(listening.getSupportedProtocols()));
+  synchronized(this){if(epoch.get()!=g){listening.close();fresh.close();return;}identity=fresh;server=listening;pairing=new LocalPairing(UUID.randomUUID().toString(),host,listening.getLocalPort(),fresh.fingerprint,LocalPairing.token(),ssid,password,chosen,System.currentTimeMillis()+5*60*1000);method=chosen;state("waiting");}
+  while(epoch.get()==g&&!listening.isClosed()){
+   SSLSocket candidate=null;try{candidate=(SSLSocket)listening.accept();if(authenticated){candidate.close();continue;}candidate.setSoTimeout(15000);candidate.startHandshake();DataInputStream in=new DataInputStream(candidate.getInputStream());DataOutputStream out=new DataOutputStream(candidate.getOutputStream());JSONObject hello=new JSONObject(LocalProtocol.readControl(in));
     String supplied=hello.optString("credential"),id=hello.optString("peer");boolean first=receiverTicket.isEmpty();
     if(!hello.optString("type").equals("hello")||hello.optInt("v")!=1||!hello.optString("session").equals(pairing.session)||!id.matches("[a-f0-9-]{36}")||(first?(System.currentTimeMillis()>pairing.expires||!LocalProtocol.secret(supplied,pairing.secret)):(!LocalProtocol.secret(supplied,receiverTicket)||!receiverPeer.equals(id))))throw new IOException("PAIRING_REJECTED");
     String proposed=first?LocalPairing.token():receiverTicket;
@@ -46,8 +46,8 @@ public final class LocalEngine implements AutoCloseable {
     JSONObject confirm=new JSONObject(LocalProtocol.readControl(in));if(!confirm.optString("type").equals("confirm")||!LocalProtocol.secret(confirm.optString("ticket"),proposed))throw new IOException("PAIRING_REJECTED");
     if(first){receiverPeer=id;receiverTicket=proposed;}
     LocalProtocol.writeControl(out,new JSONObject().put("type","ready").toString());
-    if(epoch.get()!=g){candidate.close();break;}activate(candidate,out,id);candidate=null;readLoop(in,g);
-   }catch(Exception e){if(epoch.get()!=g)break;if(authenticated)lost(g);}
+    if(epoch.get()!=g){candidate.close();break;}activate(candidate,out,id,g);candidate=null;readLoop(in,g);
+   }catch(Exception e){if(epoch.get()!=g)break;if(authenticated){String reason=code(e);try{send(new JSONObject().put("type","error").put("code",reason));}catch(Exception ignored){}lost(g);error=reason;changed();}}
    finally{if(candidate!=null)try{candidate.close();}catch(Exception ignored){}}
   }
  }
@@ -56,17 +56,17 @@ public final class LocalEngine implements AutoCloseable {
   LocalPairing p=LocalPairing.decode(raw);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");reset();role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
   wifi.connect(p,new LocalNetwork.Sender(){public void ready(Network n){if(epoch.get()!=g)return;route=n;connect(g);}public void failed(String code){if(epoch.get()==g){closeSocket();fail(code);}}});
  }
- private void connect(int g){if(epoch.get()!=g||!clientRunning.compareAndSet(false,true))return;io.execute(()->{try{if(epoch.get()!=g)return;
-  Socket raw=new Socket();if(route!=null)route.bindSocket(raw);raw.connect(new InetSocketAddress(pairing.host,pairing.port),15000);
-  SSLSocket s=(SSLSocket)LocalIdentity.client(pairing.pin).getSocketFactory().createSocket(raw,pairing.host,pairing.port,true);s.setEnabledProtocols(protocols(s.getSupportedProtocols()));s.setSoTimeout(15000);s.startHandshake();
+ private void connect(int g){if(epoch.get()!=g||!clientRunning.compareAndSet(false,true))return;io.execute(()->{Socket raw=null;SSLSocket candidate=null;try{if(epoch.get()!=g)return;
+  raw=new Socket();if(route!=null)route.bindSocket(raw);raw.connect(new InetSocketAddress(pairing.host,pairing.port),15000);
+  SSLSocket s=candidate=(SSLSocket)LocalIdentity.client(pairing.pin).getSocketFactory().createSocket(raw,pairing.host,pairing.port,true);s.setEnabledProtocols(protocols(s.getSupportedProtocols()));s.setSoTimeout(15000);s.startHandshake();
   DataInputStream in=new DataInputStream(s.getInputStream());DataOutputStream out=new DataOutputStream(s.getOutputStream());
   LocalProtocol.writeControl(out,new JSONObject().put("type","hello").put("v",1).put("session",pairing.session).put("credential",ticket.isEmpty()?pairing.secret:ticket).put("peer",myPeer).toString());
   JSONObject welcome=new JSONObject(LocalProtocol.readControl(in));if(!welcome.optString("type").equals("welcome")||!welcome.optString("ticket").matches("[A-Za-z0-9_-]{43}"))throw new IOException("INVALID_HANDSHAKE");ticket=welcome.getString("ticket");
   LocalProtocol.writeControl(out,new JSONObject().put("type","confirm").put("ticket",ticket).toString());
   if(!new JSONObject(LocalProtocol.readControl(in)).optString("type").equals("ready"))throw new IOException("INVALID_HANDSHAKE");
-  if(epoch.get()!=g){s.close();return;}activate(s,out,welcome.getString("peer"));pump();readLoop(in,g);
- }catch(Exception e){if(epoch.get()==g){lost(g);error=code(e);changed();}}finally{clientRunning.set(false);if(epoch.get()==g&&!authenticated&&!paused&&!ticket.isEmpty()&&retries++<3)clock.schedule(()->connect(g),Math.min(8,1<<retries),TimeUnit.SECONDS);}});}
- private void activate(SSLSocket s,DataOutputStream out,String id)throws Exception{closeSocket();socket=s;output=out;s.setSoTimeout(90000);authenticated=true;retries=0;peer=id;state(started?"transferring":"paired");}
+  if(epoch.get()!=g){s.close();return;}activate(s,out,welcome.getString("peer"),g);pump();readLoop(in,g);
+ }catch(Exception e){if(epoch.get()==g){lost(g);error=code(e);changed();}}finally{if(candidate!=null)try{candidate.close();}catch(Exception ignored){}else if(raw!=null)try{raw.close();}catch(Exception ignored){}clientRunning.set(false);if(epoch.get()==g&&!authenticated&&!paused&&!ticket.isEmpty()&&retries++<3)clock.schedule(()->connect(g),Math.min(8,1<<retries),TimeUnit.SECONDS);}});}
+ private synchronized void activate(SSLSocket s,DataOutputStream out,String id,int g)throws Exception{if(epoch.get()!=g)throw new IOException("CANCELLED");closeSocket();socket=s;output=out;s.setSoTimeout(90000);authenticated=true;retries=0;peer=id;state(started?"transferring":"paired");}
  private void readLoop(DataInputStream in,int g)throws Exception{
   while(epoch.get()==g&&authenticated){JSONObject m=new JSONObject(LocalProtocol.readControl(in));String type=m.getString("type"),id=m.optString("id");
    switch(type){
@@ -85,6 +85,7 @@ public final class LocalEngine implements AutoCloseable {
     case "accept":case "ack":case "complete":case "reject":{BlockingQueue<JSONObject> q=responses.get(id);if(q!=null&&!q.offer(m))throw new IOException("UNEXPECTED_RESPONSE");break;}
     case "message":{String text=m.getString("text");if(!authenticated||!started||text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>16000||!id.matches("[a-f0-9-]{36}"))throw new IOException("INVALID_MESSAGE");synchronized(this){boolean exists=false;for(JSONObject item:messages)if(id.equals(item.optString("id")))exists=true;if(!exists){if(messages.size()>=500)messages.remove(0);messages.add(new JSONObject().put("id",id).put("text",text).put("direction","in").put("status","received").put("time",System.currentTimeMillis()));}}send(new JSONObject().put("type","messageAck").put("id",id));changed();break;}
     case "messageAck":synchronized(this){for(JSONObject item:messages)if(id.equals(item.optString("id")))item.put("status","delivered");}changed();break;
+    case "error":throw new IOException(m.optString("code","PEER_ERROR"));
     case "close":throw new IOException("PEER_DISCONNECTED");default:throw new IOException("UNKNOWN_FRAME");
    }
   }
@@ -120,10 +121,10 @@ public final class LocalEngine implements AutoCloseable {
  private void lost(int g){if(epoch.get()!=g)return;closeSocket();phase="paused";error="CONNECTION_LOST";changed();}
  private void closeSocket(){connectionVersion.incrementAndGet();authenticated=false;SSLSocket old=socket;socket=null;output=null;if(old!=null)try{old.close();}catch(Exception ignored){}}
  private void closeTransport(){closeSocket();SSLServerSocket old=server;server=null;if(old!=null)try{old.close();}catch(Exception ignored){}wifi.close();LocalIdentity id=identity;identity=null;if(id!=null)id.close();}
- public void reset(){epoch.incrementAndGet();closeTransport();pairing=null;route=null;ticket="";receiverTicket="";receiverPeer="";started=false;paused=false;peerPaused=false;retries=0;role="";peer="";method="";sent.clear();responses.clear();synchronized(this){transfers.clear();messages.clear();bytes=0;}state("idle");}
+ public synchronized void reset(){epoch.incrementAndGet();closeTransport();pairing=null;route=null;ticket="";receiverTicket="";receiverPeer="";started=false;paused=false;peerPaused=false;retries=0;role="";peer="";method="";sent.clear();responses.clear();synchronized(this){transfers.clear();messages.clear();bytes=0;}state("idle");}
  public void disconnect(){try{send(new JSONObject().put("type","close"));}catch(Exception ignored){}reset();state("closed");}
  public void shutdown(){disconnect();clock.shutdownNow();io.shutdownNow();}
  @Override public void close(){disconnect();}
  private static String[]protocols(String[]supported){List<String>a=new ArrayList<>();for(String p:supported)if(p.equals("TLSv1.2")||p.equals("TLSv1.3"))a.add(p);return a.toArray(new String[0]);}
- private static String code(Exception e){String s=e.getMessage();return s!=null&&s.matches("[A-Z0-9_]{3,80}")?s:e instanceof javax.net.ssl.SSLException?"TLS_VERIFICATION_FAILED":e instanceof java.net.SocketTimeoutException?"NETWORK_TIMEOUT":"LOCAL_TRANSFER_FAILED";}
+ private static String code(Exception e){if(e instanceof SecurityException)return "FILE_ACCESS_REQUIRED";String s=e.getMessage();return s!=null&&s.matches("[A-Z0-9_]{3,80}")?s:e instanceof javax.net.ssl.SSLException?"TLS_VERIFICATION_FAILED":e instanceof java.net.SocketTimeoutException?"NETWORK_TIMEOUT":"LOCAL_TRANSFER_FAILED";}
 }

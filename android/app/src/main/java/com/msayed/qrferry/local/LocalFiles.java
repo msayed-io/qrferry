@@ -23,7 +23,7 @@ public final class LocalFiles {
  public LocalFiles(Context c){context=c.getApplicationContext();resolver=c.getContentResolver();inbox=new File(c.getFilesDir(),"local-inbox");inbox.mkdirs();}
  public synchronized JSONArray selected()throws Exception{JSONArray a=new JSONArray();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.put(s.json());}return a;}
  public synchronized List<Source> sources(){List<Source>a=new ArrayList<>();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.add(s);}return a;}
- public synchronized void select(String id,boolean on){if(!catalogue.containsKey(id))throw new IllegalArgumentException("UNKNOWN_FILE");if(on){if(selection.size()>=LocalProtocol.MAX_FILES)throw new IllegalArgumentException("TOO_MANY_FILES");selection.add(id);}else selection.remove(id);}
+ public synchronized void select(String id,boolean on){if(!catalogue.containsKey(id))throw new IllegalArgumentException("UNKNOWN_FILE");List<String>ids=new ArrayList<>();if(id.startsWith("apk:")){String group=id.substring(0,id.lastIndexOf(':')+1);for(String key:catalogue.keySet())if(key.startsWith(group))ids.add(key);}else ids.add(id);if(on){Set<String>next=new LinkedHashSet<>(selection);next.addAll(ids);if(next.size()>LocalProtocol.MAX_FILES)throw new IllegalArgumentException("TOO_MANY_FILES");selection.clear();selection.addAll(next);}else selection.removeAll(ids);}
  public synchronized JSONArray addUris(List<Uri> uris,int flags)throws Exception{
   JSONArray a=new JSONArray();for(Uri uri:uris){if(!"content".equals(uri.getScheme()))continue;if(selection.size()>=LocalProtocol.MAX_FILES)break;
    if((flags&Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)!=0)try{resolver.takePersistableUriPermission(uri,flags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION));}catch(SecurityException ignored){}
@@ -69,7 +69,7 @@ public final class LocalFiles {
   File meta=path(id,".json"),part=path(id,".part");
   if(meta.isFile()){JSONObject o=read(meta);if(o.getLong("size")!=size)throw new IOException("FILE_ID_CONFLICT");}
   else write(meta,new JSONObject().put("id",id).put("name",LocalProtocol.safeName(name)).put("mime",mime).put("size",size));
-  long length=part.isFile()?part.length():0;if(length>size)throw new IOException("INVALID_PARTIAL");return length;
+  long length=part.isFile()?part.length():0;if(length>size)throw new IOException("INVALID_PARTIAL");if(new StatFs(inbox.getAbsolutePath()).getAvailableBytes()<size-length+16L*1024*1024)throw new IOException("STORAGE_FULL");return length;
  }
  public synchronized String published(String id)throws Exception{File f=path(id,".done");if(!f.isFile())return null;String uri=read(f).getString("uri");try(InputStream in=resolver.openInputStream(Uri.parse(uri))){return in==null?null:uri;}catch(Exception e){return null;}}
  public synchronized long append(String id,long offset,byte[]data,int length)throws Exception{
