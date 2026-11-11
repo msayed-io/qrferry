@@ -11,6 +11,7 @@ export interface NativeBounds { x: number; y: number; width: number; height: num
 interface LocalPlugin {
  getState(): Promise<LocalState>;
  addListener(event:'state',listener:(state:LocalState)=>void):Promise<PluginListenerHandle>;
+ addListener(event:'lifecycle',listener:(state:{active:boolean})=>void):Promise<PluginListenerHandle>;
  listFiles(options:{category:string;page:number}):Promise<{files:LocalFile[]}>;
  selectFile(options:{id:string;selected:boolean}):Promise<LocalState>;
  pickFiles(options:{mime:string}):Promise<LocalState>;

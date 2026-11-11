@@ -66,8 +66,11 @@ public final class LocalFiles {
  public void tree(Uri uri){resolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);context.getSharedPreferences("local-files",0).edit().putString("tree",uri.toString()).apply();}
  private File root(){return new File(Environment.getExternalStorageDirectory(),"QRFerry");}
  public void ensureFolders()throws IOException{
-  if(broad()||legacyWritable()){for(String n:new String[]{"Audio","Videos","Images","Files"}){File f=new File(root(),n);if(!f.isDirectory()&&!f.mkdirs())throw new IOException("STORAGE_ACCESS_REQUIRED");}}
-  else if(!tree().isEmpty()){DocumentFile r=DocumentFile.fromTreeUri(context,Uri.parse(tree()));if(r==null||!r.canWrite())throw new IOException("STORAGE_ACCESS_REQUIRED");DocumentFile base=r.findFile("QRFerry");if(base==null)base=r.createDirectory("QRFerry");if(base==null)throw new IOException("CANNOT_CREATE_FOLDER");for(String n:new String[]{"Audio","Videos","Images","Files"})if(base.findFile(n)==null&&base.createDirectory(n)==null)throw new IOException("CANNOT_CREATE_FOLDER");}
+  if(!tree().isEmpty()){
+   DocumentFile r=DocumentFile.fromTreeUri(context,Uri.parse(tree()));if(r==null||!r.canWrite())throw new IOException("STORAGE_ACCESS_REQUIRED");DocumentFile base=r.findFile("QRFerry");if(base==null)base=r.createDirectory("QRFerry");if(base==null)throw new IOException("CANNOT_CREATE_FOLDER");for(String n:new String[]{"Audio","Videos","Images","Files"})if(base.findFile(n)==null&&base.createDirectory(n)==null)throw new IOException("CANNOT_CREATE_FOLDER");
+  }else if(broad()||legacyWritable()){
+   for(String n:new String[]{"Audio","Videos","Images","Files"}){File f=new File(root(),n);if(!f.isDirectory()&&!f.mkdirs())throw new IOException("STORAGE_ACCESS_REQUIRED");}
+  }
   // Scoped-storage Downloads collections are created lazily when real data arrives.
  }
  private File path(String hash,String suffix)throws IOException{if(!LocalProtocol.hash(hash))throw new IOException("INVALID_FILE_ID");return new File(inbox,hash+suffix);}
@@ -102,7 +105,7 @@ public final class LocalFiles {
   File part=path(id,".part");if(!part.exists()&&m.getLong("size")==0)part.createNewFile();
   if(part.length()!=m.getLong("size"))throw new IOException("INCOMPLETE_FILE");try(InputStream in=new FileInputStream(part)){if(!LocalProtocol.secret(LocalProtocol.sha(in,active),m.getString("sha256"))){part.delete();throw new IOException("HASH_MISMATCH");}}
   ensureFolders();String name=m.getString("name"),mime=m.getString("mime");
-  Uri uri=publication.publish(id,m,part,broad()||legacyWritable(),tree(),active);
+  Uri uri=publication.publish(id,m,part,tree().isEmpty()&&(broad()||legacyWritable()),tree(),active);
   write(path(id,".done"),new JSONObject().put("uri",uri.toString()).put("name",name).put("mime",mime).put("size",m.getLong("size")).put("sha256",m.getString("sha256")));
   publication.receiptWritten();part.delete();publication.clear(id);return uri.toString();
  }

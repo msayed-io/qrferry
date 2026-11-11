@@ -36,6 +36,18 @@ public final class UnknownLengthProvider extends ContentProvider {
   }catch(java.io.IOException e){throw new FileNotFoundException(e.getMessage());}
  }
  @Override public AssetFileDescriptor openAssetFile(Uri uri,String mode)throws FileNotFoundException{return new AssetFileDescriptor(openFile(uri,mode),0,AssetFileDescriptor.UNKNOWN_LENGTH);}
+ @Override public android.os.Bundle call(String method,String arg,android.os.Bundle extras){
+  authorize();long identity=Binder.clearCallingIdentity();try{
+  if("grant-document-tree".equals(method)){
+   Uri tree=android.provider.DocumentsContract.buildTreeDocumentUri(TestDocumentsProvider.AUTHORITY,"root");
+   getContext().grantUriPermission("com.msayed.qrferry",tree,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION|android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION|android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|android.content.Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+   android.os.Bundle result=new android.os.Bundle();result.putString("uri",tree.toString());return result;
+  }
+  if("revoke-document-tree".equals(method)){getContext().revokeUriPermission(android.provider.DocumentsContract.buildTreeDocumentUri(TestDocumentsProvider.AUTHORITY,"root"),android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION|android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);return new android.os.Bundle();}
+  if("reset-document-tree".equals(method)){java.io.File root=new java.io.File(getContext().getFilesDir(),"saf-fixture");TestDocumentsProvider.remove(root);root.mkdirs();return new android.os.Bundle();}
+  return super.call(method,arg,extras);
+  }finally{Binder.restoreCallingIdentity(identity);}
+ }
  @Override public Uri insert(Uri uri,ContentValues values){throw new UnsupportedOperationException();}
  @Override public int update(Uri uri,ContentValues values,String where,String[]args){throw new UnsupportedOperationException();}
  @Override public int delete(Uri uri,String where,String[]args){throw new UnsupportedOperationException();}

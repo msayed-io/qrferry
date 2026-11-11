@@ -210,4 +210,26 @@ public class LocalNativeTest {
   }
  }
 
+ @Test public void safRecoveryFollowsRenamedUrisAndRevocationNeverRedirectsWrites()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();android.content.ContentResolver resolver=context.getContentResolver();String previous=context.getSharedPreferences("local-files",0).getString("tree","");List<String>ids=new ArrayList<>();
+  resolver.call(UnknownLengthProvider.URI,"reset-document-tree",null,null);android.os.Bundle grant=resolver.call(UnknownLengthProvider.URI,"grant-document-tree",null,null);assertNotNull(grant);android.net.Uri tree=android.net.Uri.parse(grant.getString("uri"));
+  try{
+   LocalFiles destination=new LocalFiles(context);destination.tree(tree);destination.ensureFolders();
+   for(String boundary:new String[]{"allocated","copied","external-published","receipt"}){
+    byte[]data=new byte[4097];new java.security.SecureRandom().nextBytes(data);String digest=LocalProtocol.sha(new ByteArrayInputStream(data)),name="saf-"+System.nanoTime()+".bin",id=LocalProtocol.transferId(digest,name,"application/octet-stream",data.length,UUID.randomUUID().toString());ids.add(id);
+    LocalFiles interrupted=new LocalFiles(context,phase->{if(phase.equals(boundary))throw new IOException("SIMULATED_PROCESS_EXIT");});interrupted.prepare(id,name,"application/octet-stream",data.length,digest);interrupted.append(id,0,data,data.length);
+    try{interrupted.finish(id);fail("Missing SAF fault boundary "+boundary);}catch(IOException expected){assertEquals("SIMULATED_PROCESS_EXIT",expected.getMessage());}
+    LocalFiles recovered=new LocalFiles(context);String saved=recovered.finish(id);assertTrue(saved.contains(TestDocumentsProvider.AUTHORITY));assertEquals(saved,recovered.finish(id));
+    try(InputStream in=resolver.openInputStream(android.net.Uri.parse(saved))){assertEquals(digest,LocalProtocol.sha(in));}
+    androidx.documentfile.provider.DocumentFile directory=androidx.documentfile.provider.DocumentFile.fromTreeUri(context,tree).findFile("QRFerry").findFile("Files");int count=0;for(androidx.documentfile.provider.DocumentFile file:directory.listFiles())if(name.equals(file.getName()))count++;assertEquals("Recovery duplicated a renamed SAF document",1,count);
+   }
+   resolver.call(UnknownLengthProvider.URI,"revoke-document-tree",null,null);
+   try{new LocalFiles(context).ensureFolders();fail("Revoked SAF destination was silently replaced with another location");}catch(IOException expected){assertEquals("STORAGE_ACCESS_REQUIRED",expected.getMessage());}
+   assertEquals(tree.toString(),new LocalFiles(context).tree());
+  }finally{
+   context.getSharedPreferences("local-files",0).edit().putString("tree",previous).commit();resolver.call(UnknownLengthProvider.URI,"reset-document-tree",null,null);resolver.call(UnknownLengthProvider.URI,"revoke-document-tree",null,null);
+   for(String id:ids)for(String suffix:new String[]{".json",".done",".part",".txn"})new android.util.AtomicFile(new File(context.getFilesDir(),"local-inbox/"+id+suffix)).delete();
+  }
+ }
+
 }
