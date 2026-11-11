@@ -15,10 +15,10 @@ public final class LocalNetwork implements AutoCloseable {
  private final Context context;private final Handler main=new Handler(Looper.getMainLooper());
  private final WifiManager wifi;private final ConnectivityManager connectivity;private final WifiP2pManager p2p;private WifiP2pManager.Channel channel;
  private WifiManager.LocalOnlyHotspotReservation hotspot;private ConnectivityManager.NetworkCallback callback;
- private boolean ownedGroup;private int generation,legacyId=-1;private WifiManager.WifiLock lock;
+ private boolean ownedGroup;private final java.util.concurrent.atomic.AtomicInteger generation=new java.util.concurrent.atomic.AtomicInteger();private int legacyId=-1;private WifiManager.WifiLock lock;
  public LocalNetwork(Context c){context=c.getApplicationContext();wifi=(WifiManager)context.getSystemService(Context.WIFI_SERVICE);connectivity=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);p2p=(WifiP2pManager)context.getSystemService(Context.WIFI_P2P_SERVICE);}
- private boolean live(int g){return generation==g;}
- public void receive(String method,Receiver receiver){main.post(()->{close();int g=generation;try{
+ private boolean live(int g){return generation.get()==g;}
+ public void receive(String method,Receiver receiver){int g=generation.incrementAndGet();main.post(()->{if(!live(g))return;releaseResources();try{
   if(!wifi.isWifiEnabled()){receiver.failed("WIFI_OFF");return;}hold();
   if("lan".equals(method)){String ip=lanAddress();if(ip==null)receiver.failed("JOIN_WIFI_FIRST");else receiver.ready(ip,"","","lan");return;}
   if("hotspot".equals(method)){hotspot(g,receiver);return;}
@@ -43,14 +43,14 @@ public final class LocalNetwork implements AutoCloseable {
    @Override public void onFailed(int reason){if(live(g))receiver.failed("HOTSPOT_UNAVAILABLE_USE_EXISTING_WIFI");}
   },main);}catch(SecurityException e){receiver.failed("NEARBY_PERMISSION_REQUIRED");}catch(Exception e){receiver.failed("HOTSPOT_UNAVAILABLE_USE_EXISTING_WIFI");}
  }
- public void connect(LocalPairing offer,Sender sender){main.post(()->{close();int g=generation;try{
+ public void connect(LocalPairing offer,Sender sender){int g=generation.incrementAndGet();main.post(()->{if(!live(g))return;releaseResources();try{
   if(!wifi.isWifiEnabled()){sender.failed("WIFI_OFF");return;}hold();
   if(offer.method.equals("lan")){for(Network n:connectivity.getAllNetworks()){NetworkCapabilities caps=connectivity.getNetworkCapabilities(n);if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){sender.ready(n);return;}}sender.failed("JOIN_WIFI_FIRST");return;}
   if(Build.VERSION.SDK_INT>=29){
    WifiNetworkSpecifier spec=new WifiNetworkSpecifier.Builder().setSsid(offer.ssid).setWpa2Passphrase(offer.password).build();
    NetworkRequest request=new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).setNetworkSpecifier(spec).build();
    callback=new ConnectivityManager.NetworkCallback(){public void onAvailable(Network n){if(live(g))sender.ready(n);}public void onUnavailable(){if(live(g))sender.failed("NETWORK_REQUEST_DECLINED");}public void onLost(Network n){if(live(g))sender.failed("NETWORK_LOST");}};
-   connectivity.requestNetwork(request,callback,45000);
+   connectivity.requestNetwork(request,callback,main,45000);
   }else{
    WifiConfiguration config=new WifiConfiguration();config.SSID=quote(offer.ssid);config.preSharedKey=quote(offer.password);config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);legacyId=wifi.addNetwork(config);
    if(legacyId<0||!wifi.enableNetwork(legacyId,true)){sender.failed("WIFI_JOIN_FAILED");return;}wifi.reconnect();legacyWait(g,offer,sender,0);
@@ -63,5 +63,8 @@ public final class LocalNetwork implements AutoCloseable {
  private static String quote(String s){return "\""+s.replace("\\","\\\\").replace("\"","\\\"")+"\"";}
  private static String unquote(String s){return s!=null&&s.startsWith("\"")&&s.endsWith("\"")?s.substring(1,s.length()-1):s;}
  private void hold(){lock=wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF,"QRFerry:local");lock.setReferenceCounted(false);lock.acquire();}
- @Override public void close(){generation++;main.removeCallbacksAndMessages(null);if(callback!=null){try{connectivity.unregisterNetworkCallback(callback);}catch(Exception ignored){}callback=null;}if(hotspot!=null){hotspot.close();hotspot=null;}if(ownedGroup&&p2p!=null&&channel!=null){try{p2p.removeGroup(channel,null);}catch(Exception ignored){}ownedGroup=false;}if(channel!=null&&Build.VERSION.SDK_INT>=27)channel.close();channel=null;if(legacyId>=0){wifi.removeNetwork(legacyId);legacyId=-1;}if(lock!=null){if(lock.isHeld())lock.release();lock=null;}}
+ @Override public void close(){int g=generation.incrementAndGet();Runnable cleanup=()->{if(live(g))releaseResources();};if(Looper.myLooper()==main.getLooper())cleanup.run();else main.post(cleanup);}
+ // Every Android network resource is touched on the main looper. Generation is
+ // invalidated at call time, so queued starts/callbacks cannot resurrect a session.
+ private void releaseResources(){if(callback!=null){try{connectivity.unregisterNetworkCallback(callback);}catch(Exception ignored){}callback=null;}if(hotspot!=null){hotspot.close();hotspot=null;}if(ownedGroup&&p2p!=null&&channel!=null){try{p2p.removeGroup(channel,null);}catch(Exception ignored){}ownedGroup=false;}if(channel!=null&&Build.VERSION.SDK_INT>=27)channel.close();channel=null;if(legacyId>=0){wifi.removeNetwork(legacyId);legacyId=-1;}if(lock!=null){if(lock.isHeld())lock.release();lock=null;}}
 }

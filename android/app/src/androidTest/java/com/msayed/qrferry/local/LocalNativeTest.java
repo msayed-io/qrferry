@@ -232,4 +232,23 @@ public class LocalNativeTest {
   }
  }
 
+ @Test public void cancelledPickerGenerationCannotRepopulateANewSession()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();LocalFiles files=new LocalFiles(context);
+  int picker=files.fileWorkGeneration();files.cancelFileWork();
+  try{files.addUris(Collections.singletonList(UnknownLengthProvider.URI),0,picker);fail("Stale picker selection was accepted");}catch(IOException expected){assertEquals("CANCELLED",expected.getMessage());}
+  assertEquals(0,files.sources().size());
+  assertEquals(1,files.addUris(Collections.singletonList(UnknownLengthProvider.URI),0,files.fileWorkGeneration()).length());assertEquals(1,files.sources().size());
+ }
+
+ @Test public void networkCancellationInvalidatesStartsBeforeTheMainQueueRuns()throws Exception{
+  LocalNetwork network=new LocalNetwork(InstrumentationRegistry.getInstrumentation().getTargetContext());java.util.concurrent.atomic.AtomicInteger callbacks=new java.util.concurrent.atomic.AtomicInteger();
+  LocalNetwork.Receiver receiver=new LocalNetwork.Receiver(){public void ready(String host,String ssid,String password,String method){callbacks.incrementAndGet();}public void failed(String code){callbacks.incrementAndGet();}};
+  InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{
+   network.receive("lan",receiver);network.close();
+   network.receive("lan",receiver);
+   Thread cancel=new Thread(network::close,"cancel-network-generation");cancel.start();try{cancel.join(2000);}catch(InterruptedException e){throw new AssertionError(e);}assertFalse("close must not block on the main looper",cancel.isAlive());
+  });
+  InstrumentationRegistry.getInstrumentation().waitForIdleSync();assertEquals("A cancelled queued network start called its receiver",0,callbacks.get());network.close();
+ }
+
 }

@@ -28,8 +28,10 @@ public final class LocalFiles {
  public synchronized List<Source> sources(){List<Source>a=new ArrayList<>();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.add(s);}return a;}
  public synchronized void select(String id,boolean on){if(!catalogue.containsKey(id))throw new IllegalArgumentException("UNKNOWN_FILE");List<String>ids=new ArrayList<>();if(id.startsWith("apk:")){String group=id.substring(0,id.lastIndexOf(':')+1);for(String key:catalogue.keySet())if(key.startsWith(group))ids.add(key);}else ids.add(id);if(on){Set<String>next=new LinkedHashSet<>(selection);next.addAll(ids);if(next.size()>LocalProtocol.MAX_FILES)throw new IllegalArgumentException("TOO_MANY_FILES");selection.clear();selection.addAll(next);}else selection.removeAll(ids);}
  public void cancelFileWork(){fileGeneration.incrementAndGet();}
- public JSONArray addUris(List<Uri> uris,int flags)throws Exception{
-  int generation=fileGeneration.get();JSONArray a=new JSONArray();for(Uri uri:uris){if(!"content".equals(uri.getScheme()))continue;synchronized(this){if(selection.size()>=LocalProtocol.MAX_FILES)break;}
+ int fileWorkGeneration(){return fileGeneration.get();}
+ public JSONArray addUris(List<Uri> uris,int flags)throws Exception{return addUris(uris,flags,fileWorkGeneration());}
+ JSONArray addUris(List<Uri> uris,int flags,int generation)throws Exception{
+  if(fileGeneration.get()!=generation)throw new IOException("CANCELLED");JSONArray a=new JSONArray();for(Uri uri:uris){if(!"content".equals(uri.getScheme()))continue;synchronized(this){if(selection.size()>=LocalProtocol.MAX_FILES)break;}
    if((flags&Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)!=0)try{resolver.takePersistableUriPermission(uri,flags&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION));}catch(SecurityException ignored){}
    String name="file";long size=-1;try(Cursor c=resolver.query(uri,new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE},null,null,null)){if(c!=null&&c.moveToFirst()){name=c.getString(0);if(!c.isNull(1))size=c.getLong(1);}}
    if(size<0){try(android.content.res.AssetFileDescriptor fd=resolver.openAssetFileDescriptor(uri,"r")){if(fd!=null)size=fd.getLength();}}
@@ -37,7 +39,7 @@ public final class LocalFiles {
     size=0;try(InputStream in=resolver.openInputStream(uri)){if(in==null)throw new IOException("SOURCE_UNAVAILABLE");byte[]buffer=new byte[LocalProtocol.CHUNK];while(true){if(fileGeneration.get()!=generation||Thread.currentThread().isInterrupted())throw new IOException("CANCELLED");int n=in.read(buffer);if(n<0)break;size+=n;if(size>LocalProtocol.MAX_FILE)throw new IOException("FILE_SIZE_UNSUPPORTED");}}
    }
    if(size>LocalProtocol.MAX_FILE)throw new IOException("FILE_SIZE_UNSUPPORTED");String mime=resolver.getType(uri);
-   synchronized(this){if(fileGeneration.get()!=generation)throw new IOException("CANCELLED");String id=uriIds.get(uri.toString());if(id==null){id=UUID.randomUUID().toString();uriIds.put(uri.toString(),id);}Source s=new Source(id,name,mime,size,uri,null);catalogue.put(id,s);selection.add(id);a.put(s.json());}
+   synchronized(this){if(fileGeneration.get()!=generation)throw new IOException("CANCELLED");String id=uriIds.get(uri.toString());if(id==null){id=UUID.randomUUID().toString();uriIds.put(uri.toString(),id);}Source s=new Source(id,name,mime,size,uri,null);if(!selection.contains(id)&&selection.size()>=LocalProtocol.MAX_FILES)throw new IOException("TOO_MANY_FILES");catalogue.put(id,s);selection.add(id);a.put(s.json());}
   }return a;
  }
  public synchronized JSONArray list(String category,int page)throws Exception{
