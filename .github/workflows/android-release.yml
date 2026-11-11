@@ -24,7 +24,16 @@ jobs:
       - run: npm ci
       - run: npm run lint && npm run typecheck && npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      # The apt index on the hosted runners is occasionally unreachable; that is
+      # an image problem, not a build problem, so the browser install is retried.
+      - name: Install the browser runtime
+        run: |
+          set -euo pipefail
+          npx playwright install --with-deps chromium && exit 0
+          echo "first attempt failed, refreshing the package index and retrying"
+          sudo apt-get update -y || true
+          sleep 20
+          npx playwright install --with-deps chromium
       - run: npm run test:release
       - name: Preserve browser failure diagnostics
         if: ${{ failure() }}
