@@ -26,7 +26,9 @@ function RouteContent() {
   const path = usePathname();
   const { lang } = useI18n();
   const ar = lang === "ar";
-  if (["/local", "/local/send", "/local/receive", "/local/scan", "/local/session"].includes(path)) return <LocalPage.View />;
+  // Every /local child is one screen of the local subsystem; an unknown child
+  // must never fall through to the 404 branch (a missing entry broke Receive).
+  if (path === "/local" || path.startsWith("/local/")) return <LocalPage.View />;
   if (path === "/") return <SendClient />;
   if (path === "/scan") return <ScannerClient />;
   if (path === "/history") return <HistoryClient />;

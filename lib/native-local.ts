@@ -6,7 +6,7 @@ export interface LocalState {
  recovered?: boolean; recoveryWarning?: boolean;
  revision: number; phase: string; error: string; role: string; method: string; authenticated: boolean; started: boolean;
  paused: boolean; peer: string; selected: LocalFile[]; files: LocalTransfer[]; messages: LocalMessage[];
- qrReady: boolean; expires: number; bytes: number; native?: boolean; sdk?: number; allFiles?: boolean; storageAsked?: boolean; destination?: string;
+ qrReady: boolean; expires: number; bytes: number; native?: boolean; sdk?: number; allFiles?: boolean; storageReady?: boolean; media?: boolean; storageAsked?: boolean; destination?: string;
  camera?: boolean; nearby?: boolean; wifi?: boolean;
 }
 export interface NativeBounds { x: number; y: number; width: number; height: number; viewport: number }
@@ -18,6 +18,7 @@ interface LocalPlugin {
  selectFile(options:{id:string;selected:boolean}):Promise<LocalState>;
  pickFiles(options:{mime:string}):Promise<LocalState>;
  requestStorage():Promise<LocalState>;
+ requestMedia():Promise<LocalState>;
  requestNearby():Promise<LocalState>;
  openSettings(options:{which:'wifi'|'storage'|'app'}):Promise<void>;
  chooseDestination():Promise<LocalState>;

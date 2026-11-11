@@ -66,13 +66,33 @@ public final class LocalFiles {
   }return a;
  }
  private JSONArray apps(int page)throws Exception{
-  List<ResolveInfo> apps=context.getPackageManager().queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),0);
-  apps.sort((a,b)->a.loadLabel(context.getPackageManager()).toString().compareToIgnoreCase(b.loadLabel(context.getPackageManager()).toString()));
+  PackageManager manager=context.getPackageManager();
+  List<ResolveInfo> apps;
+  try{apps=manager.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),0);}
+  catch(Exception hidden){apps=new ArrayList<>();}
+  // Android 11 package visibility can still hide launcher rows on some builds
+  // that ignore <queries>; the launchable-application list is the safe fallback
+  // so the Send screen is never silently empty.
+  if(apps.isEmpty())for(ApplicationInfo info:manager.getInstalledApplications(0)){
+   if(manager.getLaunchIntentForPackage(info.packageName)==null)continue;
+   ResolveInfo row=new ResolveInfo();row.activityInfo=new ActivityInfo();row.activityInfo.applicationInfo=info;row.activityInfo.packageName=info.packageName;apps.add(row);
+  }
+  apps.sort((a,b)->String.valueOf(a.loadLabel(manager)).compareToIgnoreCase(String.valueOf(b.loadLabel(manager))));
   JSONArray result=new JSONArray();Set<String>seen=new HashSet<>();int index=0;
-  for(ResolveInfo r:apps){ApplicationInfo info=r.activityInfo.applicationInfo;if(!seen.add(info.packageName))continue;if(index++<page*30)continue;if(result.length()>=60)break;
-   String label=r.loadLabel(context.getPackageManager()).toString();List<String>paths=new ArrayList<>();paths.add(info.sourceDir);if(info.splitSourceDirs!=null)Collections.addAll(paths,info.splitSourceDirs);
-   for(int i=0;i<paths.size();i++){File file=new File(paths.get(i));String id="apk:"+info.packageName+":"+i;String appLabel=paths.size()>1&&i>0?label+" ("+(i)+")":label;Source s=new Source(id,label+"-"+(i==0?"base":"split-"+i)+".apk",appLabel,"application/vnd.android.package-archive",file.length(),null,file);catalogue.put(id,s);result.put(row(s).put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));}
-  }return result;
+  for(ResolveInfo r:apps){
+   // One unreadable package must never empty the whole catalogue.
+   try{
+    if(r.activityInfo==null)continue;ApplicationInfo info=r.activityInfo.applicationInfo;if(info==null||!seen.add(info.packageName))continue;
+    if(index++<page*30)continue;if(result.length()>=60)break;
+    String label=r.loadLabel(manager).toString();List<String>paths=new ArrayList<>();paths.add(info.sourceDir);if(info.splitSourceDirs!=null)Collections.addAll(paths,info.splitSourceDirs);
+    for(int i=0;i<paths.size();i++){
+     File file=new File(paths.get(i));if(!file.isFile())continue;String id="apk:"+info.packageName+":"+i;String appLabel=paths.size()>1&&i>0?label+" ("+i+")":label;
+     Source s=new Source(id,label+"-"+(i==0?"base":"split-"+i)+".apk",appLabel,"application/vnd.android.package-archive",file.length(),null,file);
+     catalogue.put(id,s);result.put(row(s).put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));
+    }
+   }catch(Exception skip){/* skip this package only */}
+  }
+  return result;
  }
  /** UI-only thumbnail for a catalogue row, cached and bounded. */
  synchronized JSONObject row(Source s)throws Exception{
@@ -81,7 +101,7 @@ public final class LocalFiles {
  }
  public InputStream open(Source s)throws IOException{InputStream in=s.apk!=null?new FileInputStream(s.apk):resolver.openInputStream(s.uri);if(in==null)throw new IOException("SOURCE_UNAVAILABLE");return in;}
  public String hash(Source s)throws Exception{try(InputStream in=open(s)){return s.hash=LocalProtocol.sha(in);}}
- public boolean legacyWritable(){return Build.VERSION.SDK_INT<=28&&androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)==android.content.pm.PackageManager.PERMISSION_GRANTED;}
+ public boolean legacyWritable(){return Build.VERSION.SDK_INT<=29&&androidx.core.content.ContextCompat.checkSelfPermission(context,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)==android.content.pm.PackageManager.PERMISSION_GRANTED;}
  public boolean broad(){return Build.VERSION.SDK_INT>=30&&Environment.isExternalStorageManager();}
  public String tree(){return context.getSharedPreferences("local-files",0).getString("tree","");}
  public void tree(Uri uri){resolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);context.getSharedPreferences("local-files",0).edit().putString("tree",uri.toString()).apply();}

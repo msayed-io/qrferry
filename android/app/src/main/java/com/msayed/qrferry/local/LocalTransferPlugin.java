@@ -25,15 +25,32 @@ import java.util.concurrent.*;
  @Permission(alias="nearby",strings={Manifest.permission.NEARBY_WIFI_DEVICES}),
  @Permission(alias="location",strings={Manifest.permission.ACCESS_FINE_LOCATION}),
  @Permission(alias="read",strings={Manifest.permission.READ_EXTERNAL_STORAGE}),
- @Permission(alias="legacyStorage",strings={Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.WRITE_EXTERNAL_STORAGE})
+ @Permission(alias="legacyStorage",strings={Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.WRITE_EXTERNAL_STORAGE}),
+ @Permission(alias="media",strings={Manifest.permission.READ_MEDIA_IMAGES,Manifest.permission.READ_MEDIA_VIDEO,Manifest.permission.READ_MEDIA_AUDIO})
 })
 public class LocalTransferPlugin extends Plugin {
  private LocalEngine engine;private LocalEngine.Listener listener;private final ExecutorService worker=Executors.newSingleThreadExecutor();
  private final Map<PluginCall,Integer> pickerGenerations=new ConcurrentHashMap<>();
  private LocalScanner scanner;private FrameLayout overlay;private boolean overlayQr;private final Handler main=new Handler(Looper.getMainLooper());
- @Override public void load(){engine=LocalTransferService.engine(getContext());listener=s->{try{JSObject data=new JSObject(s.toString());notifyListeners("state",data);}catch(Exception ignored){}if(!s.optBoolean("qrReady")&&overlayQr)main.post(this::hideOverlay);};engine.subscribe(listener);}
+ @Override public void load(){engine=LocalTransferService.engine(getContext());listener=s->{try{JSObject data=new JSObject(s.toString());notifyListeners("state",data);}catch(Exception ignored){}if(!s.optBoolean("qrReady")&&overlayQr)main.post(this::hideOverlay);};engine.subscribe(listener);worker.execute(()->{try{ // The receiving tree exists from the first run that already holds the scope.
+   if(storageReady()&&engine.files.tree().isEmpty())engine.files.ensureFolders();}catch(Exception ignored){}});}
  private boolean ar(){return getContext().getResources().getConfiguration().getLocales().get(0).getLanguage().equals("ar");}
- private void resolve(PluginCall call){try{JSObject s=new JSObject(engine.snapshot().toString());s.put("native",true);s.put("sdk",Build.VERSION.SDK_INT);s.put("allFiles",engine.files.broad());s.put("storageAsked",getContext().getSharedPreferences("local-files",0).getBoolean("asked",false));s.put("camera",getPermissionState("camera")==PermissionState.GRANTED);s.put("nearby",getPermissionState(Build.VERSION.SDK_INT>=33?"nearby":"location")==PermissionState.GRANTED);s.put("wifi",((android.net.wifi.WifiManager)getContext().getApplicationContext().getSystemService(android.content.Context.WIFI_SERVICE)).isWifiEnabled());s.put("destination",!engine.files.tree().isEmpty()?"Selected folder/QRFerry":engine.files.broad()||engine.files.legacyWritable()?"QRFerry":Build.VERSION.SDK_INT>=29?"Downloads/QRFerry":"Choose destination");call.resolve(s);}catch(Exception e){call.reject("STATUS_FAILED",e);}}
+ /** One readiness flag per Android storage model: all-files (R+), legacy write
+  * (≤10), or a granted read scope (11/12). The UI must never keep prompting a
+  * scope this device cannot grant. */
+ private boolean legacyWrite(){return getPermissionState("legacyStorage")==PermissionState.GRANTED;}
+ private boolean storageReady(){
+  if(Build.VERSION.SDK_INT>=30)return engine.files.broad();
+  if(Build.VERSION.SDK_INT<=29)return legacyWrite();
+  return getPermissionState("read")==PermissionState.GRANTED;
+ }
+ /** Android 13+ needs per-type media scopes unless all-files access is granted. */
+ private boolean mediaReady(){
+  if(Build.VERSION.SDK_INT<33)return true;
+  if(engine.files.broad())return true;
+  return getPermissionState("media")==PermissionState.GRANTED;
+ }
+ private void resolve(PluginCall call){try{JSObject s=new JSObject(engine.snapshot().toString());s.put("native",true);s.put("sdk",Build.VERSION.SDK_INT);s.put("allFiles",engine.files.broad());s.put("storageReady",storageReady());s.put("media",mediaReady());s.put("storageAsked",getContext().getSharedPreferences("local-files",0).getBoolean("asked",false));s.put("camera",getPermissionState("camera")==PermissionState.GRANTED);s.put("nearby",getPermissionState(Build.VERSION.SDK_INT>=33?"nearby":"location")==PermissionState.GRANTED);s.put("wifi",((android.net.wifi.WifiManager)getContext().getApplicationContext().getSystemService(android.content.Context.WIFI_SERVICE)).isWifiEnabled());s.put("destination",!engine.files.tree().isEmpty()?"Selected folder/QRFerry":engine.files.broad()||engine.files.legacyWritable()?"QRFerry":Build.VERSION.SDK_INT>=29?"Downloads/QRFerry":"Choose destination");call.resolve(s);}catch(Exception e){call.reject("STATUS_FAILED",e);}}
  @PluginMethod public void getState(PluginCall call){resolve(call);}
  @PluginMethod public void listFiles(PluginCall call){worker.execute(()->{try{call.resolve(new JSObject().put("files",engine.files.list(call.getString("category","files"),call.getInt("page",0))));}catch(Exception e){call.reject("FILE_ACCESS_REQUIRED",e);}});}
  @PluginMethod public void selectFile(PluginCall call){try{engine.files.select(call.getString("id",""),Boolean.TRUE.equals(call.getBoolean("selected",false)));engine.changed();resolve(call);}catch(Exception e){call.reject("SELECTION_FAILED",e);}}
@@ -49,11 +66,18 @@ public class LocalTransferPlugin extends Plugin {
    catch(Exception unsupported){try{startActivityForResult(call,new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),"storageReturned");}catch(Exception e){call.reject("STORAGE_SETTINGS_UNAVAILABLE",e);}}
    return;
   }
-  requestPermissionForAlias(Build.VERSION.SDK_INT<=28?"legacyStorage":"read",call,"storagePermission");
+  requestPermissionForAlias(Build.VERSION.SDK_INT<=29?"legacyStorage":"read",call,"storagePermission");
  }
  @PermissionCallback private void storagePermission(PluginCall call){prepareFolders(call);}
+ /** Second layer on Android 13+: the official photo/video/audio dialog when the
+  * all-files screen was declined, so media categories are never silently empty. */
+ @PluginMethod public void requestMedia(PluginCall call){
+  if(Build.VERSION.SDK_INT<33||engine.files.broad()||getPermissionState("media")==PermissionState.GRANTED){resolve(call);return;}
+  requestPermissionForAlias("media",call,"mediaGranted");
+ }
+ @PermissionCallback private void mediaGranted(PluginCall call){resolve(call);}
  @ActivityCallback private void storageReturned(PluginCall call,ActivityResult r){prepareFolders(call);}
- private void prepareFolders(PluginCall call){if(call==null)return;worker.execute(()->{try{if(engine.files.broad()||Build.VERSION.SDK_INT<=28&&getPermissionState("legacyStorage")==PermissionState.GRANTED)engine.files.ensureFolders();resolve(call);}catch(Exception e){call.reject("CANNOT_PREPARE_STORAGE",e);}});}
+ private void prepareFolders(PluginCall call){if(call==null)return;worker.execute(()->{try{if(storageReady())engine.files.ensureFolders();resolve(call);}catch(Exception e){call.reject("CANNOT_PREPARE_STORAGE",e);}});}
  /** Preparation screen: only official Android dialogs/screens are opened here. */
  @PluginMethod public void requestNearby(PluginCall call){networkPermission(call);if(getPermissionState(Build.VERSION.SDK_INT>=33?"nearby":"location")==PermissionState.GRANTED)resolve(call);}
  @PluginMethod public void openSettings(PluginCall call){

@@ -40,7 +40,9 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stro
   -webkit-backdrop-filter:blur(22px) saturate(1.8);backdrop-filter:blur(22px) saturate(1.8);
   box-shadow:0 8px 20px var(--shadow);transition:transform .35s var(--ease)}
 .glass:active{transform:scale(.96)}
-.tinted{background:color-mix(in srgb,var(--tint) 90%,transparent);color:var(--on-accent)}
+/* Solid accent: color-mix() is dropped whole by older WebViews, which left a
+   dark glass plate carrying --on-accent text (illegible buttons). */
+.tinted{background:var(--tint);color:var(--on-accent)}
 .cap{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 20px;border-radius:999px;font-weight:600;font-size:16px}
 .cap.lg{height:54px;width:100%;font-size:17px}
 .circle{width:44px;height:44px;border-radius:50%;display:grid;place-items:center}

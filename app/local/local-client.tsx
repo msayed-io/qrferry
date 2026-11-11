@@ -86,6 +86,9 @@ export function LocalClient() {
   const [catalogue, setCatalogue] = useState<LocalFile[]>([]), [page, setPage] = useState(0);
   const [draft, setDraft] = useState(''), [scanning, setScanning] = useState(false), [qrShown, setQrShown] = useState(false), [foreground, setForeground] = useState(true);
   const surface = useRef<HTMLDivElement>(null), request = useRef(0), autoCamera = useRef(false);
+  // One automatic attempt per screen entry. Every prompt behind these refs is an
+  // official Android dialog/screen; the rows stay as an explicit retry.
+  const askedStorage = useRef(false), askedNearby = useRef(false), autoReceive = useRef(false), askedMedia = useRef(false);
   useKeyboardInset();
   const current = path.split('/')[2] || 'home', activeSession = localSessionVisible(state), sessionPage = current === 'session' && (activeSession || state.started);
   const apply = useCallback((next: LocalState) => setState(previous => (next.revision >= previous.revision ? { ...previous, ...next } : previous)), []);
@@ -106,9 +109,15 @@ export function LocalClient() {
   useEffect(() => {
     if (!native) return;
     let live = true;
-    const listener = NativeLocal.addListener('lifecycle', ({ active }) => { if (!live) return; setForeground(active); setScanning(false); if (!active) setQrShown(false); });
+    const listener = NativeLocal.addListener('lifecycle', ({ active }) => {
+      if (!live) return;
+      setForeground(active); setScanning(false); if (!active) setQrShown(false);
+      // Returning from an Android settings screen (all-files access) must be
+      // reflected immediately, otherwise the granted scope looks missing.
+      if (active) void NativeLocal.getState().then(s => { if (live) apply(s); }).catch(() => {});
+    });
     return () => { live = false; void listener.then(handle => handle.remove()); };
-  }, [native]);
+  }, [native, apply]);
   useEffect(() => { if (activeSession && (current === 'receive' || current === 'scan' || current === 'setup')) router.replace('/local/session'); }, [activeSession, current, router]);
   useEffect(() => { if (state.phase === 'connecting' || state.phase === 'error' || state.authenticated) setScanning(false); }, [state.phase, state.authenticated]);
   useEffect(() => {
@@ -119,6 +128,37 @@ export function LocalClient() {
     return () => { dead = true; };
   }, [category, current, page, native]);
   useEffect(() => { setScanning(false); setQrShown(false); if (native) void NativeLocal.hideNativeView(); }, [current, native]);
+  // Storage: Android 11+ grants "all files" only on its own settings screen, and
+  // ≤10 uses the classic read/write dialog. Open whichever applies as soon as
+  // Send is entered, so the catalogue is never empty for lack of a prompt.
+  useEffect(() => {
+    if (!native || current !== 'send' || askedStorage.current || typeof state.storageReady !== 'boolean') return;
+    if (state.storageReady) return;
+    askedStorage.current = true;
+    void run(() => NativeLocal.requestStorage());
+  }, [current, native, run, state.storageReady]);
+  // Android 13+ falls back to the official photo/video/audio dialog when the
+  // all-files screen was declined; apps need neither.
+  useEffect(() => {
+    if (!native || current !== 'send' || category === 'apps' || askedMedia.current) return;
+    if (state.media === undefined || state.media) return;
+    askedMedia.current = true;
+    void run(() => NativeLocal.requestMedia());
+  }, [category, current, native, run, state.media]);
+  // Nearby devices: the official dialog is opened by Prepare itself.
+  useEffect(() => {
+    if (!native || current !== 'setup' || askedNearby.current || typeof state.nearby !== 'boolean') return;
+    if (state.nearby) return;
+    askedNearby.current = true;
+    void run(() => NativeLocal.requestNearby());
+  }, [current, native, run, state.nearby]);
+  // Receiving is automatic: entering Receive starts the best available link.
+  useEffect(() => {
+    if (!native || current !== 'receive') { if (current !== 'receive') autoReceive.current = false; return; }
+    if (autoReceive.current || busy || state.qrReady || state.authenticated || state.phase === 'preparing') return;
+    autoReceive.current = true;
+    void run(() => NativeLocal.startReceive({ method: 'auto' }));
+  }, [busy, current, native, run, state.authenticated, state.phase, state.qrReady]);
   useEffect(() => {
     if (!native || !foreground || current !== 'receive' || !state.qrReady || !surface.current) return;
     let live = true;
@@ -199,6 +239,11 @@ export function LocalClient() {
         {categories.map(c => <button type="button" key={c.id} role="tab" aria-selected={category === c.id} className={category === c.id ? 'on' : ''} onClick={() => { setCategory(c.id); setPage(0); }}>{ar ? c.ar : c.en}</button>)}
       </div>
       <section className="card lf-list" aria-live="polite">
+        {native && state.storageReady === false && <button type="button" className="lf-li lf-perm" data-perm="storage" onClick={() => void run(() => NativeLocal.requestStorage())}>
+          <span className="lf-ic"><FolderOpen size={20} /></span>
+          <span className="lf-gr"><b>{tx('الوصول إلى الملفات', 'File access')}</b><small>{state.sdk && state.sdk >= 30 ? tx('يفتح Android شاشة «الوصول إلى كل الملفات»', 'Android opens “All files access”') : tx('ستظهر نافذة Android الرسمية', 'The official Android dialog appears')}</small></span>
+          <span className="glass cap lf-small">{tx('منح', 'Allow')}</span>
+        </button>}
         {catalogue.length ? catalogue.map(f => <button type="button" data-file-row="" className={`lf-li ${selected.has(f.id) ? 'sel' : ''}`} key={f.id} aria-pressed={selected.has(f.id)} disabled={busy} onClick={() => void run(() => NativeLocal.selectFile({ id: f.id, selected: !selected.has(f.id) }))}>
           <span className="lf-ic">{f.thumb ? <img src={f.thumb} alt="" loading="lazy" /> : <Package size={20} />}</span>
           <span className="lf-gr"><b>{displayLabel(f)}</b><small>{size(f.size)}{f.splitCount && f.splitCount > 1 ? ` · ${f.splitCount} APK` : ''}</small></span>
@@ -222,7 +267,7 @@ export function LocalClient() {
       <div className="card lf-list">
         <div className="lf-li"><span className="lf-ic"><Wifi size={20} /></span><span className="lf-gr"><b>Wi-Fi</b><small>{state.wifi ? tx('مفعّل', 'On') : tx('متوقف — يجب تفعيله', 'Off — required')}</small></span>{state.wifi ? <span className="lf-ok"><Check size={16} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.openSettings({ which: 'wifi' }))}>{tx('فتح الإعدادات', 'Open settings')}</button>}</div>
         <div className="lf-li"><span className="lf-ic"><ShieldCheck size={20} /></span><span className="lf-gr"><b>{tx('الأجهزة القريبة', 'Nearby devices')}</b><small>{state.nearby ? tx('مسموح', 'Allowed') : tx('غير مسموح — ستظهر نافذة Android', 'Not allowed — the Android dialog will appear')}</small></span>{state.nearby ? <span className="lf-ok"><Check size={16} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestNearby())}>{tx('السماح', 'Allow')}</button>}</div>
-        <div className="lf-li"><span className="lf-ic"><FolderOpen size={20} /></span><span className="lf-gr"><b>{tx('حفظ الملفات', 'Saving files')}</b><small>{state.destination || tx('في مجلد التطبيق', 'App folder')}</small></span><button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestStorage())}>{tx('تغيير', 'Change')}</button></div>
+        <div className="lf-li"><span className="lf-ic"><FolderOpen size={20} /></span><span className="lf-gr"><b>{tx('حفظ الملفات', 'Saving files')}</b><small>{state.storageReady ? (state.destination || 'QRFerry') : state.sdk && state.sdk >= 30 ? tx('الوصول إلى كل الملفات غير ممنوح', 'All-files access is not granted') : tx('إذن التخزين غير ممنوح', 'Storage permission is not granted')}</small></span>{state.storageReady ? <span className="lf-ok"><Check size={16} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestStorage())}>{tx('السماح', 'Allow')}</button>}</div>
       </div>
       <div className="lf-bar"><div className="glass lf-bx"><div className="lf-row lf-bx-row"><button type="button" className="glass cap tinted lf-big" disabled={!native || busy || !state.nearby || !state.wifi} onClick={() => router.push('/local/receive')}><ArrowDownToLine size={19} />{tx('متابعة إلى الاستلام', 'Continue to receive')}</button></div></div></div>
       {!setupReady && <p className="lf-hint">{tx('يفتح Android نافذته الرسمية عند الضغط على «السماح». لن يظهر أي شيء من تصميمنا بدلًا منها.', 'Android opens its own dialog when you press Allow. Nothing of our design replaces it.')}</p>}
