@@ -83,11 +83,13 @@ public class LocalUiTest {
   LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();String selectedId=null;
   try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
    AtomicReference<WebView>reference=new AtomicReference<>();scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
-   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode'))")),45000);
-   assertEquals("true",js(view,"(()=>{document.querySelector('.brand-mode').click();return true})()"));
+   // The app remembers the last mode, so the switch is pressed only when it is on
+   // screen, and a child route left by an earlier test is walked back to home.
+   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode')||document.querySelector('.local-page'))")),45000);
+   assertEquals("true",js(view,"(()=>{const b=document.querySelector('.brand-mode');if(b)b.click();return true})()"));
    // Permissions belong to the preparation screen and to the Android dialogs only.
    onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).check(doesNotExist());
-   until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
+   until("Native home did not mount",()->"true".equals(js(view,"(()=>{const p=document.querySelector('.local-page');if(!p||!p.dataset.screen)return false;if(p.dataset.screen==='home')return true;const x=document.querySelector('.support-exit');if(x)x.click();return false})()")),25000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.local-notice'))"));
    shot("home");
    selectedId=engine.files.addUris(Collections.singletonList(FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source)),0).getJSONObject(0).getString("id");engine.changed();
@@ -138,9 +140,11 @@ public class LocalUiTest {
   try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
    AtomicReference<WebView>reference=new AtomicReference<>();
    scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
-   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode'))")),45000);
-   assertEquals("true",js(view,"(()=>{document.querySelector('.brand-mode').click();return true})()"));
-   until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
+   // The app remembers the last mode, so the switch is pressed only when it is on
+   // screen, and a child route left by an earlier test is walked back to home.
+   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode')||document.querySelector('.local-page'))")),45000);
+   assertEquals("true",js(view,"(()=>{const b=document.querySelector('.brand-mode');if(b)b.click();return true})()"));
+   until("Native home did not mount",()->"true".equals(js(view,"(()=>{const p=document.querySelector('.local-page');if(!p||!p.dataset.screen)return false;if(p.dataset.screen==='home')return true;const x=document.querySelector('.support-exit');if(x)x.click();return false})()")),25000);
    // Home carries the app's own brand capsule; child screens the app toolbar.
    assertEquals("true",js(view,"(()=>{const h=document.querySelector('header.lf-home-header');if(!h)return false;return Boolean(h.querySelector('.brand'))&&Boolean(h.querySelector('button'))&&getComputedStyle(h).zIndex>getComputedStyle(document.querySelector('.progressive-blur-top')).zIndex}()"));
    // Receive goes through Prepare, exactly like the home action does.
