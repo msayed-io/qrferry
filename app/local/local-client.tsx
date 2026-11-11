@@ -335,7 +335,9 @@ export function LocalClient() {
           <p>{state.qrReady ? tx('رمز جلسة مؤقت', 'Temporary session code') : state.phase === 'preparing' ? tx('جارٍ تجهيز أفضل اتصال متاح…', 'Preparing the best available link…') : tx('يظهر الرمز بعد جاهزية الاتصال', 'The code appears when the link is ready')}</p>
         </div>
       </div>
-      <p className="lf-status" role="status">{state.authenticated ? tx('تم التحقق من المرسل؛ سيبدأ النقل.', 'Sender verified; the transfer will start.') : state.qrReady ? <>{tx('يعمل الآن:', 'Active path:')} <b>{methodLabel}</b></> : state.phase === 'preparing' ? tx('جارٍ تجهيز أفضل اتصال متاح…', 'Preparing the best available link…') : ''}</p>
+      {/* The plate already narrates the preparation, so the status line only
+          speaks once there is something the plate cannot say. */}
+      {(state.qrReady || state.authenticated) && <p className="lf-status" role="status">{state.authenticated ? tx('تم التحقق من المرسل؛ سيبدأ النقل.', 'Sender verified; the transfer will start.') : <>{tx('يعمل الآن:', 'Active path:')} <b>{methodLabel}</b></>}</p>}
       <div className="lf-bar"><div className="glass lf-bx lf-bx-compact">
         {!(state.qrReady || state.authenticated || state.phase === 'preparing')
           ? <button type="button" className="glass cap tinted lf-act" disabled={!native || busy} onClick={() => void run(() => NativeLocal.startReceive({ method: 'auto' }))}><DesignIcon name="wifi" style={{ width: 18, height: 18 }} />{tx('بدء الاتصال', 'Start link')}</button>
