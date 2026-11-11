@@ -10,7 +10,7 @@ final class LocalScanFrame extends View {
  private static final int DIM=(int)0x99000000L,TINT=(int)0xFFE792B9L;
  private final Paint dim=new Paint(Paint.ANTI_ALIAS_FLAG),bracket=new Paint(Paint.ANTI_ALIAS_FLAG);
  private final Path outside=new Path();
- LocalScanFrame(Context context){super(context);dim.setColor(DIM);bracket.setColor(TINT);bracket.setStyle(Paint.Style.STROKE);bracket.setStrokeCap(Paint.Cap.round);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+ LocalScanFrame(Context context){super(context);dim.setColor(DIM);bracket.setColor(TINT);bracket.setStyle(Paint.Style.STROKE);bracket.setStrokeCap(Paint.Cap.ROUND);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
  @Override protected void onDraw(Canvas canvas){
   float w=getWidth(),h=getHeight(),side=Math.min(w,h)*.62f,left=(w-side)/2f,top=(h-side)/2f,radius=28*getResources().getDisplayMetrics().density;
   RectF square=new RectF(left,top,left+side,top+side);
