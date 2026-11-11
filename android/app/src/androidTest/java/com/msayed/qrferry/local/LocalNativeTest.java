@@ -24,6 +24,19 @@ public class LocalNativeTest {
   try(SSLSocket client=(SSLSocket)LocalIdentity.client(String.join("",Collections.nCopies(64,"0"))).getSocketFactory().createSocket("127.0.0.1",server.getLocalPort())){client.setSoTimeout(10000);try{client.startHandshake();fail("Unpinned server accepted");}catch(SSLException expected){}}
   f.get(15,TimeUnit.SECONDS);server.close();worker.shutdownNow();identity.close();
  }
+ /** The official scope is what unlocks the shared tree; once held, the four
+  *  routing folders must exist at the documented path. On API < 30 the legacy
+  *  read/write grant plays the same role. */
+ @Test public void applicationTreeIsCreatedOnceTheStorageScopeIsHeld()throws Exception{
+  LocalFiles files=new LocalFiles(InstrumentationRegistry.getInstrumentation().getTargetContext());
+  // Without the official scope there is nothing to assert here: the publisher
+  // then falls back to Downloads/QRFerry/<category> through MediaStore.
+  if(!(files.broad()||files.legacyWritable()))return;
+  files.ensureFolders();
+  File root=new File(android.os.Environment.getExternalStorageDirectory(),"QRFerry");
+  assertTrue("application root missing",root.isDirectory());
+  for(String name:new String[]{"Audio","Videos","Images","Files"})assertTrue(name+" missing",new File(root,name).isDirectory());
+ }
  @Test public void journalResumesOnlyExactOffsetsAndRejectsCorruption()throws Exception{
   LocalFiles files=new LocalFiles(InstrumentationRegistry.getInstrumentation().getTargetContext());byte[]data=new byte[9001];new java.security.SecureRandom().nextBytes(data);String hash=LocalProtocol.sha(new ByteArrayInputStream(data));
   assertEquals(0,files.prepare(hash,"../../native-test.bin","application/octet-stream",data.length,hash));assertEquals(4000,files.append(hash,0,data,4000));
