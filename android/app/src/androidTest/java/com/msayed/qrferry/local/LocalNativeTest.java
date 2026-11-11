@@ -15,7 +15,7 @@ public class LocalNativeTest {
   LocalIdentity identity=new LocalIdentity(UUID.randomUUID().toString());SSLServerSocket server=(SSLServerSocket)identity.server.getServerSocketFactory().createServerSocket(0);ExecutorService worker=Executors.newSingleThreadExecutor();
   byte[]payload=new byte[1048579];new Random(31).nextBytes(payload);
   Future<String>received=worker.submit(()->{try(SSLSocket s=(SSLSocket)server.accept()){s.setSoTimeout(15000);s.startHandshake();byte[]out=new byte[payload.length];new DataInputStream(s.getInputStream()).readFully(out);assertArrayEquals(payload,out);s.getOutputStream().write(1);return LocalProtocol.sha(new ByteArrayInputStream(out));}});
-  try(SSLSocket client=(SSLSocket)LocalIdentity.client(identity.fingerprint).getSocketFactory().createSocket("127.0.0.1",server.getLocalPort())){client.setSoTimeout(15000);client.startHandshake();client.getOutputStream().write(payload);client.getOutputStream().flush();assertEquals(1,client.getInputStream().read());}
+  try(SSLSocket client=(SSLSocket)LocalIdentity.client(identity.fingerprint).getSocketFactory().createSocket("127.0.0.1",server.getLocalPort())){client.setSoTimeout(15000);try{client.startHandshake();}catch(Exception clientError){try{received.get(3,TimeUnit.SECONDS);}catch(Exception serverError){throw new IOException("Native TLS server failure: "+serverError,serverError);}throw clientError;}client.getOutputStream().write(payload);client.getOutputStream().flush();assertEquals(1,client.getInputStream().read());}
   assertEquals(LocalProtocol.sha(new ByteArrayInputStream(payload)),received.get(20,TimeUnit.SECONDS));server.close();worker.shutdownNow();identity.close();
  }
  @Test public void wrongCertificatePinIsRejected()throws Exception{

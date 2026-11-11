@@ -13,6 +13,8 @@ import { AppMenu } from "./app-menu";
 import { SupportReturnContext, SUPPORT_ROUTES } from "./support-navigation";
 import { RouteErrorBoundary } from "./global-error";
 import { ProgressiveBlur } from "./progressive-blur";
+import { localSupported } from "../lib/native-local";
+import { ChevronDown } from "lucide-react";
 import { observeRims } from "./rim";
 
 /** Only the mounted UI/session owner is retained. The transport and its authentication are unchanged. */
@@ -21,7 +23,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const pendingPath = usePendingPathname();
   const router = useRouter();
-  const standalone = SUPPORT_ROUTES.includes(path);
+  const localRoute = path === "/local" || path.startsWith("/local/");
+  const standalone = SUPPORT_ROUTES.includes(path) || localRoute;
   const [returnPath, setReturnPath] = useState("/");
   const [connected, setConnected] = useState(false);
   const [view, setView] = useState<BridgeView>("pair");
@@ -60,10 +63,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ProgressiveBlur />
     <div className={`wrap app-wrap ${standalone ? "standalone-wrap" : ""} ${immersiveChat ? "chat-wrap" : ""}`}>
       {!standalone && !immersiveChat && <header className="app-header">
-        <AppLink className="brand" href="/" aria-label="QRFerry">
+        <div className="brand-group"><AppLink className="brand" href="/" aria-label="QRFerry">
           <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3"/><rect x="17" y="3" width="10" height="10" rx="3"/><rect x="3" y="17" width="10" height="10" rx="3"/><rect x="17" y="17" width="10" height="10" rx="3" fill="var(--tint)" stroke="none"/></svg>
           QRFerry
-        </AppLink>
+        </AppLink>{localSupported() && <button type="button" className="brand-mode" onClick={() => router.push("/local")} aria-label={lang === "ar" ? "فتح النقل المحلي بين هواتف Android" : "Open local Android transfer"}><ChevronDown size={18}/></button>}</div>
         <AppMenu onNavigate={href => { setReturnPath(path); router.push(href); }} />
       </header>}
       <div id="route-content" hidden={bridgeRoute}>{children}</div>

@@ -57,3 +57,6 @@
   .progressive-blur i { display: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (min-width: 900px) { .app-header,.support-toolbar,.chatbar { max-width: 1040px; } }
+
+.brand-group { display:flex; align-items:center; gap:6px; }
+.brand-mode { display:grid; place-items:center; min-width:36px; min-height:44px; color:var(--label2); }

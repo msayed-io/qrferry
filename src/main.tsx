@@ -15,7 +15,7 @@ import { PageMetadata } from "../app/page-metadata";
 import { NativeShareReceiver } from "../app/native-share-receiver";
 import { initializeDeviceEnvironment } from "../app/device-environment";
 import { usePathname, AppLink } from "../app/router";
-import { SendPage, ScanPage, HistoryPage, PrivacyPage, TvPage } from "../app/route-pages";
+import { LocalPage, SendPage, ScanPage, HistoryPage, PrivacyPage, TvPage } from "../app/route-pages";
 const SendClient = SendPage.View;
 const ScannerClient = ScanPage.View;
 const HistoryClient = HistoryPage.View;
@@ -26,6 +26,7 @@ function RouteContent() {
   const path = usePathname();
   const { lang } = useI18n();
   const ar = lang === "ar";
+  if (["/local", "/local/send", "/local/receive", "/local/scan", "/local/session"].includes(path)) return <LocalPage.View />;
   if (path === "/") return <SendClient />;
   if (path === "/scan") return <ScannerClient />;
   if (path === "/history") return <HistoryClient />;

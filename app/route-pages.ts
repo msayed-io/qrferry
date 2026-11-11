@@ -26,7 +26,9 @@ export const BridgePage = page(() => import('./bridge/bridge-client').then(m => 
 export const HistoryPage = page(() => import('./history/history-client').then(m => ({ default: m.HistoryClient })));
 export const PrivacyPage = page(() => import('./privacy/privacy-client').then(m => ({ default: m.PrivacyClient })));
 export const TvPage = page(() => import('./tv/tv-client').then(m => ({ default: m.TvClient })));
+export const LocalPage = page(() => import('./local/local-client').then(m => ({ default: m.LocalClient })));
 const pages: Record<string, ReturnType<typeof page>> = {
+  '/local': LocalPage, '/local/send': LocalPage, '/local/receive': LocalPage, '/local/scan': LocalPage, '/local/session': LocalPage,
   '/': SendPage, '/scan': ScanPage, '/bridge': BridgePage, '/pc': BridgePage,
   '/history': HistoryPage, '/privacy': PrivacyPage, '/tv': TvPage,
 };

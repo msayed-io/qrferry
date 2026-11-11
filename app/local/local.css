@@ -1,0 +1,51 @@
+/* Layout only. Material, physical rim, springs and progressive blur are reused. */
+.local-page { min-width: 0; padding-bottom: 32px; }
+.local-toolbar .brand { pointer-events:auto; }
+.brand-group { display:flex; align-items:center; gap:6px; }
+.brand-mode { display:grid; place-items:center; min-width:36px; min-height:44px; color:var(--label2); }
+.local-intro { text-align:center; padding-top:12px; }
+.local-emblem { display:flex; align-items:center; justify-content:center; gap:18px; color:var(--tint); margin:20px auto 30px; }
+.local-emblem > svg { width:44px; height:44px; stroke-width:1.7; }
+.local-emblem > svg:nth-child(2) { width:24px; transform:rotate(90deg); }
+.local-actions { display:grid; gap:14px; margin:24px 0; }
+.local-actions > button { width:100%; }
+.local-explainer { display:flex; gap:14px; margin-top:24px; }
+.local-explainer > svg { flex:none; color:var(--tint); }
+.local-explainer h2,.local-storage h2 { font-size:18px; }
+.local-explainer p,.local-storage p,.local-notice p { margin-top:10px; font-size:14px; line-height:1.7; color:var(--label2); }
+.local-storage,.local-notice { margin-top:16px; }
+.local-notice > svg { color:var(--tint); width:32px; height:32px; }
+.local-notice a { display:inline-block; padding:14px 0; }
+.local-error { border-inline-start:3px solid var(--danger-ink); padding:12px; margin-bottom:18px; color:var(--danger-ink); background:var(--card); border-radius:16px; overflow-wrap:anywhere; }
+.local-error small { display:block; font-size:11px; opacity:.8; margin:8px 0; }
+.local-error button { text-decoration:underline; font-size:13px; min-height:40px; }
+.local-categories { display:flex; overflow-x:auto; gap:6px; margin:8px 0 24px; padding-bottom:8px; }
+.local-categories button { display:flex; flex:1; min-width:54px; min-height:64px; flex-direction:column; align-items:center; justify-content:center; gap:8px; font-size:12px; border-radius:16px; color:var(--label2); }
+.local-categories button[aria-selected=true] { background:var(--fill); color:var(--tint); }
+.local-file-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
+.local-file-heading h2 { font-size:19px; }
+.local-file-list,.local-transfer-list { padding:0 16px; overflow:hidden; }
+.local-file-row { display:flex; align-items:center; gap:12px; width:100%; min-height:80px; text-align:start; padding:12px 0; }
+.local-file-row+.local-file-row,.local-transfer-row+.local-transfer-row { border-top:.5px solid var(--hair); }
+.local-file-icon { width:44px; height:44px; background:var(--fill); border-radius:12px; display:grid; place-items:center; color:var(--tint); flex:none; }
+.local-file-name { flex:1; min-width:0; }
+.local-file-name b { display:block; overflow-wrap:anywhere; font-size:15px; font-weight:600; }
+.local-file-name small { display:block; color:var(--label2); margin-top:4px; font-size:12px; }
+.local-check { width:24px; height:24px; border-radius:50%; border:1px solid var(--sep); display:grid; place-items:center; flex:none; }
+.local-check svg { visibility:hidden; }.local-check.checked { background:var(--tint); border-color:transparent; color:var(--on-accent); }.local-check.checked svg { visibility:visible; }
+.local-empty { display:grid; justify-items:center; gap:14px; padding:30px 12px; text-align:center; color:var(--label2); font-size:15px; }
+.local-empty h2 { color:var(--label); font-size:19px; }
+.local-empty > svg { width:36px; height:36px; color:var(--tint); }
+.local-pagination { display:flex; align-items:center; justify-content:center; gap:20px; margin:16px 0; font-size:14px; }.local-pagination button { min-height:44px; }
+.local-selected { margin:24px 0; }.local-selected h2 { font-size:17px; margin-bottom:10px; }.local-selected > div { display:flex; align-items:center; gap:8px; min-height:44px; }.local-selected span { flex:1; min-width:0; overflow-wrap:anywhere; font-size:14px; }.local-selected small { color:var(--label2); white-space:nowrap; font-size:12px; }.local-selected button { width:44px; height:44px; flex:none; }
+.local-send-action { display:grid; gap:12px; padding:18px 0; }.local-send-action > span { font-size:14px; color:var(--label2); }.local-send-action > button { width:100%; }
+.local-native-surface { position:relative; width:100%; height:clamp(180px,70vw,340px); border-radius:16px; background:var(--fill); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; margin:18px 0; overflow:hidden; }
+.local-native-surface > svg { width:64px; height:64px; color:var(--label3); }
+.local-native-surface > p,.local-native-surface > span { font-size:14px; text-align:center; padding:0 12px; color:var(--label2); }
+.local-status { font-size:14px; color:var(--label2); margin:16px 4px; line-height:1.7; }
+.local-alternatives { border:0; padding:0; margin:20px 0; }.local-alternatives p { font-size:13px; color:var(--label2); line-height:1.7; }
+.local-session-status { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; margin:12px 0 24px; font-size:14px; }.local-session-status svg { color:var(--tint); }.local-session-status small { flex-basis:100%; text-align:center; color:var(--label2); }
+.local-transfer-row { display:flex; align-items:center; gap:12px; padding:18px 0; }.local-transfer-row > div { flex:1; min-width:0; }.local-transfer-row b { display:block; overflow-wrap:anywhere; font-size:15px; }.local-transfer-row small { display:block; font-size:12px; color:var(--label2); }.local-transfer-row > svg { color:var(--ok); flex:none; }
+.local-transfer-row progress { display:block; width:100%; height:5px; margin:12px 0 8px; accent-color:var(--tint); border:0; border-radius:999px; overflow:hidden; background:var(--fill); }.local-transfer-row progress::-webkit-progress-bar { background:var(--fill); }.local-transfer-row progress::-webkit-progress-value { background:var(--tint); border-radius:999px; }
+.local-transfer-controls { display:flex; justify-content:center; margin:20px 0; }.local-timeline { padding-bottom:100px; }.local-timeline small { font-size:11px; }
+.local-page:not(.local-session) { padding-bottom:100px; }
