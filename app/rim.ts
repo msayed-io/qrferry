@@ -1,7 +1,7 @@
 import { IDENTITY, multiply, rasterRim, type Linear } from '../lib/specular-rim';
 
 // Explicit opt-in: never a card, menu plate, list, QR, camera or chat header.
-const TARGET='.lg-button,.lg-tab-bar-glass,.lg-tab-lens,.support-title,.chat-peer,.glass.cap,.glass.circle,.lg-glass.inp,.support-count,.history-badges span,.seg [aria-selected=true],.mini .on,.tab[aria-selected=true]';
+const TARGET='.lg-button,.lg-tab-bar-glass,.lg-tab-lens,.support-title,.chat-peer,.glass.cap,.glass.circle,.lg-glass.inp,.support-count,.history-badges span,.seg [aria-selected=true],.mini .on,.tab[aria-selected=true],.lf-bx,.lf-seg button[aria-selected=true],.lf-thumb';
 type Owner={canvas:HTMLCanvasElement;key:string};
 function angle(value:string) {
   const n=parseFloat(value)||0;

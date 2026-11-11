@@ -1,26 +1,24 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Glass } from 'glisse';
-import {
-  ArrowDownToLine, ArrowUpFromLine, Camera, Check, ChevronDown, ChevronRight, File, FolderOpen, Home,
-  Image as ImageIcon, Lock, Music2, Package, Pause, Play, Plus, QrCode, Send, ShieldCheck, Smartphone, Video, Wifi,
-} from 'lucide-react';
+import { Button, Glass } from 'glisse';
 import { useI18n } from '../lang-provider';
 import { AppLink, usePathname, useRouter } from '../router';
 import { LiquidChoices } from '../liquid-controls';
 import { CircleButton } from '../design-system';
-import { ProgressiveBlur } from '../progressive-blur';
+import { DesignIcon } from '../design-icons';
+import { AppMenu } from '../app-menu';
+import { BackChevron, ProgressiveBlur } from '../progressive-blur';
 import { NativeLocal, displayLabel, emptyLocalState, localSessionVisible, localSupported, transferRatio, type LocalFile, type LocalState, type NativeBounds } from '../../lib/native-local';
 import './local.css';
 
-type IconType = typeof File;
-const categories: { id: string; ar: string; en: string; icon: IconType; mime: string }[] = [
-  { id: 'apps', ar: 'تطبيقات', en: 'Apps', icon: Package, mime: 'application/vnd.android.package-archive' },
-  { id: 'images', ar: 'صور', en: 'Photos', icon: ImageIcon, mime: 'image/*' },
-  { id: 'videos', ar: 'فيديو', en: 'Videos', icon: Video, mime: 'video/*' },
-  { id: 'audio', ar: 'صوت', en: 'Audio', icon: Music2, mime: 'audio/*' },
-  { id: 'files', ar: 'ملفات', en: 'Files', icon: File, mime: '*/*' },
+type IconName = Parameters<typeof DesignIcon>[0]['name'];
+const categories: { id: string; ar: string; en: string; icon: IconName; mime: string }[] = [
+  { id: 'apps', ar: 'تطبيقات', en: 'Apps', icon: 'apps', mime: 'application/vnd.android.package-archive' },
+  { id: 'images', ar: 'صور', en: 'Photos', icon: 'image', mime: 'image/*' },
+  { id: 'videos', ar: 'فيديو', en: 'Videos', icon: 'video', mime: 'video/*' },
+  { id: 'audio', ar: 'صوت', en: 'Audio', icon: 'music', mime: 'audio/*' },
+  { id: 'files', ar: 'ملفات', en: 'Files', icon: 'doc', mime: '*/*' },
 ];
 const errorText: Record<string, [string, string]> = {
   RECOVERY_UNAVAILABLE: ['تعذر قراءة حالة الجلسة السابقة. الأجزاء المستلمة لم تُحذف؛ اختر الملفات وأعد الاقتران.', 'The previous session record could not be read. Received parts are retained; select files and pair again.'],
@@ -58,6 +56,9 @@ function errorCode(e: unknown) { return e instanceof Error ? e.message : 'LOCAL_
 function size(value: number) { if (value < 0) return '—'; const units = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (value >= 1024 && i < 4) { value /= 1024; i++; } return `${value.toLocaleString(undefined, { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`; }
 function bounds(el: HTMLElement): NativeBounds { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, viewport: innerWidth }; }
 
+/** Per app run: the first Send visit drops a leftover selection. */
+let selectionReset = false;
+
 /** Bottom inset driven by the real visual viewport, so a fixed composer never
  *  floats over the keyboard and the page never jumps between scroll positions. */
 function useKeyboardInset() {
@@ -83,7 +84,7 @@ export function LocalClient() {
   const { lang } = useI18n(), ar = lang === 'ar', tx = (a: string, b: string) => (ar ? a : b), path = usePathname(), router = useRouter(), native = localSupported();
   const [state, setState] = useState<LocalState>(emptyLocalState);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [category, setCategory] = useState('apps');
-  const [catalogue, setCatalogue] = useState<LocalFile[]>([]), [page, setPage] = useState(0);
+  const [catalogue, setCatalogue] = useState<LocalFile[]>([]), [sheetOpen, setSheetOpen] = useState(false);
   const [draft, setDraft] = useState(''), [scanning, setScanning] = useState(false), [qrShown, setQrShown] = useState(false), [foreground, setForeground] = useState(true);
   const surface = useRef<HTMLDivElement>(null), request = useRef(0), autoCamera = useRef(false);
   // One automatic attempt per screen entry. Every prompt behind these refs is an
@@ -132,9 +133,24 @@ export function LocalClient() {
     if (!native || current !== 'send') return;
     let dead = false;
     const id = ++request.current;
-    void NativeLocal.listFiles({ category, page }).then(v => { if (!dead && id === request.current) setCatalogue(v.files); }).catch(e => { if (!dead) setError(errorCode(e)); });
+    // The whole catalogue arrives at once from the native layer; a unique id is
+    // the key, so no row can ever repeat and there is no "load more" step.
+    void NativeLocal.listFiles({ category }).then(v => {
+      if (dead || id !== request.current) return;
+      const seen = new Set<string>();
+      setCatalogue(v.files.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true))));
+    }).catch(e => { if (!dead) setError(errorCode(e)); });
     return () => { dead = true; };
-  }, [category, current, page, native]);
+  }, [category, current, native]);
+  // A selection left over from an earlier run of the app must never look like
+  // something this session chose: the first visit to Send clears it once. Later
+  // visits keep the user's own selection (so Files → Send still works).
+  useEffect(() => {
+    if (current !== 'send') { askedStorage.current = false; askedMedia.current = false; return; }
+    if (selectionReset) return;
+    selectionReset = true;
+    if (state.selected.length) ask(() => NativeLocal.clearSelection());
+  }, [ask, current, state.selected.length]);
   useEffect(() => { setScanning(false); setQrShown(false); if (native) void NativeLocal.hideNativeView(); }, [current, native]);
   // Storage: Android 11+ grants "all files" only on its own settings screen, and
   // ≤10 uses the classic read/write dialog. Open whichever applies as soon as
@@ -155,7 +171,8 @@ export function LocalClient() {
   }, [ask, category, current, native, state.media]);
   // Nearby devices: the official dialog is opened by Prepare itself.
   useEffect(() => {
-    if (!native || current !== 'setup' || askedNearby.current || typeof state.nearby !== 'boolean') return;
+    if (current !== 'setup') { askedNearby.current = false; return; }
+    if (!native || askedNearby.current || typeof state.nearby !== 'boolean') return;
     if (state.nearby) return;
     askedNearby.current = true;
     ask(() => NativeLocal.requestNearby());
@@ -207,63 +224,72 @@ export function LocalClient() {
   const back = () => { if (sessionPage || current === 'scan') void end(); else if (current === 'home') router.push('/'); else router.push(current === 'receive' || current === 'setup' ? '/local' : '/local'); };
   const title = current === 'send' ? tx('إرسال', 'Send') : current === 'setup' ? tx('التحضير', 'Prepare') : current === 'scan' ? tx('مسح للاتصال', 'Scan to connect') : current === 'receive' ? tx('استلام', 'Receive') : sessionPage ? tx('متصل', 'Connected') : tx('نقل محلي', 'Local transfer');
   const methodLabel = state.method === 'direct' ? 'Wi-Fi Direct' : state.method === 'hotspot' ? tx('نقطة محلية', 'Local hotspot') : state.method === 'lan' ? tx('شبكة محلية', 'Local Wi-Fi') : tx('تلقائي', 'Automatic');
-  const setupReady = !!state.nearby && !!state.wifi;
+  // Every indicator must be green: the link scope, Wi-Fi, and a storage route
+  // (all-files, or the MediaStore fallback that every Android 10+ device has).
+  const setupReady = !!state.nearby && !!state.wifi && (!!state.storageReady || (state.sdk ?? 0) >= 29);
   const done = state.files.filter(f => f.status === 'complete').length;
 
   return <main className={`local-page ${sessionPage ? 'local-session' : ''}`} data-page="local" data-screen={current} data-phase={state.phase}>
-    <header className="lf-top">
-      <button type="button" className={`glass cap lf-chip ${current === 'home' ? 'lf-brand' : 'lf-icon lf-back'}`} onClick={back} aria-label={current === 'home' ? tx('العودة للنقل البصري', 'Return to optical transfer') : tx('رجوع', 'Back')}>
-        {current === 'home' ? <><span className="lf-dot" />QRFerry<ChevronDown size={16} /></> : <ChevronRight size={20} />}
-      </button>
-      {current !== 'home' && <div className="glass cap lf-chip lf-title">{title}</div>}
-      <div className="lf-top-end">
-        {current === 'send' && <button type="button" className="glass cap lf-chip lf-icon" disabled={!native} onClick={() => void pick()} aria-label={tx('تصفح ملفات الجهاز', 'Browse device files')}><FolderOpen size={19} /></button>}
-        {sessionPage && <div className="glass cap lf-chip lf-mode"><span className="lf-dot" />{state.authenticated ? tx('موثّق', 'Verified') : tx('متوقف', 'Paused')}<small>{methodLabel}</small></div>}
-      </div>
+    <header className={current === 'home' ? 'app-header lf-home-header' : 'support-toolbar lf-toolbar'}>
+      {current === 'home' ? <>
+        <div className="brand-group">
+          <button type="button" className="brand" onClick={back} aria-label={tx('العودة للنقل البصري', 'Return to optical transfer')}>
+            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3" /><rect x="17" y="3" width="10" height="10" rx="3" /><rect x="3" y="17" width="10" height="10" rx="3" /><rect x="17" y="17" width="10" height="10" rx="3" fill="var(--tint)" stroke="none" /></svg>
+            QRFerry
+          </button>
+          <button type="button" className="brand-mode" onClick={back} aria-label={tx('العودة للنقل البصري', 'Return to optical transfer')}><DesignIcon name="chev" /></button>
+        </div>
+        <AppMenu onNavigate={href => router.push(href)} />
+      </> : <>
+        <Button className="support-exit" icon={<BackChevron />} aria-label={tx('رجوع', 'Back')} onClick={back} />
+        <Glass className="support-title"><h1>{title}</h1></Glass>
+        <div className="lf-toolbar-end">
+          {current === 'send' && <Button className="lf-tool" icon={<DesignIcon name="folder" />} aria-label={tx('تصفح ملفات الجهاز', 'Browse device files')} disabled={!native} onClick={() => void pick()} />}
+        </div>
+      </>}
     </header>
 
-    {!native && <section className="card local-notice"><Smartphone /><h2>{tx('هذه المنظومة تعمل داخل تطبيق Android', 'This mode runs inside the Android app')}</h2><p>{tx('الاتصال والملفات والكاميرا تعمل محليًا في طبقة Android. المنظومة البصرية الحالية ما زالت متاحة.', 'Networking, files and camera run in the native Android layer. The existing optical mode is still available.')}</p><AppLink href="/">{tx('العودة إلى المنظومة الحالية', 'Return to the existing mode')}</AppLink></section>}
+    {!native && <section className="card local-notice"><DesignIcon name="phone" /><h2>{tx('هذه المنظومة تعمل داخل تطبيق Android', 'This mode runs inside the Android app')}</h2><p>{tx('الاتصال والملفات والكاميرا تعمل محليًا في طبقة Android. المنظومة البصرية الحالية ما زالت متاحة.', 'Networking, files and camera run in the native Android layer. The existing optical mode is still available.')}</p><AppLink href="/">{tx('العودة إلى المنظومة الحالية', 'Return to the existing mode')}</AppLink></section>}
     {!!message && <div className="local-error" role="alert"><p>{message}</p>{error && <button type="button" onClick={() => setError('')}>{tx('إخفاء', 'Dismiss')}</button>}</div>}
     {native && state.recoveryWarning && <p className="local-error" role="alert">{tx('تعذر حفظ سجل الاستعادة. الأجزاء المستلمة محفوظة، لكن قد تحتاج لإعادة اختيار الملفات.', 'The recovery record could not be saved. Received parts are retained, but sources may need selecting again.')}</p>}
 
     {current === 'home' && <>
-      <section className="lf-orb" aria-hidden="true"><i /><i /><i /><div className="lf-core"><ArrowUpFromLine size={30} /></div></section>
+      <section className="lf-orb" aria-hidden="true"><i /><i /><i /><div className="lf-core"><DesignIcon name="up" style={{ width: 30, height: 30 }} /></div></section>
       <h1 className="lf-h1">{tx('انقل ملفاتك مباشرة', 'Move your files directly')}</h1>
       <p className="lf-sub">{tx('بين هاتفين، عبر اتصال محلي موثّق. لا إنترنت في مسار النقل.', 'Between two phones over an authenticated local link. No internet in the transfer path.')}</p>
       <div className="lf-row local-actions">
-        <button type="button" className="glass cap tinted lf-big" disabled={!native} onClick={() => router.push('/local/send')}><ArrowUpFromLine size={20} />{tx('إرسال', 'Send')}</button>
-        <button type="button" className="glass cap lf-big" disabled={!native} onClick={() => router.push('/local/setup')}><ArrowDownToLine size={20} />{tx('استلام', 'Receive')}</button>
+        <button type="button" className="glass cap tinted lf-big" disabled={!native} onClick={() => router.push('/local/send')}><DesignIcon name="up" style={{ width: 20, height: 20 }} />{tx('إرسال', 'Send')}</button>
+        <button type="button" className="glass cap lf-big" disabled={!native} onClick={() => router.push('/local/setup')}><DesignIcon name="down" style={{ width: 20, height: 20 }} />{tx('استلام', 'Receive')}</button>
       </div>
-      {state.started && <button type="button" className="card lf-li lf-resume" onClick={() => router.push('/local/session')}><span className="lf-ic"><ShieldCheck size={22} /></span><span className="lf-gr"><b>{tx('الجلسة الحالية', 'Current session')}</b><small>{state.authenticated ? tx('موثّقة — عرض التقدم', 'Verified — view progress') : tx('متوقفة — عرض الحالة', 'Paused — view state')}</small></span><ChevronRight size={18} /></button>}
-      <button type="button" className="card lf-li" onClick={() => router.push('/local/send')}><span className="lf-ic"><FolderOpen size={22} /></span><span className="lf-gr"><b>{tx('الملفات', 'Files')}</b><small>{tx('تصفّح ملفات جهازك واختر ما تريد', 'Browse your device files and choose')}</small></span><ChevronRight size={18} /></button>
+      {state.started && <button type="button" className="card lf-li lf-resume" onClick={() => router.push('/local/session')}><span className="lf-ic"><DesignIcon name="shield" style={{ width: 22, height: 22 }} /></span><span className="lf-gr"><b>{tx('الجلسة الحالية', 'Current session')}</b><small>{state.authenticated ? tx('موثّقة — عرض التقدم', 'Verified — view progress') : tx('متوقفة — عرض الحالة', 'Paused — view state')}</small></span><DesignIcon name="chev" style={{ width: 18, height: 18 }} /></button>}
+      <button type="button" className="card lf-li" onClick={() => router.push('/local/send')}><span className="lf-ic"><DesignIcon name="folder" style={{ width: 22, height: 22 }} /></span><span className="lf-gr"><b>{tx('الملفات', 'Files')}</b><small>{tx('تصفّح ملفات جهازك واختر ما تريد', 'Browse your device files and choose')}</small></span><DesignIcon name="chev" style={{ width: 18, height: 18 }} /></button>
       <h2 className="lf-h2">{tx('الأخيرة', 'Recent')}</h2>
-      {state.files.length ? <div className="card lf-list">{state.files.slice(-6).reverse().map(f => <div className="lf-li" key={f.id}><span className="lf-ic">{f.direction === 'in' ? <ArrowDownToLine size={20} /> : <ArrowUpFromLine size={20} />}</span><span className="lf-gr"><b>{displayLabel(f)}</b><small>{size(f.size)} · {f.status === 'complete' ? tx('اكتمل', 'Complete') : `${Math.floor(transferRatio(f) * 100)}%`}</small></span></div>)}</div>
+      {state.files.length ? <div className="card lf-list">{state.files.slice(-6).reverse().map(f => <div className="lf-li" key={f.id}><span className="lf-ic">{f.direction === 'in' ? <DesignIcon name="down" style={{ width: 20, height: 20 }} /> : <DesignIcon name="up" style={{ width: 20, height: 20 }} />}</span><span className="lf-gr"><b>{displayLabel(f)}</b><small>{size(f.size)} · {f.status === 'complete' ? tx('اكتمل', 'Complete') : `${Math.floor(transferRatio(f) * 100)}%`}</small></span></div>)}</div>
         : <div className="card lf-empty"><p>{tx('لا يوجد سجل نقل بعد.', 'No transfers yet.')}</p></div>}
       {state.recovered && <section className="card local-recovery"><h2>{tx('جلسة سابقة قابلة للاستعادة', 'A previous session can be resumed')}</h2><p>{tx('استُعيدت الملفات والسجل. أعد الاقتران برمز جديد لإكمال التحقق ونقل الأجزاء الناقصة.', 'Files and history were restored. Pair again with a new code to re-authenticate and finish the missing parts.')}</p></section>}
     </>}
 
     {current === 'send' && <>
       <div className="glass lf-seg" role="tablist" aria-label={tx('نوع الملفات', 'File type')}>
-        {categories.map(c => <button type="button" key={c.id} role="tab" aria-selected={category === c.id} className={category === c.id ? 'on' : ''} onClick={() => { setCategory(c.id); setPage(0); }}>{ar ? c.ar : c.en}</button>)}
+        {categories.map(c => <button type="button" key={c.id} role="tab" aria-selected={category === c.id} className={category === c.id ? 'on' : ''} onClick={() => setCategory(c.id)}>{ar ? c.ar : c.en}</button>)}
       </div>
       <section className="card lf-list" aria-live="polite">
         {native && state.storageReady === false && <button type="button" className="lf-li lf-perm" data-perm="storage" onClick={() => void run(() => NativeLocal.requestStorage())}>
-          <span className="lf-ic"><FolderOpen size={20} /></span>
+          <span className="lf-ic"><DesignIcon name="folder" style={{ width: 20, height: 20 }} /></span>
           <span className="lf-gr"><b>{tx('الوصول إلى الملفات', 'File access')}</b><small>{state.sdk && state.sdk >= 30 ? tx('يفتح Android شاشة «الوصول إلى كل الملفات»', 'Android opens “All files access”') : tx('ستظهر نافذة Android الرسمية', 'The official Android dialog appears')}</small></span>
           <span className="glass cap lf-small">{tx('منح', 'Allow')}</span>
         </button>}
         {catalogue.length ? catalogue.map(f => <button type="button" data-file-row="" className={`lf-li ${selected.has(f.id) ? 'sel' : ''}`} key={f.id} aria-pressed={selected.has(f.id)} disabled={busy} onClick={() => void run(() => NativeLocal.selectFile({ id: f.id, selected: !selected.has(f.id) }))}>
-          <span className="lf-ic">{f.thumb ? <img src={f.thumb} alt="" loading="lazy" /> : <Package size={20} />}</span>
+          <span className="lf-ic">{f.thumb ? <img src={f.thumb} alt="" loading="lazy" /> : <DesignIcon name="apps" style={{ width: 20, height: 20 }} />}</span>
           <span className="lf-gr"><b>{displayLabel(f)}</b><small>{size(f.size)}{f.splitCount && f.splitCount > 1 ? ` · ${f.splitCount} APK` : ''}</small></span>
-          <span className={`lf-ck ${selected.has(f.id) ? 'on' : ''}`}><Check size={15} /></span>
-        </button>) : <div className="lf-empty"><FolderOpen size={30} /><p>{tx('لا توجد عناصر في هذا التصنيف. استخدم زر التصفح لاختيار ملفات من جهازك.', 'Nothing in this category. Use Browse to choose files from your device.')}</p></div>}
+          <span className={`lf-ck ${selected.has(f.id) ? 'on' : ''}`}><DesignIcon name="ok" style={{ width: 15, height: 15 }} /></span>
+        </button>) : <div className="lf-empty"><DesignIcon name="folder" style={{ width: 30, height: 30 }} /><p>{tx('لا توجد عناصر في هذا التصنيف. استخدم زر التصفح لاختيار ملفات من جهازك.', 'Nothing in this category. Use Browse to choose files from your device.')}</p></div>}
       </section>
-      {catalogue.length >= 30 && <button type="button" className="glass cap lf-more" onClick={() => setPage(p => p + 1)}>{tx('المزيد', 'More')}</button>}
       <div className="lf-bar">
         <div className="glass lf-bx">
-          <span className="lf-sum">{state.selected.length} {tx('عناصر', 'items')}<small>{size(totalSize)}</small></span>
+          <button type="button" className="lf-sum" data-sheet="selection" onClick={() => setSheetOpen(true)} aria-expanded={sheetOpen}>{state.selected.length} {tx('محدد', 'selected')}<small>{size(totalSize)}</small></button>
           <div className="local-send-action">
-            <button type="button" className="glass cap tinted" disabled={!native || busy || !state.selected.length} onClick={() => { if (activeSession) { void run(() => NativeLocal.sendSelected()); router.push('/local/session'); } else router.push('/local/scan'); }}><ArrowUpFromLine size={18} />{tx('إرسال', 'Send')}</button>
+            <button type="button" className="glass cap tinted" disabled={!native || busy || !state.selected.length} onClick={() => { if (activeSession) { void run(() => NativeLocal.sendSelected()); router.push('/local/session'); } else router.push('/local/scan'); }}><DesignIcon name="up" style={{ width: 18, height: 18 }} />{tx('إرسال', 'Send')}</button>
           </div>
         </div>
       </div>
@@ -273,42 +299,44 @@ export function LocalClient() {
       <h1 className="lf-h1 lf-h1-sm">{tx('تحضير الاستلام', 'Prepare to receive')}</h1>
       <p className="lf-sub">{tx('تظهر هنا نوافذ Android الرسمية فقط. كل عنصر يوضح حالته على هذا الجهاز وإصداره.', 'Only official Android dialogs appear here. Each row reflects this device and its Android version.')}</p>
       <div className="card lf-list">
-        <div className="lf-li"><span className="lf-ic"><Wifi size={20} /></span><span className="lf-gr"><b>Wi-Fi</b><small>{state.wifi ? tx('مفعّل', 'On') : tx('متوقف — يجب تفعيله', 'Off — required')}</small></span>{state.wifi ? <span className="lf-ok"><Check size={16} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.openSettings({ which: 'wifi' }))}>{tx('فتح الإعدادات', 'Open settings')}</button>}</div>
-        <div className="lf-li"><span className="lf-ic"><ShieldCheck size={20} /></span><span className="lf-gr"><b>{tx('الأجهزة القريبة', 'Nearby devices')}</b><small>{state.nearby ? tx('مسموح', 'Allowed') : tx('غير مسموح — ستظهر نافذة Android', 'Not allowed — the Android dialog will appear')}</small></span>{state.nearby ? <span className="lf-ok"><Check size={16} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestNearby())}>{tx('السماح', 'Allow')}</button>}</div>
-        <div className="lf-li"><span className="lf-ic"><FolderOpen size={20} /></span><span className="lf-gr"><b>{tx('حفظ الملفات', 'Saving files')}</b><small>{state.storageReady ? (state.destination || 'QRFerry') : state.sdk && state.sdk >= 30 ? tx('الوصول إلى كل الملفات غير ممنوح', 'All-files access is not granted') : tx('إذن التخزين غير ممنوح', 'Storage permission is not granted')}</small></span>{state.storageReady ? <span className="lf-ok"><Check size={16} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestStorage())}>{tx('السماح', 'Allow')}</button>}</div>
+        <div className="lf-li"><span className="lf-ic"><DesignIcon name="wifi" style={{ width: 20, height: 20 }} /></span><span className="lf-gr"><b>Wi-Fi</b><small>{state.wifi ? tx('مفعّل', 'On') : tx('متوقف — يجب تفعيله', 'Off — required')}</small></span>{state.wifi ? <span className="lf-ok"><DesignIcon name="ok" style={{ width: 16, height: 16 }} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.openSettings({ which: 'wifi' }))}>{tx('فتح الإعدادات', 'Open settings')}</button>}</div>
+        <div className="lf-li"><span className="lf-ic"><DesignIcon name="shield" style={{ width: 20, height: 20 }} /></span><span className="lf-gr"><b>{tx('الأجهزة القريبة', 'Nearby devices')}</b><small>{state.nearby ? tx('مسموح', 'Allowed') : tx('غير مسموح — ستظهر نافذة Android', 'Not allowed — the Android dialog will appear')}</small></span>{state.nearby ? <span className="lf-ok"><DesignIcon name="ok" style={{ width: 16, height: 16 }} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestNearby())}>{tx('السماح', 'Allow')}</button>}</div>
+        <div className="lf-li"><span className="lf-ic"><DesignIcon name="folder" style={{ width: 20, height: 20 }} /></span><span className="lf-gr"><b>{tx('حفظ الملفات', 'Saving files')}</b><small>{state.storageReady ? (state.destination || 'QRFerry') : state.sdk && state.sdk >= 30 ? tx('الوصول إلى كل الملفات غير ممنوح', 'All-files access is not granted') : tx('إذن التخزين غير ممنوح', 'Storage permission is not granted')}</small></span>{state.storageReady ? <span className="lf-ok"><DesignIcon name="ok" style={{ width: 16, height: 16 }} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestStorage())}>{tx('السماح', 'Allow')}</button>}</div>
       </div>
-      <div className="lf-bar"><div className="glass lf-bx"><div className="lf-row lf-bx-row"><button type="button" className="glass cap tinted lf-big" disabled={!native || busy || !state.nearby || !state.wifi} onClick={() => router.push('/local/receive')}><ArrowDownToLine size={19} />{tx('متابعة إلى الاستلام', 'Continue to receive')}</button></div></div></div>
+      <div className="lf-bar"><div className="glass lf-bx"><div className="lf-row lf-bx-row"><button type="button" className="glass cap tinted lf-big" disabled={!native || busy || !setupReady} onClick={() => router.push('/local/receive')}><DesignIcon name="down" style={{ width: 19, height: 19 }} />{tx('متابعة إلى الاستلام', 'Continue to receive')}</button></div></div></div>
       {!setupReady && <p className="lf-hint">{tx('يفتح Android نافذته الرسمية عند الضغط على «السماح». لن يظهر أي شيء من تصميمنا بدلًا منها.', 'Android opens its own dialog when you press Allow. Nothing of our design replaces it.')}</p>}
     </>}
 
     {current === 'scan' && <>
       <div className="lf-cam">
         <div className="local-native-surface lf-cam-surface" ref={surface} aria-label={tx('معاينة كاميرا المسح الأصلية', 'Native scan camera preview')}>
-          <Camera size={40} /><span>{scanning ? tx('الكاميرا تعمل محليًا', 'Camera running locally') : tx('الكاميرا مغلقة', 'Camera is closed')}</span>
+          <DesignIcon name="cam" style={{ width: 40, height: 40 }} /><span>{scanning ? tx('الكاميرا تعمل محليًا', 'Camera running locally') : tx('الكاميرا مغلقة', 'Camera is closed')}</span>
         </div>
       </div>
       <div className="lf-sheet">
         <h2>{tx('ضع رمز QR داخل الإطار', 'Place the QR code inside the frame')}</h2>
         <p role="status">{state.phase === 'connecting' ? tx('جارٍ الاتصال والتحقق…', 'Connecting and verifying…') : state.phase === 'preparing-files' ? tx('تم التحقق. تجهيز الملفات…', 'Verified. Preparing files…') : scanning ? tx('ابحث عن رمز المستقبل. تُقرأ الرموز محليًا فقط.', 'Look for the receiver’s code. Codes are decoded locally only.') : tx('سيطلب Android إذن الكاميرا إن لم يكن ممنوحًا.', 'Android asks for camera permission if it is not granted.')}</p>
         <div className="lf-row">
-          <button type="button" className="glass cap tinted lf-big" disabled={!native || busy || scanning} onClick={() => void openScanner()}><QrCode size={18} />{tx('فتح الكاميرا', 'Open camera')}</button>
+          <button type="button" className="glass cap tinted lf-big" disabled={!native || busy || scanning} onClick={() => void openScanner()}><DesignIcon name="qr" style={{ width: 18, height: 18 }} />{tx('فتح الكاميرا', 'Open camera')}</button>
           {scanning && <button type="button" className="glass cap lf-big" onClick={closeCamera}>{tx('إغلاق', 'Close')}</button>}
         </div>
       </div>
     </>}
 
     {current === 'receive' && <>
-      <h1 className="lf-h1 lf-h1-sm">{tx('امسح هذا الرمز من الهاتف المرسل', 'Have the sending phone scan this')}</h1>
-      <p className="lf-sub">{tx('يظهر الرمز بعد جاهزية الاتصال المحلي فعلًا. صالح لدقائق ثم يلزم رمز جديد.', 'The code appears only when the local link is genuinely ready. It expires after a few minutes.')}</p>
-      <div ref={surface} className="local-native-surface lf-qr" aria-label={tx('رمز الاقتران الأصلي', 'Native pairing QR')}>
-        <QrCode size={56} />
-        <p>{qrShown ? tx('رمز جلسة مؤقت', 'Temporary session code') : state.phase === 'preparing' ? tx('جارٍ تجهيز أفضل اتصال متاح…', 'Preparing the best available link…') : tx('يظهر الرمز بعد جاهزية الاتصال', 'The code appears when the link is ready')}</p>
+      <div className="lf-qr-wrap" ref={surface}>
+        <div className="local-native-surface lf-qr" aria-label={tx('رمز الاقتران الأصلي', 'Native pairing QR')}>
+          <DesignIcon name="qr" style={{ width: 56, height: 56 }} />
+          <p>{state.qrReady ? tx('رمز جلسة مؤقت', 'Temporary session code') : state.phase === 'preparing' ? tx('جارٍ تجهيز أفضل اتصال متاح…', 'Preparing the best available link…') : tx('يظهر الرمز بعد جاهزية الاتصال', 'The code appears when the link is ready')}</p>
+        </div>
       </div>
-      <p className="lf-status" role="status">{state.authenticated ? tx('تم التحقق من المرسل؛ سيبدأ النقل.', 'Sender verified; the transfer will start.') : state.qrReady ? <>{tx('يعمل الآن:', 'Active path:')} <b>{methodLabel}</b></> : state.phase === 'recovering' ? '' : ''}</p>
-      <div className="lf-bar"><div className="glass lf-bx"><div className="lf-row lf-bx-row">
-        <button type="button" className="glass cap tinted lf-big" disabled={!native || busy || state.qrReady || state.authenticated || state.phase === 'preparing'} onClick={() => void run(() => NativeLocal.startReceive({ method: 'auto' }))}><Wifi size={19} />{tx('بدء الاتصال المحلي تلقائيًا', 'Start the local link automatically')}</button>
-        {(state.qrReady || state.phase === 'preparing') && <button type="button" className="glass cap lf-big" onClick={() => void end()}>{tx('إلغاء', 'Cancel')}</button>}
-      </div></div></div>
+      <p className="lf-status" role="status">{state.authenticated ? tx('تم التحقق من المرسل؛ سيبدأ النقل.', 'Sender verified; the transfer will start.') : state.qrReady ? <>{tx('يعمل الآن:', 'Active path:')} <b>{methodLabel}</b></> : state.phase === 'preparing' ? tx('جارٍ تجهيز أفضل اتصال متاح…', 'Preparing the best available link…') : ''}</p>
+      <div className="lf-bar"><div className="glass lf-bx lf-bx-compact">
+        {!(state.qrReady || state.authenticated || state.phase === 'preparing')
+          ? <button type="button" className="glass cap tinted lf-act" disabled={!native || busy} onClick={() => void run(() => NativeLocal.startReceive({ method: 'auto' }))}><DesignIcon name="wifi" style={{ width: 18, height: 18 }} />{tx('بدء الاتصال', 'Start link')}</button>
+          : <span className="lf-live"><i />{qrShown ? tx('الرمز جاهز', 'Code ready') : tx('جارٍ عرض الرمز…', 'Rendering the code…')}</span>}
+        <button type="button" className="glass cap lf-act lf-act-quiet" onClick={() => void end()}>{tx('إلغاء', 'Cancel')}</button>
+      </div></div>
     </>}
 
     {sessionPage && <>
@@ -318,28 +346,45 @@ export function LocalClient() {
       </div>
       <h2 className="lf-h2">{tx('الملفات', 'Files')} · {done}/{state.files.length}</h2>
       <section className="card lf-list">{state.files.map(f => <div className="lf-li lf-file" data-file-row="" key={f.id}>
-        <span className="lf-ic">{f.direction === 'in' ? <ArrowDownToLine size={20} /> : <ArrowUpFromLine size={20} />}</span>
+        <span className="lf-ic">{f.direction === 'in' ? <DesignIcon name="down" style={{ width: 20, height: 20 }} /> : <DesignIcon name="up" style={{ width: 20, height: 20 }} />}</span>
         <span className="lf-gr"><b>{displayLabel(f)}</b><span className="lf-tr"><i style={{ width: `${Math.round(transferRatio(f) * 100)}%` }} /></span></span>
-        <span className={`lf-st ${f.status === 'complete' ? 'ok' : ''}`}>{f.status === 'complete' ? <Check size={16} /> : `${Math.floor(transferRatio(f) * 100)}%`}</span>
+        <span className={`lf-st ${f.status === 'complete' ? 'ok' : ''}`}>{f.status === 'complete' ? <DesignIcon name="ok" style={{ width: 16, height: 16 }} /> : `${Math.floor(transferRatio(f) * 100)}%`}</span>
       </div>)}</section>
       <div className="lf-row lf-session-actions">
-        <button type="button" className="glass cap lf-big" disabled={!state.authenticated} onClick={() => state.recovered ? router.push(state.role === 'receive' ? '/local/receive' : '/local/scan') : void run(() => NativeLocal.pause({ paused: !state.paused && state.phase !== 'paused' }))}>{state.paused || state.phase === 'paused' ? <Play size={18} /> : <Pause size={18} />}{state.paused || state.phase === 'paused' ? tx('استكمال', 'Resume') : tx('إيقاف مؤقت', 'Pause')}</button>
+        <button type="button" className="glass cap lf-big" disabled={!state.authenticated} onClick={() => state.recovered ? router.push(state.role === 'receive' ? '/local/receive' : '/local/scan') : void run(() => NativeLocal.pause({ paused: !state.paused && state.phase !== 'paused' }))}>{state.paused || state.phase === 'paused' ? <DesignIcon name="play" style={{ width: 18, height: 18 }} /> : <DesignIcon name="pause" style={{ width: 18, height: 18 }} />}{state.paused || state.phase === 'paused' ? tx('استكمال', 'Resume') : tx('إيقاف مؤقت', 'Pause')}</button>
         <button type="button" className="glass cap lf-big" onClick={() => void end()}>{tx('إنهاء الجلسة', 'End session')}</button>
       </div>
       <div className="lf-msgs">{state.messages.map(m => <div className={`lf-bb ${m.direction === 'out' ? 'me' : ''}`} data-msg="" key={m.id}><p>{m.text}</p><small>{m.direction === 'out' ? (m.status === 'delivered' ? tx('وصلت', 'Delivered') : m.status === 'sending' ? tx('جارٍ الإرسال', 'Sending') : m.status === 'failed' ? tx('لم تُرسل', 'Not sent') : tx('أُرسلت', 'Sent')) : new Date(m.time).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })}</small></div>)}</div>
       {createPortal(<>
         <ProgressiveBlur edge="bottom" />
         <form className="bridge-composer lf-composer" onSubmit={e => { e.preventDefault(); if (!draft.trim() || !state.authenticated) return; void run(() => NativeLocal.sendMessage({ text: draft })).then(result => { if (result) setDraft(''); }); }}>
-          <CircleButton disabled={!state.authenticated} aria-label={tx('إرفاق ملفات', 'Attach files')} onClick={() => router.push('/local/send')}><Plus size={20} /></CircleButton>
+          <CircleButton disabled={!state.authenticated} aria-label={tx('إرفاق ملفات', 'Attach files')} onClick={() => router.push('/local/send')}><DesignIcon name="plus" style={{ width: 20, height: 20 }} /></CircleButton>
           <Glass className="inp"><textarea rows={1} aria-label={tx('رسالة للجهاز المتصل', 'Message to the connected device')} placeholder={tx('أدخل الرسالة…', 'Message…')} value={draft} maxLength={4000} onChange={e => setDraft(e.target.value)} /></Glass>
-          <CircleButton type="submit" tinted disabled={!state.authenticated || !draft.trim() || busy} aria-label={tx('إرسال الرسالة', 'Send message')}><Send size={18} /></CircleButton>
+          <CircleButton type="submit" tinted disabled={!state.authenticated || !draft.trim() || busy} aria-label={tx('إرسال الرسالة', 'Send message')}><DesignIcon name="sendup" style={{ width: 18, height: 18 }} /></CircleButton>
         </form>
       </>, document.body)}
     </>}
 
+    {sheetOpen && <div className="lf-scrim" role="presentation" onClick={() => setSheetOpen(false)}>
+      <section className="lf-dialog" role="dialog" aria-modal="true" aria-label={tx('العناصر المحددة', 'Selected items')} onClick={e => e.stopPropagation()}>
+        <header className="lf-dialog-head"><h2>{state.selected.length} {tx('محدد للإرسال', 'selected to send')}</h2>
+          <button type="button" className="glass circle" aria-label={tx('إغلاق', 'Close')} onClick={() => setSheetOpen(false)}><DesignIcon name="x" style={{ width: 18, height: 18 }} /></button></header>
+        <div className="lf-dialog-list">
+          {state.selected.length ? state.selected.map(f => <div className="lf-li" data-selected-row="" key={f.id}>
+            <span className="lf-ic">{f.thumb ? <img src={f.thumb} alt="" loading="lazy" /> : <DesignIcon name="doc" style={{ width: 20, height: 20 }} />}</span>
+            <span className="lf-gr"><b>{displayLabel(f)}</b><small>{size(f.size)}</small></span>
+            <button type="button" className="glass circle lf-remove" aria-label={tx('إزالة من التحديد', 'Remove from selection')} disabled={busy} onClick={() => void run(() => NativeLocal.selectFile({ id: f.id, selected: false }))}><DesignIcon name="x" style={{ width: 16, height: 16 }} /></button>
+          </div>) : <p className="lf-empty">{tx('لم تختر أي عنصر بعد.', 'Nothing selected yet.')}</p>}
+        </div>
+        <div className="lf-dialog-foot">
+          <button type="button" className="glass cap lf-act" onClick={() => setSheetOpen(false)}>{tx('تم', 'Done')}</button>
+        </div>
+      </section>
+    </div>}
+
     {current === 'home' && <nav className="bottom-nav local-nav" aria-label={tx('التنقل في النقل المحلي', 'Local transfer navigation')}>
-      <LiquidChoices kind="navigation" value="home" label={tx('النقل المحلي', 'Local transfer')} items={[{ value: 'home', label: tx('الرئيسية', 'Home'), icon: <Home /> }, { value: 'send', label: tx('إرسال', 'Send'), icon: <ArrowUpFromLine /> }, { value: 'receive', label: tx('استلام', 'Receive'), icon: <ArrowDownToLine /> }]} onValueChange={v => router.push(v === 'home' ? '/local' : v === 'receive' ? '/local/setup' : '/local/send')} />
+      <LiquidChoices kind="navigation" value="home" label={tx('النقل المحلي', 'Local transfer')} items={[{ value: 'home', label: tx('الرئيسية', 'Home'), icon: <DesignIcon name="home" /> }, { value: 'send', label: tx('إرسال', 'Send'), icon: <DesignIcon name="up" /> }, { value: 'receive', label: tx('استلام', 'Receive'), icon: <DesignIcon name="down" /> }]} onValueChange={v => router.push(v === 'home' ? '/local' : v === 'receive' ? '/local/setup' : '/local/send')} />
     </nav>}
-    {current === 'session' && !sessionPage && <section className="card lf-empty"><Lock size={30} /><h2>{tx('لا توجد جلسة نقل بدأت بالفعل', 'No transfer session has started')}</h2><p>{tx('الاقتران وحده لا يكفي لعرض نجاح أو تقدم.', 'Pairing alone does not justify showing success or progress.')}</p><AppLink href="/local">{tx('العودة', 'Go back')}</AppLink></section>}
+    {current === 'session' && !sessionPage && <section className="card lf-empty"><DesignIcon name="lock" style={{ width: 30, height: 30 }} /><h2>{tx('لا توجد جلسة نقل بدأت بالفعل', 'No transfer session has started')}</h2><p>{tx('الاقتران وحده لا يكفي لعرض نجاح أو تقدم.', 'Pairing alone does not justify showing success or progress.')}</p><AppLink href="/local">{tx('العودة', 'Go back')}</AppLink></section>}
   </main>;
 }

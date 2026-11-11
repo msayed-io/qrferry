@@ -20,6 +20,7 @@ public final class LocalFiles {
   public String transferId(String digest)throws Exception{return LocalProtocol.transferId(digest,name,mime,size,apk!=null?apk.getAbsolutePath():uri.toString());}
   public JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("label",label).put("mime",mime).put("size",size);}
  }
+ private static final int THUMB_ROWS=300;
  private final Object storageLock=new Object();private final java.util.concurrent.atomic.AtomicInteger fileGeneration=new java.util.concurrent.atomic.AtomicInteger();private final Map<String,String>uriIds=new HashMap<>();
  private final Context context;private final ContentResolver resolver;private final File inbox;private final LocalPublication publication;
  private final Map<String,Source> catalogue=new LinkedHashMap<>();private final LinkedHashSet<String> selection=new LinkedHashSet<>();
@@ -28,6 +29,8 @@ public final class LocalFiles {
  LocalFiles(Context c,LocalPublication.Checkpoint checkpoint){context=c.getApplicationContext();resolver=c.getContentResolver();inbox=new File(c.getFilesDir(),"local-inbox");inbox.mkdirs();publication=new LocalPublication(context,inbox,checkpoint);}
  public synchronized JSONArray selected()throws Exception{JSONArray a=new JSONArray();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.put(s.json());}return a;}
  public synchronized List<Source> sources(){List<Source>a=new ArrayList<>();for(String id:selection){Source s=catalogue.get(id);if(s!=null)a.add(s);}return a;}
+ /** Entering a screen must never inherit a selection this run did not make. */
+ public synchronized void clearSelection(){selection.clear();}
  public synchronized void select(String id,boolean on){if(!catalogue.containsKey(id))throw new IllegalArgumentException("UNKNOWN_FILE");List<String>ids=new ArrayList<>();if(id.startsWith("apk:")){String group=id.substring(0,id.lastIndexOf(':')+1);for(String key:catalogue.keySet())if(key.startsWith(group))ids.add(key);}else ids.add(id);if(on){Set<String>next=new LinkedHashSet<>(selection);next.addAll(ids);if(next.size()>LocalProtocol.MAX_FILES)throw new IllegalArgumentException("TOO_MANY_FILES");selection.clear();selection.addAll(next);}else selection.removeAll(ids);}
  synchronized JSONArray recoverySources()throws Exception{
   JSONArray rows=new JSONArray();for(Source source:sources()){JSONObject row=source.json();if(source.apk!=null)row.put("apk",source.apk.getAbsolutePath());else row.put("uri",source.uri.toString());rows.put(row);}return rows;
@@ -56,13 +59,21 @@ public final class LocalFiles {
    synchronized(this){if(fileGeneration.get()!=generation)throw new IOException("CANCELLED");String id=uriIds.get(uri.toString());if(id==null){id=UUID.randomUUID().toString();uriIds.put(uri.toString(),id);}Source s=new Source(id,name,mime,size,uri,null);if(!selection.contains(id)&&selection.size()>=LocalProtocol.MAX_FILES)throw new IOException("TOO_MANY_FILES");catalogue.put(id,s);selection.add(id);a.put(s.json());}
   }return a;
  }
+ /** The whole category in one call: the UI renders instantly and never needs a
+  *  paging step. Rows are keyed by their unique id, so none can repeat. */
+ public synchronized JSONArray list(String category)throws Exception{
+  return list(category,0);
+ }
  public synchronized JSONArray list(String category,int page)throws Exception{
   if(page<0||page>10000)throw new IllegalArgumentException("INVALID_PAGE");if(category.equals("apps"))return apps(page);
   Uri collection;String filter=null;
   switch(category){case "images":collection=MediaStore.Images.Media.EXTERNAL_CONTENT_URI;break;case "videos":collection=MediaStore.Video.Media.EXTERNAL_CONTENT_URI;break;case "audio":collection=MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;break;default:collection=MediaStore.Files.getContentUri("external");filter=MediaStore.Files.FileColumns.MEDIA_TYPE+"=0 AND "+MediaStore.MediaColumns.SIZE+">0";}
   JSONArray a=new JSONArray();String[]cols={MediaStore.MediaColumns._ID,MediaStore.MediaColumns.DISPLAY_NAME,MediaStore.MediaColumns.MIME_TYPE,MediaStore.MediaColumns.SIZE};
   try(Cursor c=resolver.query(collection,cols,filter,null,MediaStore.MediaColumns.DATE_ADDED+" DESC")){
-   if(c!=null&&c.moveToPosition(page*60))do{long size=c.getLong(3);if(size<0||size>LocalProtocol.MAX_FILE)continue;Uri uri=ContentUris.withAppendedId(collection,c.getLong(0));String id=category+":"+c.getLong(0);Source s=new Source(id,c.getString(1),c.getString(2),size,uri,null);catalogue.put(id,s);a.put(row(s).put("selected",selection.contains(id)));}while(a.length()<60&&c.moveToNext());
+   if(c!=null&&c.moveToPosition(page*60))do{long size=c.getLong(3);if(size<0||size>LocalProtocol.MAX_FILE)continue;Uri uri=ContentUris.withAppendedId(collection,c.getLong(0));String id=category+":"+c.getLong(0);Source s=new Source(id,c.getString(1),c.getString(2),size,uri,null);catalogue.put(id,s);
+    // Thumbnails are bounded: rows past the budget keep the placeholder icon so a
+    // large gallery still arrives in one payload without hundreds of bitmaps.
+    a.put((a.length()<THUMB_ROWS?row(s):s.json()).put("selected",selection.contains(id)));}while(a.length()<LocalProtocol.MAX_FILES&&c.moveToNext());
   }return a;
  }
  private JSONArray apps(int page)throws Exception{
@@ -83,12 +94,12 @@ public final class LocalFiles {
    // One unreadable package must never empty the whole catalogue.
    try{
     if(r.activityInfo==null)continue;ApplicationInfo info=r.activityInfo.applicationInfo;if(info==null||!seen.add(info.packageName))continue;
-    if(index++<page*30)continue;if(result.length()>=60)break;
+    if(index++<page*30)continue;if(result.length()>=LocalProtocol.MAX_FILES)break;
     String label=r.loadLabel(manager).toString();List<String>paths=new ArrayList<>();paths.add(info.sourceDir);if(info.splitSourceDirs!=null)Collections.addAll(paths,info.splitSourceDirs);
     for(int i=0;i<paths.size();i++){
      File file=new File(paths.get(i));if(!file.isFile())continue;String id="apk:"+info.packageName+":"+i;String appLabel=paths.size()>1&&i>0?label+" ("+i+")":label;
      Source s=new Source(id,label+"-"+(i==0?"base":"split-"+i)+".apk",appLabel,"application/vnd.android.package-archive",file.length(),null,file);
-     catalogue.put(id,s);result.put(row(s).put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));
+     catalogue.put(id,s);result.put((result.length()<THUMB_ROWS?row(s):s.json()).put("package",info.packageName).put("splitCount",paths.size()).put("selected",selection.contains(id)));
     }
    }catch(Exception skip){/* skip this package only */}
   }

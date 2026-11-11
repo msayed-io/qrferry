@@ -37,7 +37,7 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
 
-        <service android:name=".local.LocalTransferService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name=".local.LocalTransferService" android:exported="false" android:stopWithTask="true" android:foregroundServiceType="connectedDevice" />
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"

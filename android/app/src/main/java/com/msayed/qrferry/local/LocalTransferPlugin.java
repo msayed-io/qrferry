@@ -52,7 +52,9 @@ public class LocalTransferPlugin extends Plugin {
  }
  private void resolve(PluginCall call){try{JSObject s=new JSObject(engine.snapshot().toString());s.put("native",true);s.put("sdk",Build.VERSION.SDK_INT);s.put("allFiles",engine.files.broad());s.put("storageReady",storageReady());s.put("media",mediaReady());s.put("storageAsked",getContext().getSharedPreferences("local-files",0).getBoolean("asked",false));s.put("camera",getPermissionState("camera")==PermissionState.GRANTED);s.put("nearby",getPermissionState(Build.VERSION.SDK_INT>=33?"nearby":"location")==PermissionState.GRANTED);s.put("wifi",((android.net.wifi.WifiManager)getContext().getApplicationContext().getSystemService(android.content.Context.WIFI_SERVICE)).isWifiEnabled());s.put("destination",!engine.files.tree().isEmpty()?"Selected folder/QRFerry":engine.files.broad()||engine.files.legacyWritable()?"QRFerry":Build.VERSION.SDK_INT>=29?"Downloads/QRFerry":"Choose destination");call.resolve(s);}catch(Exception e){call.reject("STATUS_FAILED",e);}}
  @PluginMethod public void getState(PluginCall call){resolve(call);}
- @PluginMethod public void listFiles(PluginCall call){worker.execute(()->{try{call.resolve(new JSObject().put("files",engine.files.list(call.getString("category","files"),call.getInt("page",0))));}catch(Exception e){call.reject("FILE_ACCESS_REQUIRED",e);}});}
+ /** The entire category in one response; no paging step exists in the UI. */
+ @PluginMethod public void listFiles(PluginCall call){worker.execute(()->{try{call.resolve(new JSObject().put("files",engine.files.list(call.getString("category","files"))));}catch(Exception e){call.reject("FILE_ACCESS_REQUIRED",e);}});}
+ @PluginMethod public void clearSelection(PluginCall call){try{engine.files.clearSelection();engine.changed();resolve(call);}catch(Exception e){call.reject("SELECTION_FAILED",e);}}
  @PluginMethod public void selectFile(PluginCall call){try{engine.files.select(call.getString("id",""),Boolean.TRUE.equals(call.getBoolean("selected",false)));engine.changed();resolve(call);}catch(Exception e){call.reject("SELECTION_FAILED",e);}}
  @PluginMethod public void pickFiles(PluginCall call){pickerGenerations.put(call,engine.files.fileWorkGeneration());hideOverlay();Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(call.getString("mime","*/*")).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(call,i,"pickedFiles");}
  @ActivityCallback private void pickedFiles(PluginCall call,ActivityResult result){if(call==null)return;Integer generation=pickerGenerations.remove(call);if(generation==null||generation!=engine.files.fileWorkGeneration()){call.reject("CANCELLED");return;}if(result.getResultCode()!=Activity.RESULT_OK||result.getData()==null){resolve(call);return;}Intent data=result.getData();List<Uri>uris=new ArrayList<>();if(data.getClipData()!=null)for(int n=0;n<data.getClipData().getItemCount();n++)uris.add(data.getClipData().getItemAt(n).getUri());else if(data.getData()!=null)uris.add(data.getData());worker.execute(()->{try{engine.files.addUris(uris,data.getFlags(),generation);engine.changed();resolve(call);}catch(Exception e){call.reject("FILES_NOT_READABLE",e);}});}
@@ -130,5 +132,10 @@ public class LocalTransferPlugin extends Plugin {
  @PluginMethod public void disconnect(PluginCall call){main.post(()->{hideOverlay();engine.disconnect();getContext().stopService(new Intent(getContext(),LocalTransferService.class));resolve(call);});}
  @Override protected void handleOnPause(){main.post(()->{hideOverlay();notifyListeners("lifecycle",new JSObject().put("active",false));});}
  @Override protected void handleOnResume(){notifyListeners("lifecycle",new JSObject().put("active",true));}
- @Override protected void handleOnDestroy(){engine.unsubscribe(listener);main.post(this::hideOverlay);worker.shutdown();}
+ @Override protected void handleOnDestroy(){
+  engine.unsubscribe(listener);main.post(this::hideOverlay);worker.shutdown();
+  // The WebView is gone: the session (and its ongoing notification) must not
+  // survive it. The recovery journal keeps anything unfinished resumable.
+  try{getContext().stopService(new Intent(getContext(),LocalTransferService.class));}catch(Exception ignored){}
+ }
 }

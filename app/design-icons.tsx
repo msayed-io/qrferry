@@ -18,7 +18,19 @@ const paths = {
   "sendup": "<path d=\"M12 19V5M6 11l6-6 6 6\"/>",
   "plus": "<path d=\"M12 5v14M5 12h14\"/>",
   "x": "<path d=\"M6 6l12 12M18 6L6 18\"/>",
-  "ok": "<path d=\"M5 12.5l4.5 4.5L19 7.5\"/>"
+  "ok": "<path d=\"M5 12.5l4.5 4.5L19 7.5\"/>",
+  "down": "<path d=\"M12 4v11M8 11l4 4 4-4M6 20h12\"/>",
+  "apps": "<rect x=\"4\" y=\"4\" width=\"7\" height=\"7\" rx=\"2\"/><rect x=\"13\" y=\"4\" width=\"7\" height=\"7\" rx=\"2\"/><rect x=\"4\" y=\"13\" width=\"7\" height=\"7\" rx=\"2\"/><rect x=\"13\" y=\"13\" width=\"7\" height=\"7\" rx=\"2\"/>",
+  "image": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"3\"/><circle cx=\"8.5\" cy=\"10\" r=\"1.5\"/><path d=\"M4 17l5-5 4 4 3-3 4 4\"/>",
+  "video": "<rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"3\"/><path d=\"M15 11l5-3v8l-5-3z\"/>",
+  "music": "<path d=\"M9 18V6l10-2v12\"/><circle cx=\"7\" cy=\"18\" r=\"2.5\"/><circle cx=\"17\" cy=\"16\" r=\"2.5\"/>",
+  "wifi": "<path d=\"M3 9a15 15 0 0118 0M6.5 12.5a10 10 0 0111 0M10 16a5 5 0 014 0\"/><circle cx=\"12\" cy=\"19\" r=\"1.2\" fill=\"currentColor\" stroke=\"none\"/>",
+  "shield": "<path d=\"M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z\"/><path d=\"M9 12l2.2 2.2L15.5 10\"/>",
+  "lock": "<rect x=\"4.5\" y=\"10\" width=\"15\" height=\"10\" rx=\"3\"/><path d=\"M8 10V7.5a4 4 0 018 0V10\"/>",
+  "pause": "<path d=\"M9 5v14M15 5v14\"/>",
+  "play": "<path d=\"M7 4l12 8-12 8z\"/>",
+  "home": "<path d=\"M4 11l8-7 8 7M6.5 9.5V19a1.5 1.5 0 001.5 1.5h8A1.5 1.5 0 0017.5 19V9.5\"/>",
+  "phone": "<rect x=\"6\" y=\"2.5\" width=\"12\" height=\"19\" rx=\"3\"/><path d=\"M10.5 18.5h3\"/>"
 } as const;
 
 export function DesignIcon({ name, ...props }: SVGProps<SVGSVGElement> & { name: keyof typeof paths }) {

@@ -20,11 +20,16 @@ test('every local route renders the local subsystem, never the 404 page',()=>{
  for(const route of ['/local','/local/send','/local/setup','/local/receive','/local/scan','/local/session'])assert.match(routes,new RegExp(`'${route}': *LocalPage`),`${route} must be preloadable`);
  assert.match(routes,/path\.startsWith\('\/local\/'\) *\? *LocalPage/);
 });
-test('top capsules stay above the app blur and accent surfaces never rely on color-mix alone',()=>{
+test('the header is the app toolbar, and overlays still outrank the blur',()=>{
  const css=fs.readFileSync('app/local/local.css','utf8');
- const z=(selector:string)=>{const rule=new RegExp(`${selector}\\{[^}]*z-index:([0-9]+)`).exec(css);assert.ok(rule,`${selector} must declare a z-index`);return Number(rule![1]);};
- assert.ok(z('\\.lf-top')>18,`top bar must outrank the progressive blur (18), got ${z('\\.lf-top')}`);
- assert.ok(z('\\.lf-bar')>18);assert.ok(z('\\.lf-sheet')>18);
+ const rule=(selector:string)=>{const found=new RegExp(`${selector}\\{([^}]*)\\}`).exec(css);assert.ok(found,`${selector} must exist`);return found![1];};
+ // Header is in the page flow with the app's own capsules, never a fixed plate
+ // that covers them (the blur is z-index 18 in floating-chrome.css).
+ assert.doesNotMatch(rule('\\.lf-toolbar'),/position:fixed/);
+ assert.doesNotMatch(rule('\\.lf-home-header'),/position:fixed/);
+ for(const selector of ['\\.lf-bar','\\.lf-sheet','\\.lf-scrim']){
+  const z=/z-index:(\d+)/.exec(rule(selector));assert.ok(z,`${selector} needs a z-index`);assert.ok(Number(z![1])>18,`${selector} must outrank the blur`);
+ }
  assert.match(css,/\.local-page \.tinted[^{]*\{[^}]*background:var\(--tint\)/);
  const design=fs.readFileSync('public/design.css','utf8');
  assert.match(design,/\.tinted\{background:var\(--tint\);color:var\(--on-accent\)\}/);

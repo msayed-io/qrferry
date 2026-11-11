@@ -20,15 +20,19 @@ test('every local child route renders the subsystem and never the 404 page',asyn
  await expect(page.getByRole('heading',{name:'تحضير الاستلام'})).toBeVisible();
 });
 test('top capsules outrank the progressive blur',async({page})=>{
- await page.goto('/local/send');
- await expect(page.locator('.lf-chip').first()).toBeVisible();
- const ok=await page.evaluate(()=>{
-  const chip=document.querySelector('.lf-chip'),blur=document.querySelector('.progressive-blur-top');
-  if(!chip||!blur)return false;
-  const z=(el:Element|null)=>Number(el?getComputedStyle(el).zIndex:0)||0;
-  return z(chip.closest('.lf-top'))>z(blur);
- });
- expect(ok).toBe(true);
+ // The local header is the app's own floating toolbar (z-index 20) over the
+ // app's progressive blur (z-index 18), exactly like History and Privacy.
+ for(const route of ['/local','/local/send','/local/setup']){
+  await page.goto(route);
+  await expect(page.locator('header .support-title, header .brand').first()).toBeVisible();
+  const ok=await page.evaluate(()=>{
+   const toolbar=document.querySelector('header'),blur=document.querySelector('.progressive-blur-top');
+   if(!toolbar||!blur)return false;
+   const z=(el:Element)=>Number(getComputedStyle(el).zIndex)||0;
+   return z(toolbar)>z(blur);
+  });
+  expect(ok).toBe(true);
+ }
 });
 test('local catalogue and scanner do not manufacture data when native bridge is absent',async({page})=>{
  await page.goto('/local/send');await expect(page.locator('[data-file-row]')).toHaveCount(0);await expect(page.getByRole('button',{name:'تصفح ملفات الجهاز',exact:true})).toBeDisabled();await expect(page.locator('.local-send-action button')).toBeDisabled();

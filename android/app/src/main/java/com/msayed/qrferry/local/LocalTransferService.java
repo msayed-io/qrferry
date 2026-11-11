@@ -15,7 +15,7 @@ public class LocalTransferService extends Service {
  @Override public void onCreate(){
   super.onCreate();power=new LocalPower(this);NotificationManager nm=getSystemService(NotificationManager.class);
   if(Build.VERSION.SDK_INT>=26)nm.createNotificationChannel(new NotificationChannel("local-transfer","QRFerry · Local transfer",NotificationManager.IMPORTANCE_LOW));
-  listener=s->main.post(()->{if(destroyed)return;String phase=s.optString("phase");power.update(phase,s.optBoolean("paused"));if(phase.equals("closed")){stopSelf();return;}long now=SystemClock.elapsedRealtime();if(now-lastNotification>=1000){lastNotification=now;nm.notify(7342,notification(phase));}});
+  listener=s->main.post(()->{if(destroyed)return;String phase=s.optString("phase");power.update(phase,s.optBoolean("paused"));if(phase.equals("closed")){stopForegroundCompat();stopSelf();return;}long now=SystemClock.elapsedRealtime();if(now-lastNotification>=1000){lastNotification=now;nm.notify(7342,notification(phase));}});
   main.post(refresh);
  }
  private Notification notification(String phase){
@@ -26,7 +26,15 @@ public class LocalTransferService extends Service {
   return new NotificationCompat.Builder(this,"local-transfer").setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle(ar?"QRFerry · نقل محلي":"QRFerry · Local transfer").setContentText(status).setContentIntent(tap).setOngoing(true).setSilent(true).addAction(0,ar?"إنهاء الجلسة":"End session",cancel).build();
  }
  @Override public int onStartCommand(Intent intent,int flags,int id){if(intent!=null&&"cancel".equals(intent.getAction())){engine(this).disconnect();stopSelf();return START_NOT_STICKY;}startForeground(7342,notification(engine(this).snapshot().optString("phase")));engine(this).unsubscribe(listener);engine(this).subscribe(listener);return START_NOT_STICKY;}
- @Override public void onTaskRemoved(Intent rootIntent){engine(this).checkpointRecovery();super.onTaskRemoved(rootIntent);}
+ /** Closing the app closes the session: no notification may outlive the task. */
+ @Override public void onTaskRemoved(Intent rootIntent){
+  try{engine(this).checkpointRecovery();engine(this).disconnect();}catch(Exception ignored){}
+  stopForegroundCompat();stopSelf();super.onTaskRemoved(rootIntent);
+ }
+ private void stopForegroundCompat(){
+  try{if(Build.VERSION.SDK_INT>=24)stopForeground(STOP_FOREGROUND_REMOVE);else stopForeground(true);}catch(Exception ignored){}
+  try{((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).cancel(7342);}catch(Exception ignored){}
+ }
  @Override public IBinder onBind(Intent i){return null;}
- @Override public void onDestroy(){destroyed=true;main.removeCallbacksAndMessages(null);engine(this).unsubscribe(listener);power.close();engine(this).suspend();super.onDestroy();}
+ @Override public void onDestroy(){destroyed=true;stopForegroundCompat();main.removeCallbacksAndMessages(null);engine(this).unsubscribe(listener);power.close();engine(this).suspend();super.onDestroy();}
 }
