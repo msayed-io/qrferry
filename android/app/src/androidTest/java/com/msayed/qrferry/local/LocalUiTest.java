@@ -90,7 +90,9 @@ public class LocalUiTest {
    // the bundled scanner directly; no app-made consent card exists any more.
    until("CameraX preview never streamed",()->{AtomicBoolean streaming=new AtomicBoolean();scenario.onActivity(activity->{PreviewView p=preview(activity.getWindow().getDecorView());streaming.set(p!=null&&p.getPreviewStreamState().getValue()==PreviewView.StreamState.STREAMING);});return streaming.get();},30000);
    assertEquals("true",js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('إغلاق')||b.textContent.includes('Close'));if(!b)return false;b.click();return true})()"));
-   scenario.onActivity(activity->assertNull("Camera preview survived closing it",preview(activity.getWindow().getDecorView())));
+   // Release travels JS -> bridge -> UI thread, so give it a frame budget
+   // instead of asserting synchronously on the very next statement.
+   until("Camera preview survived closing it",()->{AtomicBoolean gone=new AtomicBoolean();scenario.onActivity(activity->gone.set(preview(activity.getWindow().getDecorView())==null));return gone.get();},8000);
    pressCamera(view);
    until("CameraX preview never streamed",()->{AtomicBoolean streaming=new AtomicBoolean();scenario.onActivity(activity->{PreviewView p=preview(activity.getWindow().getDecorView());streaming.set(p!=null&&p.getPreviewStreamState().getValue()==PreviewView.StreamState.STREAMING);});return streaming.get();},30000);
    JSONObject bounds=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const r=document.querySelector('.local-native-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth}})())")+"]").getString(0));
