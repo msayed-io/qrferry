@@ -7,7 +7,7 @@ import android.view.View;
 /** Native scan overlay drawn above the camera preview: a single soft dim around
  * the scan square (the square itself stays clear) plus four rim brackets. */
 final class LocalScanFrame extends View {
- private static final int DIM=0x99000000,TINT=0xFFE792B9;
+ private static final int DIM=(int)0x99000000L,TINT=(int)0xFFE792B9L;
  private final Paint dim=new Paint(Paint.ANTI_ALIAS_FLAG),bracket=new Paint(Paint.ANTI_ALIAS_FLAG);
  private final Path outside=new Path();
  LocalScanFrame(Context context){super(context);dim.setColor(DIM);bracket.setColor(TINT);bracket.setStyle(Paint.Style.STROKE);bracket.setStrokeCap(Paint.Cap.round);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}

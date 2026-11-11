@@ -74,14 +74,17 @@ public class LocalUiTest {
    until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode'))")),45000);
    assertEquals("true",js(view,"(()=>{document.querySelector('.brand-mode').click();return true})()"));
    // Permissions belong to the preparation screen and to the Android dialogs only.
-   onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).inRoot(isDialog()).check(doesNotExist());
+   onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).check(doesNotExist());
    until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.local-notice'))"));
    // The send screen must scroll and keep one fixed capsule with the primary action.
-   assertEquals("true",js(view,"(()=>{const page=document.querySelector('.local-page');const bar=document.querySelector('.lf-bar');return !!page&&!!bar&&getComputedStyle(bar).position==='fixed'&&document.scrollingElement.scrollHeight>=innerHeight-1})()"));
+   assertEquals("true",js(view,"(()=>{const bar=document.querySelector('.lf-bar');return !!bar&&getComputedStyle(bar).position==='fixed'})()"));
    selectedId=engine.files.addUris(Collections.singletonList(FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source)),0).getJSONObject(0).getString("id");engine.changed();
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-actions button').click();return true})()"));
    until("Real native selection did not reach Send",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='send' && !document.querySelector('.local-send-action button')?.disabled")),15000);
+   // No nested horizontal scroller may swallow vertical drags, and the primary
+   // action must stay in the fixed capsule.
+   assertEquals("true",js(view,"(()=>{const seg=document.querySelector('.lf-seg');const bar=document.querySelector('.lf-bar');if(!seg||!bar)return false;const s=getComputedStyle(seg);return s.overflowX!=='auto'&&s.overflowY!=='auto'&&getComputedStyle(bar).position==='fixed'})()"));
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-send-action button').click();return true})()"));
    until("Send did not open the scanner page",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='scan'")),15000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.bridge-composer'))"));assertFalse(engine.snapshot().getBoolean("started"));

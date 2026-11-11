@@ -3,6 +3,8 @@ package com.msayed.qrferry.local;
 import android.content.Context;
 import android.content.pm.*;
 import android.graphics.*;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.MediaStore;
@@ -19,7 +21,8 @@ final class LocalThumbs {
    if(bitmap==null)return null;
    bitmap=scale(bitmap);
    ByteArrayOutputStream out=new ByteArrayOutputStream();
-   bitmap.compress(Bitmap.CompressFormat.JPEG,72,out);bitmap.recycle();
+   // Icons may be shared framework bitmaps; never recycle anything we did not allocate.
+   bitmap.compress(Bitmap.CompressFormat.JPEG,72,out);
    if(out.size()>MAX_BYTES)return null;
    return "data:image/jpeg;base64,"+android.util.Base64.encodeToString(out.toByteArray(),android.util.Base64.NO_WRAP);
   }catch(Exception|OutOfMemoryError ignored){return null;}
@@ -30,7 +33,7 @@ final class LocalThumbs {
   if(info==null||info.applicationInfo==null)return null;
   ApplicationInfo application=info.applicationInfo;
   application.sourceDir=apk.getAbsolutePath();application.publicSourceDir=apk.getAbsolutePath();
-  return manager.getApplicationIcon(application);
+  return drawable(manager.getApplicationIcon(application));
  }
  private static Bitmap mediaThumb(Context context,Uri uri)throws Exception{
   if(uri==null||!"content".equals(uri.getScheme()))return null;
@@ -44,12 +47,16 @@ final class LocalThumbs {
    ?MediaStore.Video.Thumbnails.getThumbnail(context.getContentResolver(),id,MediaStore.Video.Thumbnails.MINI_KIND,null)
    :MediaStore.Images.Thumbnails.getThumbnail(context.getContentResolver(),id,MediaStore.Images.Thumbnails.MINI_KIND,null);
  }
+ private static Bitmap drawable(Drawable icon){
+  if(icon instanceof BitmapDrawable){Bitmap bitmap=((BitmapDrawable)icon).getBitmap();return bitmap;}
+  int width=Math.max(1,icon.getIntrinsicWidth()),height=Math.max(1,icon.getIntrinsicHeight());
+  Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
+  Canvas canvas=new Canvas(bitmap);icon.setBounds(0,0,width,height);icon.draw(canvas);return bitmap;
+ }
  private static Bitmap scale(Bitmap source){
   int width=source.getWidth(),height=source.getHeight();
   if(width<=SIZE&&height<=SIZE)return source;
   float ratio=Math.min((float)SIZE/width,(float)SIZE/height);
-  Bitmap scaled=Bitmap.createScaledBitmap(source,Math.max(1,Math.round(width*ratio)),Math.max(1,Math.round(height*ratio)),true);
-  if(scaled!=source)source.recycle();
-  return scaled;
+  return Bitmap.createScaledBitmap(source,Math.max(1,Math.round(width*ratio)),Math.max(1,Math.round(height*ratio)),true);
  }
 }
