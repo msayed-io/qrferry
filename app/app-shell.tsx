@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ProgressiveBlur />
     <div className={`wrap app-wrap ${standalone ? "standalone-wrap" : ""} ${immersiveChat ? "chat-wrap" : ""}`}>
       {!standalone && !immersiveChat && <header className="app-header">
-        <div className="brand-group"><AppLink className="brand" href="/" aria-label="QRFerry">
+        <div className="brand-group"><AppLink className="brand" href={localSupported() ? "/local" : "/"} aria-label="QRFerry">
           <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3"/><rect x="17" y="3" width="10" height="10" rx="3"/><rect x="3" y="17" width="10" height="10" rx="3"/><rect x="17" y="17" width="10" height="10" rx="3" fill="var(--tint)" stroke="none"/></svg>
           QRFerry
         </AppLink>{localSupported() && <button type="button" className="brand-mode" onClick={() => router.push("/local")} aria-label={lang === "ar" ? "فتح النقل المحلي بين هواتف Android" : "Open local Android transfer"}><ChevronDown size={18}/></button>}</div>
