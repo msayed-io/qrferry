@@ -146,13 +146,15 @@ public class LocalUiTest {
    assertEquals("true",js(view,"(()=>{const b=document.querySelector('.brand-mode');if(b)b.click();return true})()"));
    until("Native home did not mount",()->"true".equals(js(view,"(()=>{const p=document.querySelector('.local-page');if(!p||!p.dataset.screen)return false;if(p.dataset.screen==='home')return true;const x=document.querySelector('.support-exit');if(x)x.click();return false})()")),25000);
    // Home carries the app's own brand capsule; child screens the app toolbar.
-   assertEquals("true",js(view,"(()=>{const h=document.querySelector('header.lf-home-header');if(!h)return false;return Boolean(h.querySelector('.brand'))&&Boolean(h.querySelector('button'))&&getComputedStyle(h).zIndex>getComputedStyle(document.querySelector('.progressive-blur-top')).zIndex}()"));
+   assertEquals("true",js(view,"(()=>{const h=document.querySelector('header.lf-home-header');if(!h)return false;
+   // 18 is the app's top blur layer (floating-chrome.css): the capsules must float above it.
+   return Boolean(h.querySelector('.brand'))&&Boolean(h.querySelector('button'))&&Number(getComputedStyle(h).zIndex)>18}()"));
    // Receive goes through Prepare, exactly like the home action does.
    assertEquals("true",js(view,"(()=>{document.querySelectorAll('.local-actions button')[1].click();return true})()"));
    until("Prepare did not open",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='setup'")),15000);
    until("Prepare never reported its indicators",()->"true".equals(js(view,"document.querySelectorAll('.lf-live,.lf-warn,.lf-ok').length>0")),20000);
    // Same toolbar capsules as History and Privacy, above the app's top blur.
-   assertEquals("true",js(view,"(()=>{const t=document.querySelector('.lf-toolbar .support-title'),x=document.querySelector('.lf-toolbar .support-exit'),b=document.querySelector('.progressive-blur-top');return Boolean(t)&&Boolean(x)&&getComputedStyle(t.closest('header')).zIndex>getComputedStyle(b).zIndex}()"));
+   assertEquals("true",js(view,"(()=>{const t=document.querySelector('.lf-toolbar .support-title'),x=document.querySelector('.lf-toolbar .support-exit');return Boolean(t)&&Boolean(x)&&Number(getComputedStyle(t.closest('header')).zIndex)>18}()"));
    shot("prepare");
    assertEquals("true",js(view,"(()=>{const b=document.querySelector('.lf-bar .lf-big');if(!b||b.disabled)return false;b.click();return true})()"));
    until("Receive did not open",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='receive'")),15000);
