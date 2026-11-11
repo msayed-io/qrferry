@@ -1,7 +1,8 @@
 /* Local transfer mode. Geometry mirrors the reference layouts; material, physical
    rim, springs and progressive blur are the app's own design system. */
 .local-page{min-width:0;padding:calc(env(safe-area-inset-top,0px) + 14px) 0 24px}
-.local-page[data-screen=home]{padding-bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+/* The home actions must end above the floating tab bar, not under it. */
+.local-page[data-screen=home]{padding-bottom:calc(140px + env(safe-area-inset-bottom,0px))}
 .local-page[data-screen=send],.local-page[data-screen=setup],.local-page[data-screen=receive]{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
 .local-page[data-screen=scan]{padding:0;height:100vh;height:100dvh;overflow:hidden}
 
@@ -16,7 +17,7 @@
 .lf-dot{width:8px;height:8px;border-radius:50%;background:var(--tint);flex:none}
 
 /* ---- home ---- */
-.lf-orb{position:relative;height:262px;display:grid;place-items:center;margin:6px 0 4px}
+.lf-orb{position:relative;height:clamp(160px,22vh,240px);display:grid;place-items:center;margin:6px 0 4px}
 .lf-orb>i{position:absolute;border-radius:50%;border:1px solid var(--sep);width:128px;height:128px;animation:lfPulse 5s ease-in-out infinite}
 .lf-orb>i:nth-child(2){width:204px;height:204px;animation-delay:-1.6s}
 .lf-orb>i:nth-child(3){width:280px;height:280px;animation-delay:-3.2s}
