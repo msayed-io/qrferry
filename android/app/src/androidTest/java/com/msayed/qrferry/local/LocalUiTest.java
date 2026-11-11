@@ -53,6 +53,18 @@ public class LocalUiTest {
   InstrumentationRegistry.getInstrumentation().runOnMainSync(()->view.evaluateJavascript(expression,value->{result.set(value);done.countDown();}));
   assertTrue("WebView evaluation did not return",done.await(5,TimeUnit.SECONDS));return result.get();
  }
+ /** Real device pixels for every screen, shipped with the CI artifact so the
+  *  chrome can be reviewed against the app's own History/Privacy pages. */
+ private static int shotIndex;
+ private static void shot(String name)throws Exception{
+  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  android.graphics.Bitmap bitmap=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+  assertNotNull("Screenshot failed: "+name,bitmap);
+  File dir=new File(context.getExternalFilesDir(null),"shots");if(!dir.exists()&&!dir.mkdirs())fail("Cannot create "+dir);
+  try(FileOutputStream out=new FileOutputStream(new File(dir,String.format("%02d-%s.png",++shotIndex,name)))){
+   assertTrue("Cannot write screenshot "+name,bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));
+  }finally{bitmap.recycle();}
+ }
  private static PreviewView preview(View view){
   if(view instanceof PreviewView)return (PreviewView)view;
   if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){PreviewView found=preview(group.getChildAt(i));if(found!=null)return found;}}
@@ -77,13 +89,16 @@ public class LocalUiTest {
    onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).check(doesNotExist());
    until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.local-notice'))"));
+   shot("home");
    selectedId=engine.files.addUris(Collections.singletonList(FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source)),0).getJSONObject(0).getString("id");engine.changed();
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-actions button').click();return true})()"));
    until("Real native selection did not reach Send",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='send' && !document.querySelector('.local-send-action button')?.disabled")),15000);
    // No nested horizontal scroller may swallow vertical drags, and the primary
    // action must stay in the fixed capsule.
+   shot("send");
    assertEquals("true",js(view,"(()=>{const seg=document.querySelector('.lf-seg');const bar=document.querySelector('.lf-bar');if(!seg||!bar)return false;const s=getComputedStyle(seg);return s.overflowX!=='auto'&&s.overflowY!=='auto'&&getComputedStyle(bar).position==='fixed'})()"));
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-send-action button').click();return true})()"));
+   shot("scan");
    until("Send did not open the scanner page",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='scan'")),15000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.bridge-composer'))"));assertFalse(engine.snapshot().getBoolean("started"));
    // Entering the scan screen requests the platform camera permission and opens
@@ -113,5 +128,35 @@ public class LocalUiTest {
   }finally{
    engine.disconnect();if(selectedId!=null)engine.files.select(selectedId,false);source.delete();context.getSharedPreferences("local-files",0).edit().putBoolean("asked",previouslyAsked).commit();
   }
+ }
+
+ /** Prepare and Receive only, photographed on the device: the two screens that
+  *  must not scroll, overlap or hide their capsules behind the top blur. */
+ @Test public void prepareAndReceiveScreensKeepTheAppChrome()throws Exception{
+  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();
+  try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
+   AtomicReference<WebView>reference=new AtomicReference<>();
+   scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
+   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode'))")),45000);
+   assertEquals("true",js(view,"(()=>{document.querySelector('.brand-mode').click();return true})()"));
+   until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
+   // Home carries the app's own brand capsule; child screens the app toolbar.
+   assertEquals("true",js(view,"(()=>{const h=document.querySelector('header.lf-home-header');if(!h)return false;return Boolean(h.querySelector('.brand'))&&Boolean(h.querySelector('button'))&&getComputedStyle(h).zIndex>getComputedStyle(document.querySelector('.progressive-blur-top')).zIndex}()"));
+   // Receive goes through Prepare, exactly like the home action does.
+   assertEquals("true",js(view,"(()=>{document.querySelectorAll('.local-actions button')[1].click();return true})()"));
+   until("Prepare did not open",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='setup'")),15000);
+   until("Prepare never reported its indicators",()->"true".equals(js(view,"document.querySelectorAll('.lf-live,.lf-warn,.lf-ok').length>0")),20000);
+   // Same toolbar capsules as History and Privacy, above the app's top blur.
+   assertEquals("true",js(view,"(()=>{const t=document.querySelector('.lf-toolbar .support-title'),x=document.querySelector('.lf-toolbar .support-exit'),b=document.querySelector('.progressive-blur-top');return Boolean(t)&&Boolean(x)&&getComputedStyle(t.closest('header')).zIndex>getComputedStyle(b).zIndex}()"));
+   shot("prepare");
+   assertEquals("true",js(view,"(()=>{const b=document.querySelector('.lf-bar .lf-big');if(!b||b.disabled)return false;b.click();return true})()"));
+   until("Receive did not open",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='receive'")),15000);
+   until("Receive code surface missing",()->"true".equals(js(view,"Boolean(document.querySelector('.lf-qr'))")),15000);
+   shot("receive");
+   // Static page: the code never drags, and its plate is not bigger than the code.
+   assertEquals("false",js(view,"(()=>{const p=document.querySelector('.local-page');const s=getComputedStyle(p);return (s.overflowY==='auto'||s.overflowY==='scroll')||p.scrollHeight>p.clientHeight+8})()"));
+   assertEquals("true",js(view,"(()=>{const q=document.querySelector('.lf-qr').getBoundingClientRect();const w=document.querySelector('.lf-qr-wrap').getBoundingClientRect();return Math.abs(q.width-q.height)<2&&q.width<=w.width+1&&q.width<innerWidth*0.8})()"));
+  }finally{engine.disconnect();}
  }
 }
