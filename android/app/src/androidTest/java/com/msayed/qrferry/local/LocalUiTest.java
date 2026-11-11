@@ -95,6 +95,15 @@ public class LocalUiTest {
  private static void pressCamera(WebView view)throws Exception{
   until("Camera button is unavailable",()->"true".equals(js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Open camera')||b.textContent.includes('فتح الكاميرا'));if(!b||b.disabled)return false;b.click();return true})()")),15000);
  }
+ /** Enters local mode idempotently and lands on its home screen. The switch only
+  *  exists while the optical mode is showing, and the app remembers the last
+  *  mode, so pressing it unconditionally would leave local mode instead. */
+ private static void enterLocal(WebView view)throws Exception{
+  until("App chrome did not render",()->"true".equals(js(view,"Boolean(document.querySelector('.local-page')||document.querySelector('.brand-mode'))")),45000);
+  assertEquals("true",js(view,"(()=>{if(document.querySelector('.local-page'))return true;const b=document.querySelector('.brand-mode');if(!b)return false;b.click();return true})()"));
+  until("Native mode entry did not mount",()->"true".equals(js(view,"Boolean(document.querySelector('.local-page'))")),20000);
+  until("Native home did not mount",()->"true".equals(js(view,"(()=>{const p=document.querySelector('.local-page');if(!p||!p.dataset.screen)return false;if(p.dataset.screen==='home')return true;const x=document.querySelector('.support-exit');if(x)x.click();return false})()")),25000);
+ }
  @Test public void nativeEntryConsentCameraGeometryAndPauseRelease()throws Exception{
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();boolean previouslyAsked=context.getSharedPreferences("local-files",0).getBoolean("asked",false);
   context.getSharedPreferences("local-files",0).edit().putBoolean("asked",false).commit();
@@ -102,13 +111,9 @@ public class LocalUiTest {
   LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();String selectedId=null;
   try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
    AtomicReference<WebView>reference=new AtomicReference<>();scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
-   // The app remembers the last mode, so the switch is pressed only when it is on
-   // screen, and a child route left by an earlier test is walked back to home.
-   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode')||document.querySelector('.local-page'))")),45000);
-   assertEquals("true",js(view,"(()=>{const b=document.querySelector('.brand-mode');if(b)b.click();return true})()"));
+   enterLocal(view);
    // Permissions belong to the preparation screen and to the Android dialogs only.
    onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).check(doesNotExist());
-   until("Native home did not mount",()->"true".equals(js(view,"(()=>{const p=document.querySelector('.local-page');if(!p||!p.dataset.screen)return false;if(p.dataset.screen==='home')return true;const x=document.querySelector('.support-exit');if(x)x.click();return false})()")),25000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.local-notice'))"));
    shot("home");
    selectedId=engine.files.addUris(Collections.singletonList(FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source)),0).getJSONObject(0).getString("id");engine.changed();
@@ -119,8 +124,8 @@ public class LocalUiTest {
    shot("send");
    assertEquals("true",js(view,"(()=>{const seg=document.querySelector('.lf-seg');const bar=document.querySelector('.lf-bar');if(!seg||!bar)return false;const s=getComputedStyle(seg);return s.overflowX!=='auto'&&s.overflowY!=='auto'&&getComputedStyle(bar).position==='fixed'})()"));
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-send-action button').click();return true})()"));
-   shot("scan");
    until("Send did not open the scanner page",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='scan'")),15000);
+   shot("scan");
    assertEquals("false",js(view,"Boolean(document.querySelector('.bridge-composer'))"));assertFalse(engine.snapshot().getBoolean("started"));
    // Entering the scan screen requests the platform camera permission and opens
    // the bundled scanner directly; no app-made consent card exists any more.
@@ -159,11 +164,7 @@ public class LocalUiTest {
   try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
    AtomicReference<WebView>reference=new AtomicReference<>();
    scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
-   // The app remembers the last mode, so the switch is pressed only when it is on
-   // screen, and a child route left by an earlier test is walked back to home.
-   until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode')||document.querySelector('.local-page'))")),45000);
-   assertEquals("true",js(view,"(()=>{const b=document.querySelector('.brand-mode');if(b)b.click();return true})()"));
-   until("Native home did not mount",()->"true".equals(js(view,"(()=>{const p=document.querySelector('.local-page');if(!p||!p.dataset.screen)return false;if(p.dataset.screen==='home')return true;const x=document.querySelector('.support-exit');if(x)x.click();return false})()")),25000);
+   enterLocal(view);
    // Home carries the app's own brand capsule; child screens the app toolbar.
    // 18 is the app's top blur layer (floating-chrome.css): capsules float above it.
    assertEquals("true",js(view,"(()=>{const h=document.querySelector('header.lf-home-header');if(!h)return false;return Boolean(h.querySelector('.brand'))&&Boolean(h.querySelector('button'))&&Number(getComputedStyle(h).zIndex)>18})()"));
