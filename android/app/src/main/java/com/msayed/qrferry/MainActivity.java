@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override public void onCreate(Bundle state) {
         SplashScreen.installSplashScreen(this);
         registerPlugin(QRFerryDevicePlugin.class);
+        registerPlugin(com.msayed.qrferry.local.LocalTransferPlugin.class);
         super.onCreate(state);
         SystemChrome.install(this);
         if(getBridge()!=null){

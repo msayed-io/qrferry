@@ -1,0 +1,65 @@
+package com.msayed.qrferry.local;
+
+import android.Manifest;
+import android.app.*;
+import android.content.*;
+import android.content.pm.PackageManager;
+import android.graphics.*;
+import android.net.Uri;
+import android.os.*;
+import android.provider.Settings;
+import android.view.*;
+import android.widget.*;
+import androidx.activity.result.ActivityResult;
+import androidx.core.content.ContextCompat;
+import com.getcapacitor.*;
+import com.getcapacitor.annotation.*;
+import com.google.zxing.*;
+import com.google.zxing.common.BitMatrix;
+import org.json.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+@CapacitorPlugin(name="QRFerryLocal", permissions={
+ @Permission(alias="camera",strings={Manifest.permission.CAMERA}),
+ @Permission(alias="nearby",strings={Manifest.permission.NEARBY_WIFI_DEVICES}),
+ @Permission(alias="location",strings={Manifest.permission.ACCESS_FINE_LOCATION}),
+ @Permission(alias="read",strings={Manifest.permission.READ_EXTERNAL_STORAGE}),
+ @Permission(alias="legacyStorage",strings={Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.WRITE_EXTERNAL_STORAGE})
+})
+public class LocalTransferPlugin extends Plugin {
+ private LocalEngine engine;private LocalEngine.Listener listener;private final ExecutorService worker=Executors.newSingleThreadExecutor();
+ private LocalScanner scanner;private FrameLayout overlay;private boolean overlayQr;private final Handler main=new Handler(Looper.getMainLooper());
+ @Override public void load(){engine=LocalTransferService.engine(getContext());listener=s->{try{JSObject data=new JSObject(s.toString());notifyListeners("state",data);}catch(Exception ignored){}if(!s.optBoolean("qrReady")&&overlayQr)main.post(this::hideOverlay);};engine.subscribe(listener);}
+ private boolean ar(){return getContext().getResources().getConfiguration().getLocales().get(0).getLanguage().equals("ar");}
+ private void resolve(PluginCall call){try{JSObject s=new JSObject(engine.snapshot().toString());s.put("native",true);s.put("sdk",Build.VERSION.SDK_INT);s.put("allFiles",engine.files.broad());s.put("storageAsked",getContext().getSharedPreferences("local-files",0).getBoolean("asked",false));s.put("destination",engine.files.broad()||Build.VERSION.SDK_INT<=28?"QRFerry":engine.files.tree().isEmpty()?"Downloads/QRFerry":"Selected folder/QRFerry");call.resolve(s);}catch(Exception e){call.reject("STATUS_FAILED",e);}}
+ @PluginMethod public void getState(PluginCall call){resolve(call);}
+ @PluginMethod public void listFiles(PluginCall call){worker.execute(()->{try{call.resolve(new JSObject().put("files",engine.files.list(call.getString("category","files"),call.getInt("page",0))));}catch(Exception e){call.reject("FILE_ACCESS_REQUIRED",e);}});}
+ @PluginMethod public void selectFile(PluginCall call){try{engine.files.select(call.getString("id",""),Boolean.TRUE.equals(call.getBoolean("selected",false)));engine.changed();resolve(call);}catch(Exception e){call.reject("SELECTION_FAILED",e);}}
+ @PluginMethod public void pickFiles(PluginCall call){hideOverlay();Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(call.getString("mime","*/*")).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);startActivityForResult(call,i,"pickedFiles");}
+ @ActivityCallback private void pickedFiles(PluginCall call,ActivityResult result){if(call==null)return;if(result.getResultCode()!=Activity.RESULT_OK||result.getData()==null){resolve(call);return;}Intent data=result.getData();List<Uri>uris=new ArrayList<>();if(data.getClipData()!=null)for(int n=0;n<data.getClipData().getItemCount();n++)uris.add(data.getClipData().getItemAt(n).getUri());else if(data.getData()!=null)uris.add(data.getData());worker.execute(()->{try{engine.files.addUris(uris,data.getFlags());engine.changed();resolve(call);}catch(Exception e){call.reject("FILES_NOT_READABLE",e);}});}
+ @PluginMethod public void requestStorage(PluginCall call){main.post(()->new AlertDialog.Builder(getActivity()).setTitle(ar()?"الوصول إلى ملفاتك":"Access to your files").setMessage(ar()?"لإظهار ملفات الجهاز وفرز المستلم في QRFerry، يمكنك السماح بالوصول إلى التخزين. يمكنك بدلًا من ذلك اختيار ملفات ومجلد استقبال محددين. لا يصل هذا الإذن إلى بيانات التطبيقات الخاصة.":"Allow shared-storage access to browse device files and organize received files in QRFerry. You may instead choose specific files and a destination folder. This does not grant access to other apps’ private data.").setPositiveButton(ar()?"متابعة":"Continue",(d,w)->{getContext().getSharedPreferences("local-files",0).edit().putBoolean("asked",true).apply();if(Build.VERSION.SDK_INT>=30){if(engine.files.broad()){resolve(call);return;}Intent i=new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:"+getContext().getPackageName()));try{startActivityForResult(call,i,"storageReturned");}catch(Exception e){call.reject("STORAGE_SETTINGS_UNAVAILABLE",e);}}else requestPermissionForAlias(Build.VERSION.SDK_INT<=28?"legacyStorage":"read",call,"storagePermission");}).setNegativeButton(ar()?"اختيار ملفات محددة":"Choose specific files",(d,w)->{getContext().getSharedPreferences("local-files",0).edit().putBoolean("asked",true).apply();resolve(call);}).setOnCancelListener(d->resolve(call)).show());}
+ @PermissionCallback private void storagePermission(PluginCall call){prepareFolders(call);}
+ @ActivityCallback private void storageReturned(PluginCall call,ActivityResult r){prepareFolders(call);}
+ private void prepareFolders(PluginCall call){if(call==null)return;worker.execute(()->{try{if(engine.files.broad()||Build.VERSION.SDK_INT<=28&&getPermissionState("legacyStorage")==PermissionState.GRANTED)engine.files.ensureFolders();resolve(call);}catch(Exception e){call.reject("CANNOT_PREPARE_STORAGE",e);}});}
+ @PluginMethod public void chooseDestination(PluginCall call){startActivityForResult(call,new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),"destinationPicked");}
+ @ActivityCallback private void destinationPicked(PluginCall call,ActivityResult r){if(call==null)return;if(r.getResultCode()!=Activity.RESULT_OK||r.getData()==null||r.getData().getData()==null){resolve(call);return;}worker.execute(()->{try{engine.files.tree(r.getData().getData());engine.files.ensureFolders();resolve(call);}catch(Exception e){call.reject("DESTINATION_NOT_WRITABLE",e);}});}
+ private boolean networkPermission(PluginCall call){String alias=Build.VERSION.SDK_INT>=33?"nearby":"location";if(getPermissionState(alias)==PermissionState.GRANTED)return true;requestPermissionForAlias(alias,call,"networkGranted");return false;}
+ @PermissionCallback private void networkGranted(PluginCall call){String alias=Build.VERSION.SDK_INT>=33?"nearby":"location";if(getPermissionState(alias)!=PermissionState.GRANTED){call.reject("NEARBY_PERMISSION_REQUIRED");return;}if(call.getMethodName().equals("startReceive"))startReceive(call);else scanConsent(call);}
+ private void foreground(){ContextCompat.startForegroundService(getContext(),new Intent(getContext(),LocalTransferService.class));}
+ @PluginMethod public void startReceive(PluginCall call){if(!networkPermission(call))return;String method=call.getString("method","auto");if(!Arrays.asList("auto","direct","hotspot","lan").contains(method)){call.reject("INVALID_METHOD");return;}main.post(()->new AlertDialog.Builder(getActivity()).setTitle(ar()?"استقبال محلي":"Receive locally").setMessage(ar()?"سيُنشئ التطبيق اتصالًا محليًا وقد يتغيّر اتصال Wi-Fi الحالي. اعرض الرمز فقط للجهاز الذي تثق به؛ مسحه يسمح له بإرسال الملفات. لا تحتاج إلى إنترنت.":"This may change your current Wi-Fi connection. Show the pairing code only to a device you trust: scanning it authorizes file delivery. Internet is not required.").setPositiveButton(ar()?"ابدأ الاستقبال":"Start receiving",(d,w)->{foreground();engine.receive(method);resolve(call);}).setNegativeButton(ar()?"إلغاء":"Cancel",(d,w)->resolve(call)).setOnCancelListener(d->resolve(call)).show());}
+ @PluginMethod public void startScan(PluginCall call){if(engine.files.sources().isEmpty()){call.reject("SELECT_FILES_FIRST");return;}if(!networkPermission(call))return;scanConsent(call);}
+ private void scanConsent(PluginCall call){main.post(()->new AlertDialog.Builder(getActivity()).setTitle(ar()?"فتح الكاميرا لهذه الجلسة؟":"Open the camera for this session?").setMessage(ar()?"سنستخدم الكاميرا محليًا لمسح رمز المستقبل فقط. لا تُرفع الصور، وتُغلق الكاميرا بعد المسح أو الإلغاء. قد يطلب Android أيضًا إذن الكاميرا إذا لم يكن ممنوحًا.":"Use the camera locally to scan the receiver’s QR code. Images are not uploaded; the camera closes after scanning or cancellation. Android may also request permission if it is not already granted.").setPositiveButton(ar()?"فتح الكاميرا":"Open camera",(d,w)->{if(getPermissionState("camera")==PermissionState.GRANTED)openScanner(call);else requestPermissionForAlias("camera",call,"cameraGranted");}).setNegativeButton(ar()?"إلغاء":"Cancel",(d,w)->call.resolve(new JSObject().put("cancelled",true))).setOnCancelListener(d->call.resolve(new JSObject().put("cancelled",true))).show());}
+ @PermissionCallback private void cameraGranted(PluginCall call){if(getPermissionState("camera")!=PermissionState.GRANTED){call.reject("CAMERA_PERMISSION_REQUIRED");return;}openScanner(call);}
+ private void openScanner(PluginCall call){main.post(()->{try{hideOverlay();overlay=makeOverlay(call);overlayQr=false;scanner=new LocalScanner(getActivity());scanner.start(overlay,new LocalScanner.Result(){public void scanned(String raw){hideOverlay();try{foreground();engine.join(raw);}catch(Exception e){engine.fail("INVALID_OR_EXPIRED_QR");}}public void failed(String code){hideOverlay();engine.fail(code);}});call.resolve(new JSObject().put("scanning",true));}catch(Exception e){hideOverlay();call.reject("CAMERA_UNAVAILABLE",e);}});}
+ private FrameLayout makeOverlay(PluginCall call){double x=call.getDouble("x",0.0),y=call.getDouble("y",0.0),w=call.getDouble("width",0.0),h=call.getDouble("height",0.0),viewport=call.getDouble("viewport",0.0);if(w<80||h<80||viewport<200||x<0||y<0||x+w>viewport+1)throw new IllegalArgumentException("INVALID_VIEWPORT");float scale=getBridge().getWebView().getWidth()/(float)viewport;int[]location=new int[2];getBridge().getWebView().getLocationInWindow(location);FrameLayout host=new FrameLayout(getActivity());FrameLayout.LayoutParams params=new FrameLayout.LayoutParams((int)(w*scale),(int)(h*scale));params.leftMargin=location[0]+(int)(x*scale);params.topMargin=location[1]+(int)(y*scale);getActivity().addContentView(host,params);host.setClipToOutline(true);host.setOutlineProvider(new ViewOutlineProvider(){public void getOutline(View v,Outline o){o.setRoundRect(0,0,v.getWidth(),v.getHeight(),16*scale);}});return host;}
+ @PluginMethod public void showPairingCode(PluginCall call){worker.execute(()->{try{String raw=engine.pairingCode();Map<EncodeHintType,Object>hints=new EnumMap<>(EncodeHintType.class);hints.put(EncodeHintType.MARGIN,4);hints.put(EncodeHintType.ERROR_CORRECTION,com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M);BitMatrix matrix=new MultiFormatWriter().encode(raw,BarcodeFormat.QR_CODE,768,768,hints);Bitmap bitmap=Bitmap.createBitmap(768,768,Bitmap.Config.ARGB_8888);int[]pixels=new int[768*768];for(int y=0;y<768;y++)for(int x=0;x<768;x++)pixels[y*768+x]=matrix.get(x,y)?Color.BLACK:Color.WHITE;bitmap.setPixels(pixels,0,768,0,0,768,768);main.post(()->{try{hideOverlay();overlay=makeOverlay(call);overlayQr=true;ImageView image=new ImageView(getActivity());image.setBackgroundColor(Color.WHITE);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setImageBitmap(bitmap);overlay.addView(image,new FrameLayout.LayoutParams(-1,-1));call.resolve();}catch(Exception e){call.reject("QR_DISPLAY_FAILED",e);}});}catch(Exception e){call.reject("QR_NOT_READY",e);}});}
+ @PluginMethod public void hideNativeView(PluginCall call){main.post(()->{hideOverlay();call.resolve();});}
+ private void hideOverlay(){overlayQr=false;if(scanner!=null){scanner.close();scanner=null;}if(overlay!=null){if(overlay.getParent()instanceof ViewGroup)((ViewGroup)overlay.getParent()).removeView(overlay);overlay=null;}}
+ @PluginMethod public void pause(PluginCall call){engine.pause(Boolean.TRUE.equals(call.getBoolean("paused",true)));resolve(call);}
+ @PluginMethod public void sendSelected(PluginCall call){engine.pump();resolve(call);}
+ @PluginMethod public void sendMessage(PluginCall call){worker.execute(()->{try{engine.message(call.getString("text",""));resolve(call);}catch(Exception e){call.reject("MESSAGE_NOT_SENT",e);}});}
+ @PluginMethod public void disconnect(PluginCall call){main.post(()->{hideOverlay();engine.disconnect();getContext().stopService(new Intent(getContext(),LocalTransferService.class));resolve(call);});}
+ @Override protected void handleOnPause(){main.post(this::hideOverlay);}
+ @Override protected void handleOnDestroy(){engine.unsubscribe(listener);main.post(this::hideOverlay);worker.shutdown();}
+}

@@ -1,0 +1,50 @@
+name: Native local subsystem verification (no release)
+on:
+  push:
+    branches: [feature/native-local-exchange]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-local-verification
+  cancel-in-progress: true
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [24, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - run: npm ci && npm run typecheck && npm run lint && npm test && npm run build
+      - run: npx cap sync android && chmod +x android/gradlew
+      - run: android/gradlew --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          script: android/gradlew --no-daemon -p android :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.msayed.qrferry.local.LocalNativeTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-native-api${{ matrix.api }}
+          path: |
+            android/app/build/reports/
+            android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
