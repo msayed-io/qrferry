@@ -141,8 +141,11 @@ public class NativeIntegrationTest {
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync();
                 // Native/JS configuration callbacks precede SurfaceFlinger presentation.
                 // Await the actual rendered color, not just an idle instrumentation queue.
+                // An untouched emulator dims its display, which overlays a grey scrim on
+                // every sample. Wake it explicitly before judging the rendered colour.
+                shell("input keyevent KEYCODE_WAKEUP");
                 int expected=android.graphics.Color.parseColor(dark?"#121014":"#F7F4F6"),actual=0,samples=0;
-                long pixelDeadline=System.currentTimeMillis()+3000;
+                long pixelDeadline=System.currentTimeMillis()+8000;
                 do {
                     android.graphics.Bitmap screenshot=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
                     assertNotNull(screenshot);samples++;
@@ -154,6 +157,10 @@ public class NativeIntegrationTest {
                 assertEquals("14",evaluate(view,sink,"return parseFloat(getComputedStyle(document.body).paddingTop);"));
             }
         }finally{night(previous==UiModeManager.MODE_NIGHT_YES?"yes":previous==UiModeManager.MODE_NIGHT_NO?"no":"auto");}
+    }
+    private static void shell(String command) throws Exception {
+        ParcelFileDescriptor descriptor=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command);
+        try(InputStream stream=new ParcelFileDescriptor.AutoCloseInputStream(descriptor)){stream.readAllBytes();}
     }
     private static void night(String value) throws Exception {
         ParcelFileDescriptor descriptor=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("cmd uimode night "+value);

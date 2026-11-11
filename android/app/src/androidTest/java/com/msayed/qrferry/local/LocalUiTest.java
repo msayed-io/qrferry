@@ -57,8 +57,14 @@ public class LocalUiTest {
   if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){PreviewView found=preview(group.getChildAt(i));if(found!=null)return found;}}
   return null;
  }
+ // A dialog window can exist before Espresso's root picker sees window focus, for
+ // example while the launching activity is still completing its first frame. That
+ // is a transient state, so it is retried instead of failing the assertion.
  private static void dialog(String english,String arabic)throws Exception{
-  until("Native consent dialog did not appear",()->{try{onView(withText(anyOf(is(english),is(arabic)))).inRoot(isDialog()).check(matches(isDisplayed()));return true;}catch(androidx.test.espresso.NoMatchingViewException pending){return false;}},15000);
+  until("Native consent dialog did not appear",()->{try{onView(withText(anyOf(is(english),is(arabic)))).inRoot(isDialog()).check(matches(isDisplayed()));return true;}catch(RuntimeException pending){return false;}},20000);
+ }
+ private static void press(String english,String arabic)throws Exception{
+  until("Dialog button "+(english)+" remained unavailable",()->{try{onView(withText(anyOf(is(english),is(arabic)))).inRoot(isDialog()).perform(click());return true;}catch(RuntimeException pending){return false;}},20000);
  }
  private static void openCameraConsent(WebView view)throws Exception{
   until("Camera consent button is unavailable",()->"true".equals(js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Open camera for this session')||b.textContent.includes('فتح الكاميرا لهذه الجلسة'));return !!b&&!b.disabled})()")),15000);
@@ -75,7 +81,7 @@ public class LocalUiTest {
    until("Native mode entry was not rendered",()->"true".equals(js(view,"Boolean(document.querySelector('.brand-mode'))")),45000);
    assertEquals("true",js(view,"(()=>{document.querySelector('.brand-mode').click();return true})()"));
    dialog("Access to your files","الوصول إلى ملفاتك");
-   onView(withText(anyOf(is("Choose specific files"),is("اختيار ملفات محددة")))).inRoot(isDialog()).perform(click());
+   press("Choose specific files","اختيار ملفات محددة");
    until("Native home did not mount",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='home'")),15000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.local-notice'))"));
    assertTrue(context.getSharedPreferences("local-files",0).getBoolean("asked",false));
@@ -85,9 +91,9 @@ public class LocalUiTest {
    assertEquals("true",js(view,"(()=>{document.querySelector('.local-send-action button').click();return true})()"));
    until("Send did not open the scanner page",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='scan'")),15000);
    assertEquals("false",js(view,"Boolean(document.querySelector('.bridge-composer'))"));assertFalse(engine.snapshot().getBoolean("started"));
-   openCameraConsent(view);onView(withText(anyOf(is("Cancel"),is("إلغاء")))).inRoot(isDialog()).perform(click());
+   openCameraConsent(view);press("Cancel","إلغاء");
    scenario.onActivity(activity->assertNull("Camera opened despite cancellation",preview(activity.getWindow().getDecorView())));
-   openCameraConsent(view);onView(withText(anyOf(is("Open camera"),is("فتح الكاميرا")))).inRoot(isDialog()).perform(click());
+   openCameraConsent(view);press("Open camera","فتح الكاميرا");
    until("CameraX preview never streamed",()->{AtomicBoolean streaming=new AtomicBoolean();scenario.onActivity(activity->{PreviewView p=preview(activity.getWindow().getDecorView());streaming.set(p!=null&&p.getPreviewStreamState().getValue()==PreviewView.StreamState.STREAMING);});return streaming.get();},30000);
    JSONObject bounds=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const r=document.querySelector('.local-native-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth}})())")+"]").getString(0));
    scenario.onActivity(activity->{
@@ -102,7 +108,7 @@ public class LocalUiTest {
    until("Camera hardware remained open after pause",()->{AtomicBoolean closed=new AtomicBoolean(true);InstrumentationRegistry.getInstrumentation().runOnMainSync(()->{for(CameraInfo camera:cameras.get()){CameraState state=camera.getCameraState().getValue();if(state!=null&&state.getType()!=CameraState.Type.CLOSED)closed.set(false);}});return closed.get();},15000);
    scenario.moveToState(Lifecycle.State.RESUMED);
    until("Camera reopening control stayed disabled",()->"true".equals(js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Open camera for this session')||b.textContent.includes('فتح الكاميرا لهذه الجلسة'));return !!b&&!b.disabled})()")),15000);
-   openCameraConsent(view);onView(withText(anyOf(is("Cancel"),is("إلغاء")))).inRoot(isDialog()).perform(click());
+   openCameraConsent(view);press("Cancel","إلغاء");
   }finally{
    engine.disconnect();if(selectedId!=null)engine.files.select(selectedId,false);source.delete();context.getSharedPreferences("local-files",0).edit().putBoolean("asked",previouslyAsked).commit();
   }
