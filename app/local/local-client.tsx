@@ -278,6 +278,7 @@ export function LocalClient() {
       <div className="glass lf-seg" role="tablist" aria-label={tx('نوع الملفات', 'File type')}>
         {categories.map(c => <button type="button" key={c.id} role="tab" aria-selected={category === c.id} className={category === c.id ? 'on' : ''} onClick={() => setCategory(c.id)}>{ar ? c.ar : c.en}</button>)}
       </div>
+      {catalogue.length > 0 && <p className="lf-count" role="status">{new Intl.NumberFormat(ar ? 'ar-EG' : 'en-US').format(catalogue.length)} {tx('عنصرًا في هذا التصنيف', 'items in this category')}</p>}
       <section className="card lf-list" aria-live="polite">
         {native && state.storageReady === false && <button type="button" className="lf-li lf-perm" data-perm="storage" onClick={() => void run(() => NativeLocal.requestStorage())}>
           <span className="lf-ic"><DesignIcon name="folder" style={{ width: 20, height: 20 }} /></span>
@@ -331,8 +332,10 @@ export function LocalClient() {
     {current === 'receive' && <>
       <div className="lf-qr-wrap" ref={surface}>
         <div className="local-native-surface lf-qr" aria-label={tx('رمز الاقتران الأصلي', 'Native pairing QR')}>
-          <DesignIcon name="qr" style={{ width: 56, height: 56 }} />
-          <p>{state.qrReady ? tx('رمز جلسة مؤقت', 'Temporary session code') : state.phase === 'preparing' ? tx('جارٍ تجهيز أفضل اتصال متاح…', 'Preparing the best available link…') : tx('يظهر الرمز بعد جاهزية الاتصال', 'The code appears when the link is ready')}</p>
+          {/* While the link is being prepared this plate is a quiet
+              placeholder; the live code is drawn by the native layer into
+              exactly this box. */}
+          <DesignIcon name="qr" style={{ width: 44, height: 44 }} />
         </div>
       </div>
       {/* The plate already narrates the preparation, so the status line only
