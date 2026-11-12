@@ -74,7 +74,7 @@ public final class LocalNetwork implements AutoCloseable {
    @Override public void onStarted(WifiManager.LocalOnlyHotspotReservation r){if(!live(g)){r.close();return;}hotspot=r;String ssid,password;security="wpa2";
     if(Build.VERSION.SDK_INT>=30){ssid=r.getSoftApConfiguration().getSsid();password=r.getSoftApConfiguration().getPassphrase();
      // The hotspot decides its own security; the sender has to know it to join.
-     if(r.getSoftApConfiguration().getSecurityType()==SoftApConfiguration.SECURITY_TYPE_SAE)security="sae";}else{WifiConfiguration config=r.getWifiConfiguration();ssid=config.SSID;password=config.preSharedKey;}
+     if(r.getSoftApConfiguration().getSecurityType()==SoftApConfiguration.SECURITY_TYPE_WPA3_SAE)security="sae";}else{WifiConfiguration config=r.getWifiConfiguration();ssid=config.SSID;password=config.preSharedKey;}
     String host=hotspotAddress();if(host==null||password==null){r.close();hotspot=null;receiver.failed("HOTSPOT_ADDRESS_UNAVAILABLE");return;}receiver.ready(host,unquote(ssid),unquote(password),"hotspot");
    }
    @Override public void onStopped(){if(live(g))receiver.failed("HOTSPOT_STOPPED");}
