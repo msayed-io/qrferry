@@ -126,10 +126,12 @@ public class LocalUiTest {
   LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();String selectedId=null;
   try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
    AtomicReference<WebView>reference=new AtomicReference<>();scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
+   enterLocal(view);
    // Two separate systems: the camera-mode header keeps its own three-dot menu
    // and never shows the local identity.
-   until("The camera-mode header did not render",()->"true".equals(js(view,"Boolean(document.querySelector('.app-header .app-menu'))")),45000);
-   assertEquals("true",js(view,"Boolean(document.querySelector('.app-header .app-menu .lg-button'))&&!document.querySelector('.lf-avatar-button')"));
+   assertEquals("true",js(view,"(()=>{const b=document.querySelector('.lf-home-header .brand');if(!b)return false;b.click();return true})()"));
+   until("The camera-mode header did not render",()->"true".equals(js(view,"Boolean(document.querySelector('.app-header .app-menu .lg-button'))")),30000);
+   assertEquals("true",js(view,"!document.querySelector('.lf-avatar-button')&&!document.querySelector('.local-page')"));
    enterLocal(view);
    // Permissions belong to the preparation screen and to the Android dialogs only.
    onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).check(doesNotExist());
@@ -160,10 +162,10 @@ public class LocalUiTest {
    scenario.onActivity(activity->{
     View decor=activity.getWindow().getDecorView();View host=tagged(decor,"qf-camera-backdrop");
     assertNotNull("The camera must be a backing view, not a floating card",host);
-    ViewGroup parent=(ViewGroup)host.getParent();
-    assertTrue("The camera must sit behind the page",parent.indexOfChild(host)<parent.indexOfChild(view));
-    assertEquals("The camera backdrop must fill the screen",view.getWidth(),host.getWidth(),2.0);
-    assertEquals("The camera backdrop must fill the screen",view.getHeight(),host.getHeight(),2.0);
+    ViewGroup layer=(ViewGroup)host.getParent();ViewGroup parent=(ViewGroup)layer.getParent();
+    assertTrue("The camera must sit behind the page",parent.indexOfChild(layer)<parent.indexOfChild(view));
+    assertEquals("The camera backdrop must fill the screen",view.getWidth(),layer.getWidth(),2.0);
+    assertEquals("The camera backdrop must fill the screen",view.getHeight(),layer.getHeight(),2.0);
     android.graphics.drawable.Drawable bg=view.getBackground();
     assertTrue("The page must let the camera through",bg instanceof android.graphics.drawable.ColorDrawable
      &&((android.graphics.drawable.ColorDrawable)bg).getColor()==android.graphics.Color.TRANSPARENT);
