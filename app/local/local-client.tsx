@@ -371,6 +371,7 @@ export function LocalClient() {
             <b className="lf-s-cn" /><b className="lf-s-cn" /><b className="lf-s-cn" /><b className="lf-s-cn" />
             <i className="lf-s-laser" aria-hidden="true" />
           </div>
+          {scanning && <button type="button" className="glass cap lf-s-quiet lf-s-stop" onClick={closeCamera}>{tx('إيقاف الكاميرا', 'Stop the camera')}</button>}
           <div className="glass cap lf-s-hint">
             <DesignIcon name="qr" style={{ width: 17, height: 17 }} />
             {tx('ضع رمز QR داخل الإطار', 'Place the QR code inside the frame')}
@@ -416,7 +417,7 @@ export function LocalClient() {
               {!scanning && !state.authenticated && <button type="button" className="glass cap tinted lf-s-big" disabled={!native || busy} onClick={() => void openScanner()}>
                 <DesignIcon name="cam" style={{ width: 19, height: 19 }} />{!state.camera ? tx('السماح بالكاميرا', 'Allow the camera') : tx('فتح الكاميرا', 'Open camera')}
               </button>}
-              {scanning && <button type="button" className="glass cap lf-s-quiet" onClick={closeCamera}>{tx('إيقاف الكاميرا', 'Stop the camera')}</button>}
+
             </div>
           </>}
         </div>

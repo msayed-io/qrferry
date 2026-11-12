@@ -182,6 +182,7 @@
 .lf-s-cn:nth-of-type(4){bottom:-2px;right:-2px;border-width:0 3.5px 3.5px 0;border-radius:0 0 28px 0}
 .lf-s-laser{position:absolute;left:14px;right:14px;height:2px;border-radius:1px;background:linear-gradient(90deg,transparent,var(--tint),transparent);animation:lfScanSweep 2.6s ease-in-out infinite alternate;opacity:.9}
 @keyframes lfScanSweep{from{top:12%}to{top:86%}}
+.lf-s-stop{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);inset-inline-end:14px;height:38px;border-radius:999px;font-size:13.5px;padding:0 16px;z-index:3}
 .lf-s-hint{font-size:14px;gap:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;justify-content:center}
 
 .lf-s-sheet{position:relative;max-width:100%;overflow:hidden;min-height:300px;background:var(--card);border-radius:32px 32px 0 0;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 26px)}
