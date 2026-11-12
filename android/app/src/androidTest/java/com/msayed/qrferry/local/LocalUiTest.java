@@ -167,9 +167,14 @@ public class LocalUiTest {
     assertEquals("The camera backdrop must fill the screen",view.getWidth(),layer.getWidth(),2.0);
     assertEquals("The camera backdrop must fill the screen",view.getHeight(),layer.getHeight(),2.0);
     android.graphics.drawable.Drawable bg=view.getBackground();
-    assertTrue("The page must let the camera through",bg instanceof android.graphics.drawable.ColorDrawable
-     &&((android.graphics.drawable.ColorDrawable)bg).getColor()==android.graphics.Color.TRANSPARENT);
+    assertTrue("The page must let the camera through",bg==null||(bg instanceof android.graphics.drawable.ColorDrawable
+     &&((android.graphics.drawable.ColorDrawable)bg).getColor()==android.graphics.Color.TRANSPARENT));
    });
+   // Nothing of the page may paint an opaque backdrop over the camera.
+   assertEquals("The document must be transparent while the camera is up","true",
+    js(view,"(()=>{if(document.documentElement.dataset.camera!=='on')return false;const clear=c=>c==='rgba(0, 0, 0, 0)'||c==='transparent';return clear(getComputedStyle(document.body).backgroundColor)&&clear(getComputedStyle(document.querySelector('.lf-s')).backgroundColor)})()"));
+   // And the scanner must not stack a second header under its own.
+   assertEquals("The scanner must carry a single toolbar","true",js(view,"document.querySelectorAll('.support-toolbar, .app-header').length<=1"));
    // Exit stops the camera and returns to Send.
    assertEquals("true",js(view,"(()=>{const b=document.querySelector('.lf-s-bar .support-exit');if(!b)return false;b.click();return true})()"));
    // Release travels JS -> bridge -> UI thread, so give it a frame budget

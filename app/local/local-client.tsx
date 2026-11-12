@@ -323,7 +323,9 @@ export function LocalClient() {
   if (current === 'profile') return <ProfileScreen ar={ar} tx={tx} profile={profile} onSaved={setProfile}
     onBack={() => router.push('/local')} onHistory={() => router.push('/history')} onPrivacy={() => router.push('/privacy')} />;
   return <main className={`local-page ${sessionPage ? 'local-session' : ''}`} data-page="local" data-screen={current} data-phase={state.phase}>
-    <header className={current === 'home' ? 'app-header lf-home-header' : 'support-toolbar lf-toolbar'}>
+    {/* The scanner owns the whole screen and brings its own capsules, so the page
+        header stays out of it. */}
+    {current !== 'scan' && <header className={current === 'home' ? 'app-header lf-home-header' : 'support-toolbar lf-toolbar'}>
       {current === 'home' ? <>
         <div className="brand-group">
           <button type="button" className="brand" onClick={back} aria-label={tx('العودة للنقل البصري', 'Return to optical transfer')}>
@@ -340,7 +342,7 @@ export function LocalClient() {
           {current === 'send' && <Button className="lf-tool" icon={<DesignIcon name="folder" />} aria-label={tx('تصفح ملفات الجهاز', 'Browse device files')} disabled={!native} onClick={() => void pick()} />}
         </div>
       </>}
-    </header>
+    </header>}
 
     {!native && <section className="card local-notice"><DesignIcon name="phone" /><h2>{tx('هذه المنظومة تعمل داخل تطبيق Android', 'This mode runs inside the Android app')}</h2><p>{tx('الاتصال والملفات والكاميرا تعمل محليًا في طبقة Android. المنظومة البصرية الحالية ما زالت متاحة.', 'Networking, files and camera run in the native Android layer. The existing optical mode is still available.')}</p><AppLink href="/">{tx('العودة إلى المنظومة الحالية', 'Return to the existing mode')}</AppLink></section>}
     {!!message && <div className="local-error" role="alert"><p>{message}</p>{error && <button type="button" onClick={() => setError('')}>{tx('إخفاء', 'Dismiss')}</button>}</div>}

@@ -178,7 +178,7 @@ html[data-native][data-camera=on],html[data-native][data-camera=on] body,html[da
 .lf-s-bar>*{pointer-events:auto}
 /* A grid item's automatic minimum would let a long capsule stretch the column. */
 .lf-s>*{min-width:0}
-.lf-s-stage{position:relative;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:calc(env(safe-area-inset-top,0px) + 82px) 20px 16px;min-height:0;overflow:hidden}
+.lf-s-stage{position:relative;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:calc(env(safe-area-inset-top,0px) + 66px) 20px 16px;min-height:0;overflow:hidden}
 /* The square also has to fit the height left over by the sheet. */
 .lf-s-frame{position:relative;width:min(56vw,240px,30vh);aspect-ratio:1;flex:none}
 /* One huge spread shadow dims everything around the window, so the camera stays
@@ -194,7 +194,7 @@ html[data-native][data-camera=on],html[data-native][data-camera=on] body,html[da
 .lf-s-cn:nth-of-type(4){bottom:-2px;right:-2px;border-width:0 3.5px 3.5px 0;border-radius:0 0 28px 0}
 .lf-s-laser{position:absolute;left:14px;right:14px;height:2px;border-radius:1px;background:linear-gradient(90deg,transparent,var(--tint),transparent);animation:lfScanSweep 2.6s ease-in-out infinite alternate;opacity:.9}
 @keyframes lfScanSweep{from{top:12%}to{top:86%}}
-.lf-s-hint{font-size:14px;gap:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;justify-content:center}
+.lf-s-hint{flex:none;font-size:14px;gap:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;justify-content:center}
 
 .lf-s-sheet{position:relative;max-width:100%;overflow:hidden;min-height:300px;background:var(--card);border-radius:32px 32px 0 0;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 26px)}
 /* Glass over the live camera: the sheet keeps its own contrast without ever
