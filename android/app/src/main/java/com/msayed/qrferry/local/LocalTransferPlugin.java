@@ -221,16 +221,16 @@ public class LocalTransferPlugin extends Plugin {
   if(radarWired)return;
   radarWired=true;
   radar.attach(new NearbyRadar.Events(){
-   public void radarStatus(String state,String code){notify("status",state,code,null,null);}
-   public void radarPeer(String endpointId,String payload,boolean lost){notify(lost?"peer-lost":"peer",endpointId,payload,null,null);}
-   public void radarRequest(String endpointId,String payload,String digits){notify("request",endpointId,payload,digits,null);}
-   public void radarConnecting(String endpointId,String digits){notify("connecting",endpointId,digits,null,null);}
-   public void radarConnected(String endpointId,String payload){notify("connected",endpointId,payload,null,null);}
-   public void radarMessage(String endpointId,String message){notify("message",endpointId,message,null,null);}
-   public void radarClosed(String endpointId,String code){notify("closed",endpointId,code,null,null);}
+   public void radarStatus(String state,String code){emit("status",state,code,null,null);}
+   public void radarPeer(String endpointId,String payload,boolean lost){emit(lost?"peer-lost":"peer",endpointId,payload,null,null);}
+   public void radarRequest(String endpointId,String payload,String digits){emit("request",endpointId,payload,digits,null);}
+   public void radarConnecting(String endpointId,String digits){emit("connecting",endpointId,digits,null,null);}
+   public void radarConnected(String endpointId,String payload){emit("connected",endpointId,payload,null,null);}
+   public void radarMessage(String endpointId,String message){emit("message",endpointId,message,null,null);}
+   public void radarClosed(String endpointId,String code){emit("closed",endpointId,code,null,null);}
   });
  }
- private void notify(String type,String a,String b,String digits,String message){
+ private void emit(String type,String a,String b,String digits,String message){
   JSObject event=new JSObject();
   event.put("type",type).put("endpointId",a==null?"":a).put("value",b==null?"":b);
   if(digits!=null)event.put("digits",digits);
