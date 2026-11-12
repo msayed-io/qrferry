@@ -109,8 +109,9 @@ public final class LocalEngine implements AutoCloseable {
  }
  public String pairingCode()throws Exception{LocalPairing p=pairing;if(p==null||!role.equals("receive")||authenticated||!receiverTicket.isEmpty()||p.expires<System.currentTimeMillis())throw new IOException("QR_NOT_READY");return p.encode();}
  public synchronized void join(String raw)throws Exception{
-  LocalPairing p=LocalPairing.decode(raw);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");newSession("send");role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
-  wifi.connect(p,new LocalNetwork.Sender(){public void ready(Network n){synchronized(LocalEngine.this){if(epoch.get()!=g)return;route=n;connect(g);}}public void failed(String code){connectionError(g,code);}});
+  LocalPairing p=LocalPairing.decode(raw);
+  Log.i("QRFerryLocal","qr accepted: method="+p.method+" host="+p.host+":"+p.port);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");newSession("send");role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
+  wifi.connect(p,new LocalNetwork.Sender(){public void ready(Network n){synchronized(LocalEngine.this){if(epoch.get()!=g)return;route=n;Log.i("QRFerryLocal","joined, opening socket");connect(g);}}public void failed(String code){Log.i("QRFerryLocal","join failed: "+code);connectionError(g,code);}});
  }
  private synchronized void connect(int g){
   if(io.isShutdown()||epoch.get()!=g||clientOwner.get()==g||pairing==null)return;
@@ -129,9 +130,10 @@ public final class LocalEngine implements AutoCloseable {
     String proposed=welcome.getString("ticket");synchronized(this){if(epoch.get()!=g)throw new IOException("CANCELLED");ticket=proposed;}
     LocalProtocol.writeControl(out,new JSONObject().put("type","confirm").put("ticket",proposed).toString());
     if(!new JSONObject(LocalProtocol.readControl(in)).optString("type").equals("ready"))throw new IOException("INVALID_HANDSHAKE");
+    Log.i("QRFerryLocal","secure session established");
     activate(connection,out,welcome.getString("peer"),g);pendingConnections.remove(g,raw);
     sendOn(new JSONObject().put("type","pause").put("value",paused),g,connectionVersion.get());pump();readLoop(in,g);
-   }catch(Exception e){retry=e instanceof EOFException||e instanceof java.net.SocketException||e instanceof java.net.SocketTimeoutException;connectionError(g,code(e));}
+   }catch(Exception e){Log.i("QRFerryLocal","connect error: "+code(e));retry=e instanceof EOFException||e instanceof java.net.SocketException||e instanceof java.net.SocketTimeoutException;connectionError(g,code(e));}
    finally{
     if(candidate!=null)try{candidate.close();}catch(Exception ignored){}else if(raw!=null)try{raw.close();}catch(Exception ignored){}
     if(raw!=null)pendingConnections.remove(g,raw);clientOwner.compareAndSet(g,-1);if(retry)reconnectLater(g);
