@@ -100,6 +100,13 @@ public class LocalUiTest {
  // A dialog window can exist before Espresso's root picker sees window focus, for
  // example while the launching activity is still completing its first frame. That
  // is a transient state, so it is retried instead of failing the assertion.
+ /** Finds the native camera host by its tag, anywhere under the decor. */
+ private static View tagged(View view,String tag){
+  if(!(view instanceof ViewGroup))return null;
+  ViewGroup group=(ViewGroup)view;
+  for(int i=0;i<group.getChildCount();i++){View child=group.getChildAt(i);if(tag.equals(child.getTag()))return child;View found=tagged(child,tag);if(found!=null)return found;}
+  return null;
+ }
  private static void pressCamera(WebView view)throws Exception{
   until("Camera button is unavailable",()->"true".equals(js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Open camera')||b.textContent.includes('فتح الكاميرا'));if(!b||b.disabled)return false;b.click();return true})()")),15000);
  }
@@ -119,6 +126,10 @@ public class LocalUiTest {
   LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();String selectedId=null;
   try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
    AtomicReference<WebView>reference=new AtomicReference<>();scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
+   // Two separate systems: the camera-mode header keeps its own three-dot menu
+   // and never shows the local identity.
+   until("The camera-mode header did not render",()->"true".equals(js(view,"Boolean(document.querySelector('.app-header .app-menu'))")),45000);
+   assertEquals("true",js(view,"Boolean(document.querySelector('.app-header .app-menu .lg-button'))&&!document.querySelector('.lf-avatar-button')"));
    enterLocal(view);
    // Permissions belong to the preparation screen and to the Android dialogs only.
    onView(withText(anyOf(is("Access to your files"),is("الوصول إلى ملفاتك")))).check(doesNotExist());
@@ -140,11 +151,33 @@ public class LocalUiTest {
    // Captured once the camera is live: a capture taken during the surface swap
    // returns the frame that was still on screen.
    shot("scan");
-   assertEquals("true",js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>document.querySelector('.lf-s')&&b.classList.contains('lf-s-quiet'));if(!b)return false;b.click();return true})()"));
+   // The scanner is full bleed: the preview rectangle is the whole viewport, the
+   // native camera sits *behind* the page, and the page is transparent so the
+   // frame, the hint capsule and the sheet are drawn over live camera pixels.
+   assertEquals("true",js(view,"(()=>{const r=document.querySelector('.lf-s-preview').getBoundingClientRect();return Math.abs(r.x)<1&&Math.abs(r.y)<1&&Math.abs(r.width-innerWidth)<1&&Math.abs(r.height-innerHeight)<1})()"));
+   assertEquals("The scanner keeps its own toolbar, not a floating stop button",true,
+    js(view,"Boolean(document.querySelector('.lf-s-bar .support-exit'))&&Boolean(document.querySelector('.lf-s-bar .support-title'))&&!document.querySelector('.lf-s-stop')").equals("true"));
+   scenario.onActivity(activity->{
+    View decor=activity.getWindow().getDecorView();View host=tagged(decor,"qf-camera-backdrop");
+    assertNotNull("The camera must be a backing view, not a floating card",host);
+    ViewGroup parent=(ViewGroup)host.getParent();
+    assertTrue("The camera must sit behind the page",parent.indexOfChild(host)<parent.indexOfChild(view));
+    assertEquals("The camera backdrop must fill the screen",view.getWidth(),host.getWidth(),2.0);
+    assertEquals("The camera backdrop must fill the screen",view.getHeight(),host.getHeight(),2.0);
+    android.graphics.drawable.Drawable bg=view.getBackground();
+    assertTrue("The page must let the camera through",bg instanceof android.graphics.drawable.ColorDrawable
+     &&((android.graphics.drawable.ColorDrawable)bg).getColor()==android.graphics.Color.TRANSPARENT);
+   });
+   // Exit stops the camera and returns to Send.
+   assertEquals("true",js(view,"(()=>{const b=document.querySelector('.lf-s-bar .support-exit');if(!b)return false;b.click();return true})()"));
    // Release travels JS -> bridge -> UI thread, so give it a frame budget
    // instead of asserting synchronously on the very next statement.
    until("Camera preview survived closing it",()->{AtomicBoolean gone=new AtomicBoolean();scenario.onActivity(activity->gone.set(preview(activity.getWindow().getDecorView())==null));return gone.get();},8000);
-   pressCamera(view);
+   until("Leaving the scanner did not return to Send",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='send'")),15000);
+   assertEquals("The page must paint again once the camera is gone",true,
+    js(view,"(()=>{const b=document.querySelector('.local-native-surface');return !document.documentElement.dataset.camera})()").equals("true"));
+   assertEquals("true",js(view,"(()=>{document.querySelector('.local-send-action button').click();return true})()"));
+   until("The scanner page did not open again",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='scan'")),15000);
    until("CameraX preview never streamed",()->{AtomicBoolean streaming=new AtomicBoolean();scenario.onActivity(activity->{PreviewView p=preview(activity.getWindow().getDecorView());streaming.set(p!=null&&p.getPreviewStreamState().getValue()==PreviewView.StreamState.STREAMING);});return streaming.get();},30000);
    JSONObject bounds=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const r=document.querySelector('.local-native-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth}})())")+"]").getString(0));
    scenario.onActivity(activity->{
@@ -207,6 +240,46 @@ public class LocalUiTest {
    assertEquals("The name must survive a reload",saved,js(view,"window.__qrferryRead").replaceAll("^\"|\"$",""));
   }
  }
+ /** The identity in the local header is the picture itself, 40px like the menu
+  *  button elsewhere, and the profile page neither drifts sideways nor jumps
+  *  when a save message appears. */
+ @Test public void localHeaderAvatarAndProfileLayout()throws Exception{
+  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();
+  try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
+   AtomicReference<WebView>reference=new AtomicReference<>();
+   scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
+   enterLocal(view);
+   JSONObject avatar=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const b=document.querySelector('.lf-avatar-button');if(!b)return null;const r=b.getBoundingClientRect(),s=getComputedStyle(b);return {w:r.width,h:r.height,radius:s.borderRadius,bg:s.backgroundColor,shadow:s.boxShadow,cls:b.className}})())")+"]").getString(0));
+   assertEquals("The avatar button must be as tall as the menu button",40.0,avatar.optDouble("h"),1.0);
+   assertEquals("The avatar button must be a circle",40.0,avatar.optDouble("w"),1.0);
+   assertEquals("50%",avatar.optString("radius"));
+   assertEquals("No capsule may sit under the picture","lf-avatar-button",avatar.optString("cls").trim());
+   assertTrue("The avatar button must not paint a plate",avatar.optString("bg").startsWith("rgba(0, 0, 0, 0)")||avatar.optString("bg").equals("transparent"));
+   assertEquals("The avatar button must not carry a shadow","none",avatar.optString("shadow"));
+   assertEquals("true",js(view,"(()=>{document.querySelector('.lf-avatar-button').click();return true})()"));
+   until("The profile page did not open",()->"true".equals(js(view,"Boolean(document.querySelector('.lf-p'))")),15000);
+   // The header is the same pair of capsules History and Privacy use: exit at the
+   // inline end, title at the inline start, never overlapping.
+   JSONObject head=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const bar=document.querySelector('.lf-p-top');if(!bar)return null;const e=bar.querySelector('.support-exit'),t=bar.querySelector('.support-title');if(!e||!t)return null;const er=e.getBoundingClientRect(),tr=t.getBoundingClientRect();return {exitEnd:innerWidth-er.right,titleStart:tr.left,gap:er.left-tr.right,title:t.textContent.trim()}})())")+"]").getString(0));
+   assertEquals("The exit capsule must sit at the inline end",16.0,head.optDouble("exitEnd"),2.0);
+   assertEquals("The title capsule must sit at the inline start",16.0,head.optDouble("titleStart"),2.0);
+   assertTrue("The two capsules must not touch",head.optDouble("gap")>40);
+   assertTrue("The title capsule must name the page",head.optString("title").length()>3);
+   // No horizontal scrolling anywhere: not the page, not the panel, not the cards.
+   JSONObject drift=new JSONObject(new JSONArray("["+js(view,"JSON.stringify((()=>{const p=document.querySelector('.lf-p');const cards=[...document.querySelectorAll('.lf-p-card')].map(c=>{const r=c.getBoundingClientRect();return {l:r.left,w:r.width}});return {doc:document.documentElement.scrollWidth,win:innerWidth,panel:p.scrollWidth,panelW:p.clientWidth,cards}})())")+"]").getString(0));
+   assertEquals("The document must not scroll sideways",drift.optDouble("win"),drift.optDouble("doc"),0.5);
+   assertEquals("The profile panel must not scroll sideways",drift.optDouble("panelW"),drift.optDouble("panel"),0.5);
+   JSONArray cards=drift.optJSONArray("cards");
+   for(int i=0;i<cards.length();i++){JSONObject card=cards.optJSONObject(i);
+    assertEquals("Every card keeps the same inset",16.0,card.optDouble("l"),1.0);
+    assertEquals("Every card keeps the same width",drift.optDouble("win")-32,card.optDouble("w"),1.0);}
+   // The confirmation line is reserved, so saving never shifts the cards.
+   assertEquals("true",js(view,"(()=>{const n=document.querySelector('.lf-p-note'),c=n.closest('.lf-p-card');const a=c.getBoundingClientRect().height;n.textContent='تم حفظ الاسم.';const b=c.getBoundingClientRect().height;n.textContent='\u00A0';return Math.abs(a-b)<0.5})()"));
+   shot("profile");
+  }finally{engine.disconnect();}
+ }
+
  @Test public void prepareAndReceiveScreensKeepTheAppChrome()throws Exception{
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();

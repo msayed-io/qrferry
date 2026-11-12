@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Button, Glass } from 'glisse';
+import { BackChevron } from '../../app/progressive-blur';
 import { DesignIcon } from '../../app/design-icons';
 import { NativeLocal, localSupported, type UserProfile } from '../../lib/native-local';
 import { DEFAULT_AVATAR_COUNT, validateName } from '../../lib/nearby';
 import type { RadarRequest } from './use-radar';
+import '../support.css';
 
 /* Ten built-in avatars: a palette plus a shared silhouette. Only the index is
    stored on the device and advertised, never the picture. */
@@ -43,10 +46,12 @@ export function useProfile(word: string) {
 }
 
 /** The header entry: the user's own picture, circular, where the menu used to be. */
+/** The picture itself is the button: no plate, no ring, and the same 40px
+ *  circle the menu button occupies in the other header. */
 export function ProfileButton({ profile, onOpen, label }: { profile: UserProfile | null; onOpen: () => void; label: string }) {
   return (
-    <button type="button" className="glass cap lf-avatar-button" onClick={onOpen} aria-label={label}>
-      <AvatarBubble index={profile?.defaultAvatarIndex ?? 0} image={profile?.avatar || undefined} size={38} />
+    <button type="button" className="lf-avatar-button" onClick={onOpen} aria-label={label}>
+      <AvatarBubble index={profile?.defaultAvatarIndex ?? 0} image={profile?.avatar || undefined} size={40} />
     </button>
   );
 }
@@ -132,9 +137,11 @@ export function ProfileScreen(props: {
 
   return (
     <div className="lf-p">
-      <header className="lf-p-top">
-        <button type="button" className="glass cap lf-r-back" onClick={onBack} aria-label={tx('رجوع', 'Back')}><DesignIcon name="chev" style={{ width: 18, height: 18 }} /></button>
-        <div className="glass cap lf-r-title">{tx('ملفي الشخصي', 'My profile')}</div>
+      {/* The same two capsules History and Privacy use: exit at the inline
+          start of the toolbar, title next to it. */}
+      <header className="support-toolbar lf-p-top">
+        <Button className="support-exit" icon={<BackChevron />} aria-label={tx('رجوع', 'Back')} onClick={onBack} />
+        <Glass className="support-title"><h1>{tx('ملفي الشخصي', 'My profile')}</h1></Glass>
       </header>
 
       <div className="lf-p-scroll">
@@ -153,7 +160,8 @@ export function ProfileScreen(props: {
             <button type="button" className="glass cap tinted lf-p-save" disabled={busy} onClick={() => void save()}>{tx('حفظ', 'Save')}</button>
           </div>
           <p className="lf-p-hint">{tx('هذا الاسم يظهر على رادار الأجهزة القريبة.', 'This name appears on nearby devices’ radars.')}</p>
-          {note && <p className="lf-p-note" role="status">{note}</p>}
+          {/* Fixed height: the confirmation never pushes the cards down. */}
+          <p className="lf-p-note" role="status">{note || '\u00A0'}</p>
         </div>
 
         <div className="glass lf-p-card">

@@ -166,13 +166,25 @@
 .lf-loading{opacity:.8}
 
 /* ---- scan: the reference layout, in this app's material ---- */
-.lf-s{position:fixed;inset:0;max-width:520px;margin:auto;display:grid;grid-template-rows:1fr auto;grid-template-columns:minmax(0,1fr);background:#000;overflow:hidden;z-index:80}
+.lf-s{position:fixed;inset:0;max-width:520px;margin:auto;display:grid;grid-template-rows:1fr auto;grid-template-columns:minmax(0,1fr);background:transparent;overflow:hidden;z-index:80}
+/* The native preview is a real view under the page, so this rectangle is the
+   whole screen and the page above it must not paint over it. */
+.lf-s-preview{position:fixed;inset:0;width:100%;height:100%;background:#0E0E12}
+html[data-native] .lf-s-preview{background:transparent}
+/* While the scanner is open the native preview IS the page's backdrop, so the
+   document must stop painting its own background over it. */
+html[data-native][data-camera=on],html[data-native][data-camera=on] body,html[data-native][data-camera=on] .wrap{background:transparent}
+.lf-s-bar{pointer-events:none}
+.lf-s-bar>*{pointer-events:auto}
 /* A grid item's automatic minimum would let a long capsule stretch the column. */
 .lf-s>*{min-width:0}
-.lf-s-stage{position:relative;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:calc(env(safe-area-inset-top,0px) + 58px) 20px 16px;min-height:0;overflow:hidden}
+.lf-s-stage{position:relative;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:calc(env(safe-area-inset-top,0px) + 82px) 20px 16px;min-height:0;overflow:hidden}
 /* The square also has to fit the height left over by the sheet. */
 .lf-s-frame{position:relative;width:min(56vw,240px,30vh);aspect-ratio:1;flex:none}
-.lf-s-preview{position:absolute;inset:0;width:100%;height:100%;border-radius:28px;background:#0E0E12;color:rgba(255,255,255,.4);overflow:hidden}
+/* One huge spread shadow dims everything around the window, so the camera stays
+   clear exactly inside the frame and never anywhere else. */
+.lf-s-frame::before{content:"";position:absolute;inset:0;border-radius:28px;pointer-events:none;
+  box-shadow:0 0 0 100vmax rgba(0,0,0,.58),inset 0 0 0 1px rgba(255,255,255,.16)}
 .lf-s-preview>span{display:none}
 /* the four corners, exactly where the reference puts them */
 .lf-s-cn{position:absolute;width:34px;height:34px;border:0 solid var(--tint);pointer-events:none}
@@ -182,10 +194,14 @@
 .lf-s-cn:nth-of-type(4){bottom:-2px;right:-2px;border-width:0 3.5px 3.5px 0;border-radius:0 0 28px 0}
 .lf-s-laser{position:absolute;left:14px;right:14px;height:2px;border-radius:1px;background:linear-gradient(90deg,transparent,var(--tint),transparent);animation:lfScanSweep 2.6s ease-in-out infinite alternate;opacity:.9}
 @keyframes lfScanSweep{from{top:12%}to{top:86%}}
-.lf-s-stop{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);inset-inline-end:14px;height:38px;border-radius:999px;font-size:13.5px;padding:0 16px;z-index:3}
 .lf-s-hint{font-size:14px;gap:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;justify-content:center}
 
 .lf-s-sheet{position:relative;max-width:100%;overflow:hidden;min-height:300px;background:var(--card);border-radius:32px 32px 0 0;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 26px)}
+/* Glass over the live camera: the sheet keeps its own contrast without ever
+   turning into an opaque slab. */
+@supports (backdrop-filter:blur(2px)){
+  .lf-s-sheet{background:color-mix(in srgb,var(--card) 84%,transparent);-webkit-backdrop-filter:blur(26px) saturate(1.25);backdrop-filter:blur(26px) saturate(1.25)}
+}
 .lf-s-grab{display:block;width:36px;height:5px;border-radius:3px;background:var(--sep);margin:0 auto 20px}
 .lf-s-h{font-size:20px;font-weight:700;text-align:center;position:relative;z-index:2}
 .lf-s-msg{position:relative;z-index:2;color:var(--label2);font-size:14px;line-height:1.6;text-align:center;margin:8px auto 0;max-width:300px}
@@ -257,7 +273,6 @@
 .lf-confirm-note{color:var(--label2);font-size:13px;line-height:1.5}
 .lf-confirm-actions{display:grid;gap:8px;width:100%;margin-top:6px}
 
-.lf-p{grid-template-rows:auto 1fr}
 
 
 
@@ -268,8 +283,11 @@
 @keyframes lfFade{from{opacity:0;transform:scale(.8)}}
 
 /* ---- identity: header button, receive row, scanner peers ---- */
-.lf-avatar-button{width:52px;height:48px;padding:0;border-radius:999px;display:grid;place-items:center;flex:none}
-.lf-avatar-button .lf-av{box-shadow:none}
+/* Same 40px circle as the menu button in the other header, with the picture
+   itself as the target: no plate, no ring, no shadow. */
+.lf-avatar-button{width:40px;height:40px;min-width:40px;padding:0;border:0;background:none;border-radius:50%;display:grid;place-items:center;flex:none;overflow:hidden;-webkit-tap-highlight-color:transparent}
+.lf-avatar-button .lf-av{width:40px;height:40px;box-shadow:none;border-radius:50%}
+.lf-avatar-button:active{transform:scale(.94)}
 
 /* Under the code, always the same height so the plate never moves. */
 /* The stack is exactly the plate, so the row can hang below it without ever
@@ -288,13 +306,13 @@
 .lf-s-wait{color:var(--label2);font-size:13px;text-align:center;margin:10px 0 0;font-variant-numeric:tabular-nums}
 
 /* ---- profile screen ---- */
-.lf-p{position:fixed;inset:0;max-width:520px;margin:auto;background:var(--bg, #0E0E12);color:var(--label);display:grid;grid-template-rows:auto 1fr;overflow:hidden;z-index:80}
-.lf-p-top{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px}
-.lf-p-scroll{overflow-y:auto;padding:6px 16px calc(env(safe-area-inset-bottom,0px) + 26px);display:grid;gap:14px;align-content:start}
+.lf-p{position:fixed;inset:0;width:100%;max-width:520px;margin:auto;box-sizing:border-box;background:var(--bg, #0E0E12);color:var(--label);display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;overflow-x:hidden;z-index:80}
+.lf-p-top{position:static;transform:none;width:auto;max-width:none;height:auto;padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px;margin:0 0 4px}
+.lf-p-scroll{min-width:0;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;padding:6px 16px calc(env(safe-area-inset-bottom,0px) + 26px);display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start}
 .lf-p-hero{display:grid;justify-items:center;gap:14px;padding:10px 0 4px}
 .lf-p-hero .lf-av{box-shadow:0 14px 34px rgba(0,0,0,.34)}
 .lf-p-camera{height:44px;border-radius:999px;padding:0 18px;display:inline-flex;align-items:center;gap:8px;font-size:14px}
-.lf-p-card{border-radius:26px;padding:16px;display:grid;gap:10px;background:var(--card)}
+.lf-p-card{min-width:0;box-sizing:border-box;border-radius:26px;padding:16px;display:grid;gap:10px;background:var(--card)}
 .lf-p-label{color:var(--label2);font-size:13px;font-weight:600;margin:0}
 .lf-p-field{display:flex;align-items:center;gap:8px}
 .lf-p-input{flex:1;min-width:0;height:52px;border-radius:999px;border:0;padding:0 20px;font:inherit;font-size:16px;
@@ -302,7 +320,7 @@
 .lf-p-input:focus{outline:none;box-shadow:inset 0 0 0 1.5px var(--tint)}
 .lf-p-save{height:44px;border-radius:999px;padding:0 20px;font-size:14px;font-weight:700;flex:none}
 .lf-p-hint{color:var(--label2);font-size:12.5px;margin:0}
-.lf-p-note{color:var(--tint);font-size:13px;margin:0}
+.lf-p-note{color:var(--tint);font-size:13px;line-height:1.4;min-height:18px;margin:0}
 .lf-p-avatars{list-style:none;display:flex;flex-wrap:wrap;gap:10px;margin:0}
 .lf-p-avatar{padding:3px;border-radius:999px;background:none;box-shadow:0 0 0 0 transparent;transition:box-shadow .2s}
 .lf-p-avatar.is-on{box-shadow:0 0 0 2px var(--tint)}

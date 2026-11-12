@@ -237,7 +237,17 @@ export function LocalClient() {
   const selected = new Set(state.selected.map(f => f.id));
   const totalSize = state.selected.reduce((n, f) => n + f.size, 0);
   const pick = () => run(() => NativeLocal.pickFiles({ mime: icon.mime }));
-  const closeCamera = () => { setScanning(false); void NativeLocal.hideNativeView(); };
+  /** Leaving the scanner stops the camera and the discovery with it; a session
+   *  that was already open is left untouched. */
+  /** The camera preview is a native view under this page; the document must be
+   *  transparent for exactly as long as that preview is up. */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (current !== 'scan') { delete root.dataset.camera; return; }
+    root.dataset.camera = 'on';
+    return () => { delete root.dataset.camera; };
+  }, [current]);
+  const closeScanner = () => { setScanning(false); setFound(null); void NativeLocal.hideNativeView().catch(() => {}); router.push('/local/send'); };
   const openScanner = useCallback(async () => {
     if (!surface.current) return;
     const result = await run(() => NativeLocal.startScan(bounds(surface.current!)));
@@ -397,13 +407,18 @@ export function LocalClient() {
 
     {current === 'scan' && (
       <div className="lf-s">
+        {/* The camera is not a box inside the page: the native preview fills the
+            screen behind it, and this node is only its rectangle. */}
+        <div className="local-native-surface lf-s-preview" ref={surface} aria-label={tx('معاينة كاميرا المسح الأصلية', 'Native scan camera preview')} />
+        <header className="support-toolbar lf-s-bar">
+          <Button className="support-exit" icon={<BackChevron />} aria-label={tx('إغلاق الماسح', 'Close the scanner')} onClick={closeScanner} />
+          <Glass className="support-title"><h1>{tx('الماسح', 'Scanner')}</h1></Glass>
+        </header>
         <div className="lf-s-stage">
           <div className="lf-s-frame">
-            <div className="local-native-surface lf-s-preview" ref={surface} aria-label={tx('معاينة كاميرا المسح الأصلية', 'Native scan camera preview')} />
             <b className="lf-s-cn" /><b className="lf-s-cn" /><b className="lf-s-cn" /><b className="lf-s-cn" />
             <i className="lf-s-laser" aria-hidden="true" />
           </div>
-          {scanning && <button type="button" className="glass cap lf-s-quiet lf-s-stop" onClick={closeCamera}>{tx('إيقاف الكاميرا', 'Stop the camera')}</button>}
           <div className="glass cap lf-s-hint">
             <DesignIcon name="qr" style={{ width: 17, height: 17 }} />
             {tx('ضع رمز QR داخل الإطار', 'Place the QR code inside the frame')}

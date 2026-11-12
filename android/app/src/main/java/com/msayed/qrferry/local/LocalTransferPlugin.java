@@ -38,7 +38,7 @@ public class LocalTransferPlugin extends Plugin {
  private LocalEngine engine;private LocalEngine.Listener listener;private final ExecutorService worker=Executors.newSingleThreadExecutor();
  private final Map<PluginCall,Integer> pickerGenerations=new ConcurrentHashMap<>();
  private LocalProfile profile;private NearbyRadar radar;private boolean radarWired;
- private LocalScanner scanner;private FrameLayout overlay;private boolean overlayQr;private final Handler main=new Handler(Looper.getMainLooper());
+ private LocalScanner scanner;private FrameLayout overlay;private boolean overlayQr;private boolean overlayBehind;private Integer webBackground;private final Handler main=new Handler(Looper.getMainLooper());
  @Override public void load(){engine=LocalTransferService.engine(getContext());
   /* The identity is created on the first load, synchronously and committed, so no
   screen can ever draw before it exists. It is built through the same guarded
@@ -130,12 +130,8 @@ public class LocalTransferPlugin extends Plugin {
   catch(Exception e){call.reject("JOIN_FAILED",e);}
  }
  @PermissionCallback private void cameraGranted(PluginCall call){if(getPermissionState("camera")!=PermissionState.GRANTED){call.reject("CAMERA_PERMISSION_REQUIRED");return;}openScanner(call);}
- private void openScanner(PluginCall call){main.post(()->{try{hideOverlay();overlay=makeOverlay(call);overlayQr=false;scanner=new LocalScanner(getActivity());final FrameLayout host=overlay;
-  // The scan square is rounded in the page's own geometry, so the native
-  // preview is clipped to it instead of covering the whole screen.
-  android.graphics.drawable.GradientDrawable clip=new android.graphics.drawable.GradientDrawable();
-  float radius=28*getContext().getResources().getDisplayMetrics().density;clip.setCornerRadius(radius);
-  host.setBackground(clip);host.setClipToOutline(true);scanner.start(host,new LocalScanner.Result(){
+ private void openScanner(PluginCall call){main.post(()->{try{hideOverlay();overlay=makeBackdrop(call);overlayBehind=true;overlayQr=false;scanner=new LocalScanner(getActivity());final FrameLayout host=overlay;
+  scanner.start(host,new LocalScanner.Result(){
   // The code is handed to the page, which shows the device and connects on the
   // user's tap. Nothing is joined behind their back any more.
   public void scanned(String raw){hideOverlay();try{notifyListeners("scan",new JSObject().put("raw",raw).put("device",LocalPairing.decode(raw).device));}catch(Exception ignored){}}
@@ -162,10 +158,38 @@ public class LocalTransferPlugin extends Plugin {
   host.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);FrameLayout.LayoutParams params=overlayBounds(call,true);getActivity().addContentView(host,params);
   float scale=getBridge().getWebView().getWidth()/call.getDouble("viewport",1.0).floatValue();host.setClipToOutline(true);host.setOutlineProvider(new ViewOutlineProvider(){public void getOutline(View v,Outline o){o.setRoundRect(0,0,v.getWidth(),v.getHeight(),16*scale);}});return host;
  }
+ /** The scanner preview is a full-bleed backdrop, not a card: it goes directly
+  *  behind the WebView, and the WebView turns transparent for as long as it is
+  *  up, so the page draws its frame, capsules and sheet over live camera pixels
+  *  instead of around a small box. */
+ private FrameLayout makeBackdrop(PluginCall call){
+  android.webkit.WebView web=getBridge().getWebView();
+  if(!(web.getParent() instanceof ViewGroup))throw new IllegalStateException("NO_SIBLING_PARENT");
+  ViewGroup parent=(ViewGroup)web.getParent();
+  FrameLayout host=new FrameLayout(getActivity());
+  host.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);
+  host.setTag("qf-camera-backdrop");
+  if(webBackground==null)webBackground=webColor(web);
+  parent.addView(host,Math.max(0,parent.indexOfChild(web)),overlayBounds(call,true));
+  web.setBackgroundColor(Color.TRANSPARENT);
+  android.graphics.drawable.Drawable bg=parent.getBackground();
+  if(bg!=null)bg.mutate().setAlpha(0);
+  return host;
+ }
+ private static int webColor(android.webkit.WebView web){
+  android.graphics.drawable.Drawable d=web.getBackground();
+  return d instanceof android.graphics.drawable.ColorDrawable?((android.graphics.drawable.ColorDrawable)d).getColor():Color.rgb(14,14,18);
+ }
  @PluginMethod public void showPairingCode(PluginCall call){worker.execute(()->{try{String raw=engine.pairingCode();Map<EncodeHintType,Object>hints=new EnumMap<>(EncodeHintType.class);hints.put(EncodeHintType.MARGIN,2);hints.put(EncodeHintType.ERROR_CORRECTION,com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M);BitMatrix matrix=new MultiFormatWriter().encode(raw,BarcodeFormat.QR_CODE,768,768,hints);Bitmap bitmap=Bitmap.createBitmap(768,768,Bitmap.Config.ARGB_8888);int[]pixels=new int[768*768];for(int y=0;y<768;y++)for(int x=0;x<768;x++)pixels[y*768+x]=matrix.get(x,y)?Color.BLACK:Color.WHITE;bitmap.setPixels(pixels,0,768,0,0,768,768);main.post(()->{try{if(!engine.snapshot().optBoolean("qrReady"))throw new IllegalStateException("QR_NOT_READY");hideOverlay();overlay=makeOverlay(call);overlayQr=true;ImageView image=new ImageView(getActivity());image.setBackgroundColor(Color.WHITE);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setImageBitmap(bitmap);overlay.addView(image,new FrameLayout.LayoutParams(-1,-1));call.resolve();}catch(Exception e){call.reject("QR_DISPLAY_FAILED",e);}});}catch(Exception e){call.reject("QR_NOT_READY",e);}});}
  @PluginMethod public void updateNativeView(PluginCall call){main.post(()->{try{if(overlay!=null)overlay.setLayoutParams(overlayBounds(call,false));call.resolve();}catch(Exception e){call.reject("INVALID_VIEWPORT",e);}});}
  @PluginMethod public void hideNativeView(PluginCall call){main.post(()->{hideOverlay();call.resolve();});}
- private void hideOverlay(){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(this::hideOverlay);return;}overlayQr=false;if(scanner!=null){scanner.close();scanner=null;}if(overlay!=null){if(overlay.getParent()instanceof ViewGroup)((ViewGroup)overlay.getParent()).removeView(overlay);overlay=null;}}
+ private void hideOverlay(){if(Looper.myLooper()!=Looper.getMainLooper()){main.post(this::hideOverlay);return;}overlayQr=false;if(scanner!=null){scanner.close();scanner=null;}
+  if(overlay!=null){if(overlay.getParent()instanceof ViewGroup)((ViewGroup)overlay.getParent()).removeView(overlay);overlay=null;}
+  // The backdrop exists only while the scanner does: the page gets its own
+  // background back, so no other screen can show through it.
+  if(overlayBehind){overlayBehind=false;android.webkit.WebView web=getBridge().getWebView();
+   web.setBackgroundColor(webBackground==null?Color.rgb(14,14,18):webBackground);
+   if(web.getParent()instanceof ViewGroup){android.graphics.drawable.Drawable bg=((ViewGroup)web.getParent()).getBackground();if(bg!=null)bg.mutate().setAlpha(255);}}}
  @PluginMethod public void pause(PluginCall call){worker.execute(()->{engine.pause(Boolean.TRUE.equals(call.getBoolean("paused",true)));resolve(call);});}
  @PluginMethod public void sendSelected(PluginCall call){engine.sendSelected();resolve(call);}
  @PluginMethod public void sendMessage(PluginCall call){worker.execute(()->{try{engine.message(call.getString("text",""));resolve(call);}catch(Exception e){call.reject("MESSAGE_NOT_SENT",e);}});}
