@@ -39,7 +39,12 @@ public class LocalTransferPlugin extends Plugin {
  private final Map<PluginCall,Integer> pickerGenerations=new ConcurrentHashMap<>();
  private LocalProfile profile;private NearbyRadar radar;private boolean radarWired;
  private LocalScanner scanner;private FrameLayout overlay;private boolean overlayQr;private final Handler main=new Handler(Looper.getMainLooper());
- @Override public void load(){engine=LocalTransferService.engine(getContext());listener=s->{try{JSObject data=new JSObject(s.toString());notifyListeners("state",data);}catch(Exception ignored){}if(!s.optBoolean("qrReady")&&overlayQr)main.post(this::hideOverlay);};engine.subscribe(listener);worker.execute(()->{try{ // The receiving tree exists from the first run that already holds the scope.
+ @Override public void load(){engine=LocalTransferService.engine(getContext());
+  /* The identity is created on the first load, synchronously and committed, so no
+  screen can ever draw before it exists. It is built through the same guarded
+  accessor: during load() the plugin context is not always usable yet, and that
+  was exactly what used to leave the profile broken for the whole process. */
+  try{profileStore().getOrCreate();}catch(Exception ignored){}listener=s->{try{JSObject data=new JSObject(s.toString());notifyListeners("state",data);}catch(Exception ignored){}if(!s.optBoolean("qrReady")&&overlayQr)main.post(this::hideOverlay);};engine.subscribe(listener);worker.execute(()->{try{ // The receiving tree exists from the first run that already holds the scope.
    if(storageReady()&&engine.files.tree().isEmpty())engine.files.ensureFolders();}catch(Exception ignored){}});}
  private boolean ar(){return getContext().getResources().getConfiguration().getLocales().get(0).getLanguage().equals("ar");}
  /** One readiness flag per Android storage model: all-files (R+), legacy write

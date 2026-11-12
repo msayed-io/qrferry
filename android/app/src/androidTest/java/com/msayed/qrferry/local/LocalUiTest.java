@@ -195,7 +195,7 @@ public class LocalUiTest {
     "window.Capacitor.Plugins.QRFerryLocal.profileSetName({name:window.__qrferryProfileTest}).then(p=>{window.__qrferrySaved=p.displayName}).catch(e=>{window.__qrferrySaved='ERR:'+(e&&e.message?e.message:String(e))})",null));
    until("profileSetName never answered: "+js(view,"String(window.__qrferrySaved)"),()->"true".equals(js(view,"(()=>{return window.__qrferrySaved!==undefined})()")),15000);
    assertFalse("profileSetName failed: "+js(view,"String(window.__qrferrySaved)"),js(view,"String(window.__qrferrySaved)").startsWith("ERR:"));
-   assertEquals("The bridge must return the committed name",saved,js(view,"window.__qrferrySaved"));
+   assertEquals("The bridge must return the committed name",saved,js(view,"window.__qrferrySaved").replaceAll("^\"|\"$",""));
    // Reload the page: the identity must come from SharedPreferences, not from state.
    scenario.onActivity(activity->activity.getBridge().getWebView().evaluateJavascript("location.reload()",null));
    Thread.sleep(1500);
@@ -204,7 +204,7 @@ public class LocalUiTest {
     "window.Capacitor.Plugins.QRFerryLocal.profileGet({word:'User'}).then(p=>{window.__qrferryRead=p.displayName}).catch(e=>{window.__qrferryRead='ERR:'+(e&&e.message?e.message:String(e))})",null));
    until("profileGet never answered after the reload: "+js(view,"String(window.__qrferryRead)"),()->"true".equals(js(view,"(()=>{return window.__qrferryRead!==undefined})()")),20000);
    assertFalse("profileGet failed: "+js(view,"String(window.__qrferryRead)"),js(view,"String(window.__qrferryRead)").startsWith("ERR:"));
-   assertEquals("The name must survive a reload",saved,js(view,"window.__qrferryRead"));
+   assertEquals("The name must survive a reload",saved,js(view,"window.__qrferryRead").replaceAll("^\"|\"$",""));
   }
  }
  @Test public void prepareAndReceiveScreensKeepTheAppChrome()throws Exception{
