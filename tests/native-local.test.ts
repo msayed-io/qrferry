@@ -27,7 +27,7 @@ test('the header is the app toolbar, and overlays still outrank the blur',()=>{
  // that covers them (the blur is z-index 18 in floating-chrome.css).
  assert.doesNotMatch(rule('\\.lf-toolbar'),/position:fixed/);
  assert.doesNotMatch(rule('\\.lf-home-header'),/position:fixed/);
- for(const selector of ['\\.lf-bar','\\.lf-sheet','\\.lf-scrim']){
+ for(const selector of ['\\.lf-bar','\\.lf-s','\\.lf-scrim']){
   const z=/z-index:(\d+)/.exec(rule(selector));assert.ok(z,`${selector} needs a z-index`);assert.ok(Number(z![1])>18,`${selector} must outrank the blur`);
  }
  assert.match(css,/\.local-page \.tinted[^{]*\{[^}]*background:var\(--tint\)/);

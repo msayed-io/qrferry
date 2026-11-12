@@ -76,6 +76,12 @@ public final class LocalNetwork implements AutoCloseable {
  public String security(){return security;}
  private void hotspot(int g,Receiver receiver){
   if(!live(g))return;if(Build.VERSION.SDK_INT<26){receiver.failed("DIRECT_UNAVAILABLE_USE_EXISTING_WIFI");return;}
+  // Before Android 13 the nearby permission is derived from location, so the
+  // system refuses to open the hotspot while Location services are off.
+  if(Build.VERSION.SDK_INT<33){
+   try{android.location.LocationManager lm=(android.location.LocationManager)context.getSystemService(Context.LOCATION_SERVICE);
+    if(lm!=null&&!lm.isLocationEnabled()){receiver.failed("TURN_ON_LOCATION");return;}}catch(Exception ignored){}
+  }
   try{wifi.startLocalOnlyHotspot(new WifiManager.LocalOnlyHotspotCallback(){
    @Override public void onStarted(WifiManager.LocalOnlyHotspotReservation r){if(!live(g)){r.close();return;}hotspot=r;String ssid,password;security="wpa2";
     if(Build.VERSION.SDK_INT>=30){ssid=r.getSoftApConfiguration().getSsid();password=r.getSoftApConfiguration().getPassphrase();

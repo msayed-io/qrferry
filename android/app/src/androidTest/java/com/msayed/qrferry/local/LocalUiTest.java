@@ -140,7 +140,7 @@ public class LocalUiTest {
    // Captured once the camera is live: a capture taken during the surface swap
    // returns the frame that was still on screen.
    shot("scan");
-   assertEquals("true",js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('إغلاق')||b.textContent.includes('Close'));if(!b)return false;b.click();return true})()"));
+   assertEquals("true",js(view,"(()=>{const b=[...document.querySelectorAll('button')].find(b=>document.querySelector('.lf-s')&&b.classList.contains('lf-s-quiet'));if(!b)return false;b.click();return true})()"));
    // Release travels JS -> bridge -> UI thread, so give it a frame budget
    // instead of asserting synchronously on the very next statement.
    until("Camera preview survived closing it",()->{AtomicBoolean gone=new AtomicBoolean();scenario.onActivity(activity->gone.set(preview(activity.getWindow().getDecorView())==null));return gone.get();},8000);

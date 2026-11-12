@@ -7,13 +7,16 @@ export interface LocalState {
  revision: number; phase: string; error: string; role: string; method: string; authenticated: boolean; started: boolean;
  paused: boolean; peer: string; selected: LocalFile[]; files: LocalTransfer[]; messages: LocalMessage[];
  qrReady: boolean; expires: number; bytes: number; native?: boolean; sdk?: number; allFiles?: boolean; storageReady?: boolean; media?: boolean; storageAsked?: boolean; destination?: string;
- camera?: boolean; nearby?: boolean; wifi?: boolean;
+ camera?: boolean; nearby?: boolean; wifi?: boolean; locationOn?: boolean;
 }
 export interface NativeBounds { x: number; y: number; width: number; height: number; viewport: number }
 interface LocalPlugin {
  getState(): Promise<LocalState>;
  addListener(event:'state',listener:(state:LocalState)=>void):Promise<PluginListenerHandle>;
  addListener(event:'lifecycle',listener:(state:{active:boolean})=>void):Promise<PluginListenerHandle>;
+ /** A decoded pairing code; the page shows the device and connects on tap. */
+ addListener(event:'scan',listener:(payload:{raw:string;device?:string})=>void):Promise<PluginListenerHandle>;
+ join(options:{raw:string}):Promise<LocalState>;
  listFiles(options:{category:string}):Promise<{files:LocalFile[]}>;
  clearSelection():Promise<LocalState>;
  thumbnails(options:{ids:string[]}):Promise<{thumbs:Record<string,string>}>;
@@ -22,7 +25,7 @@ interface LocalPlugin {
  requestStorage():Promise<LocalState>;
  requestMedia():Promise<LocalState>;
  requestNearby():Promise<LocalState>;
- openSettings(options:{which:'wifi'|'storage'|'app'}):Promise<void>;
+ openSettings(options:{which:'wifi'|'storage'|'app'|'location'}):Promise<void>;
  chooseDestination():Promise<LocalState>;
  startReceive(options:{method:'auto'|'hotspot'|'lan'}):Promise<LocalState>;
  startScan(options:NativeBounds):Promise<{scanning?:boolean;cancelled?:boolean}>;

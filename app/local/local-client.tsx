@@ -29,6 +29,8 @@ const errorText: Record<string, [string, string]> = {
   CAMERA_PERMISSION_REQUIRED: ['إذن الكاميرا غير متاح. امنحه من نافذة Android ثم أعد المحاولة.', 'Camera permission is unavailable. Grant it in the Android dialog and retry.'],
   NEARBY_PERMISSION_REQUIRED: ['اسمح بالاتصال بالأجهزة القريبة من نافذة Android. قد يحتاج Android القديم إلى Location أيضًا.', 'Allow nearby-device access in the Android dialog. Older Android may also need Location.'],
   WIFI_OFF: ['فعّل Wi-Fi ثم أعد المحاولة.', 'Turn on Wi-Fi, then retry.'],
+  TURN_ON_LOCATION: ['فعّل خدمة الموقع (Location) في Android. الأجهزة التي تعمل بإصدار أقدم من Android 13 تحتاجها لفتح اتصال محلي.', 'Turn on Location services. Androids older than 13 need it for a local link.'],
+  JOIN_FAILED: ['تعذر بدء الاتصال بهذا الرمز. أعد مسح رمز المستقبل.', 'Could not start the connection with this code. Scan the receiver’s code again.'],
   JOIN_WIFI_FIRST: ['لم يُعثر على شبكة محلية. اتصل بشبكة Wi-Fi لا تحتاج إنترنت ثم أعد المحاولة.', 'No local network found. Join a Wi-Fi network (internet not required) and retry.'],
   HOTSPOT_UNAVAILABLE_USE_EXISTING_WIFI: ['تعذر إنشاء نقطة اتصال محلية؛ سيُستَخدم المسار التالي تلقائيًا.', 'A local hotspot is unavailable; the next path is used automatically.'],
   DIRECT_UNAVAILABLE: ['الاتصال المباشر غير متاح هنا؛ سيُجرَّب المسار التالي تلقائيًا.', 'Direct connection is unavailable here; the next path is tried automatically.'],
@@ -90,6 +92,7 @@ export function LocalClient() {
   const [catalogue, setCatalogue] = useState<LocalFile[]>([]), [sheetOpen, setSheetOpen] = useState(false);
   const [listLoading, setListLoading] = useState(false);
   const [draft, setDraft] = useState(''), [scanning, setScanning] = useState(false), [qrShown, setQrShown] = useState(false), [foreground, setForeground] = useState(true);
+  const [found, setFound] = useState<{ raw: string; device?: string } | null>(null), [connecting, setConnecting] = useState(false);
   const surface = useRef<HTMLDivElement>(null), qrSurface = useRef<HTMLDivElement>(null), request = useRef(0), autoCamera = useRef(false);
   // One automatic attempt per screen entry. Every prompt behind these refs is an
   // official Android dialog/screen; the rows stay as an explicit retry.
@@ -237,6 +240,25 @@ export function LocalClient() {
     const result = await run(() => NativeLocal.startScan(bounds(surface.current!)));
     setScanning(!!(result as { scanning?: boolean } | undefined)?.scanning);
   }, [run]);
+  // The native layer reads the code; the page shows the device and connects on tap.
+  useEffect(() => {
+    if (!native) return;
+    let handle: { remove: () => Promise<void> } | undefined;
+    void NativeLocal.addListener('scan', payload => {
+      setScanning(false);
+      setConnecting(false);
+      setFound({ raw: payload.raw, device: payload.device });
+    }).then(h => { handle = h; });
+    return () => { void handle?.remove(); };
+  }, [native]);
+  useEffect(() => { if (current !== 'scan') { setFound(null); setConnecting(false); } }, [current]);
+  const connectFound = async () => {
+    if (!found) return;
+    setConnecting(true);
+    await run(() => NativeLocal.join({ raw: found.raw }));
+    setConnecting(false);
+  };
+  const rescan = async () => { setFound(null); await openScanner(); };
   useEffect(() => {
     if (!native || current !== 'scan' || autoCamera.current || !state.selected.length) return;
     autoCamera.current = true;
@@ -247,10 +269,15 @@ export function LocalClient() {
   const end = async () => { await run(() => NativeLocal.disconnect()); router.replace('/local'); };
   const back = () => { if (sessionPage || current === 'scan') void end(); else if (current === 'home') router.push('/'); else router.push(current === 'receive' || current === 'setup' ? '/local' : '/local'); };
   const title = current === 'send' ? tx('إرسال', 'Send') : current === 'setup' ? tx('التحضير', 'Prepare') : current === 'scan' ? tx('مسح للاتصال', 'Scan to connect') : current === 'receive' ? tx('استلام', 'Receive') : sessionPage ? tx('متصل', 'Connected') : tx('نقل محلي', 'Local transfer');
+  const scanHeadline = found ? tx('تم العثور على جهاز', 'Device found')
+    : connecting || state.phase === 'connecting' ? tx('جارٍ الاتصال…', 'Connecting…')
+      : code && !scanning ? tx('تعذر إكمال المسح', 'The scan did not complete')
+        : tx('البحث عن مستلمين…', 'Looking for receivers…');
   const methodLabel = state.method === 'direct' ? 'Wi-Fi Direct' : state.method === 'hotspot' ? tx('نقطة محلية', 'Local hotspot') : state.method === 'lan' ? tx('شبكة محلية', 'Local Wi-Fi') : tx('تلقائي', 'Automatic');
   // Every indicator must be green: the link scope, Wi-Fi, and a storage route
   // (all-files, or the MediaStore fallback that every Android 10+ device has).
-  const setupReady = !!state.nearby && !!state.wifi && (!!state.storageReady || (state.sdk ?? 0) >= 29);
+  const legacyLocation = (state.sdk ?? 99) < 33;
+  const setupReady = !!state.nearby && !!state.wifi && (!legacyLocation || state.locationOn !== false) && (!!state.storageReady || (state.sdk ?? 0) >= 29);
   const done = state.files.filter(f => f.status === 'complete').length;
 
   return <main className={`local-page ${sessionPage ? 'local-session' : ''}`} data-page="local" data-screen={current} data-phase={state.phase}>
@@ -328,6 +355,7 @@ export function LocalClient() {
       <p className="lf-sub">{tx('تظهر هنا نوافذ Android الرسمية فقط. كل عنصر يوضح حالته على هذا الجهاز وإصداره.', 'Only official Android dialogs appear here. Each row reflects this device and its Android version.')}</p>
       <div className="card lf-list">
         <div className="lf-li"><span className="lf-ic"><DesignIcon name="wifi" style={{ width: 20, height: 20 }} /></span><span className="lf-gr"><b>Wi-Fi</b><small>{state.wifi ? tx('مفعّل', 'On') : tx('متوقف — يجب تفعيله', 'Off — required')}</small></span>{state.wifi ? <span className="lf-ok"><DesignIcon name="ok" style={{ width: 16, height: 16 }} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.openSettings({ which: 'wifi' }))}>{tx('فتح الإعدادات', 'Open settings')}</button>}</div>
+        {legacyLocation && !state.locationOn && <div className="lf-li"><span className="lf-ic"><DesignIcon name="full" style={{ width: 20, height: 20 }} /></span><span className="lf-gr"><b>{tx('خدمة الموقع', 'Location service')}</b><small>{tx('مطلوبة في هذا الإصدار من Android لفتح اتصال محلي', 'Required on this Android version for a local link')}</small></span><button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.openSettings({ which: 'location' }))}>{tx('فتح', 'Open')}</button></div>}
         <div className="lf-li"><span className="lf-ic"><DesignIcon name="shield" style={{ width: 20, height: 20 }} /></span><span className="lf-gr"><b>{tx('الأجهزة القريبة', 'Nearby devices')}</b><small>{state.nearby ? tx('مسموح', 'Allowed') : tx('غير مسموح — ستظهر نافذة Android', 'Not allowed — the Android dialog will appear')}</small></span>{state.nearby ? <span className="lf-ok"><DesignIcon name="ok" style={{ width: 16, height: 16 }} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestNearby())}>{tx('السماح', 'Allow')}</button>}</div>
         <div className="lf-li"><span className="lf-ic"><DesignIcon name="folder" style={{ width: 20, height: 20 }} /></span><span className="lf-gr"><b>{tx('حفظ الملفات', 'Saving files')}</b><small>{state.storageReady ? (state.destination || 'QRFerry') : state.sdk && state.sdk >= 30 ? tx('الوصول إلى كل الملفات غير ممنوح', 'All-files access is not granted') : tx('إذن التخزين غير ممنوح', 'Storage permission is not granted')}</small></span>{state.storageReady ? <span className="lf-ok"><DesignIcon name="ok" style={{ width: 16, height: 16 }} /></span> : <button type="button" className="glass cap lf-small" onClick={() => void run(() => NativeLocal.requestStorage())}>{tx('السماح', 'Allow')}</button>}</div>
       </div>
@@ -335,21 +363,65 @@ export function LocalClient() {
       {!setupReady && <p className="lf-hint">{tx('يفتح Android نافذته الرسمية عند الضغط على «السماح». لن يظهر أي شيء من تصميمنا بدلًا منها.', 'Android opens its own dialog when you press Allow. Nothing of our design replaces it.')}</p>}
     </>}
 
-    {current === 'scan' && <>
-      <div className="lf-cam">
-        <div className="local-native-surface lf-cam-surface" ref={surface} aria-label={tx('معاينة كاميرا المسح الأصلية', 'Native scan camera preview')}>
-          <DesignIcon name="cam" style={{ width: 40, height: 40 }} /><span>{scanning ? tx('الكاميرا تعمل محليًا', 'Camera running locally') : tx('الكاميرا مغلقة', 'Camera is closed')}</span>
+    {current === 'scan' && (
+      <div className="lf-s">
+        <div className="lf-s-stage">
+          <div className="lf-s-frame">
+            <div className="local-native-surface lf-s-preview" ref={surface} aria-label={tx('معاينة كاميرا المسح الأصلية', 'Native scan camera preview')} />
+            <b className="lf-s-cn" /><b className="lf-s-cn" /><b className="lf-s-cn" /><b className="lf-s-cn" />
+            <i className="lf-s-laser" aria-hidden="true" />
+          </div>
+          <div className="glass cap lf-s-hint">
+            <DesignIcon name="qr" style={{ width: 17, height: 17 }} />
+            {tx('ضع رمز QR داخل الإطار', 'Place the QR code inside the frame')}
+          </div>
+        </div>
+
+        <div className="lf-s-sheet">
+          <i className="lf-s-grab" aria-hidden="true" />
+          <div className={`lf-s-radar${!found && !connecting && (!code || scanning) ? '' : ' is-off'}`} aria-hidden="true">
+            <div className="lf-s-sweep" />
+            <em /><em /><em />
+            <i className="lf-s-bl" style={{ left: 'calc(50% - 118px)', bottom: 128, animationDelay: '1s' }} />
+            <i className="lf-s-bl" style={{ left: 'calc(50% + 102px)', bottom: 104, animationDelay: '1.7s' }} />
+            <i className="lf-s-bl" style={{ left: 'calc(50% + 28px)', bottom: 162, animationDelay: '2.4s' }} />
+            <div className="lf-s-core"><DesignIcon name="wifi" style={{ width: 30, height: 30 }} /></div>
+          </div>
+
+          <h2 className="lf-s-h" role="status">{scanHeadline}</h2>
+
+          {found ? <>
+            <div className="lf-s-found">
+              <span className="lf-s-dev">{(found.device || 'QR').slice(0, 2).toUpperCase()}</span>
+              <div className="lf-s-gr">
+                <b>{found.device || tx('جهاز المستقبل', 'Receiver')}</b>
+                <small>{tx('قريب · جاهز للاستلام', 'Nearby · ready to receive')}</small>
+              </div>
+            </div>
+            <div className="lf-s-actions">
+              <button type="button" className="glass cap tinted lf-s-big" disabled={busy} onClick={() => void connectFound()}>
+                <DesignIcon name="wifi" style={{ width: 19, height: 19 }} />{tx('اتصال', 'Connect')}
+              </button>
+              <button type="button" className="glass cap lf-s-quiet" disabled={busy} onClick={rescan}>{tx('مسح آخر', 'Scan again')}</button>
+            </div>
+          </> : code && !scanning && !connecting ? <>
+            <p className="lf-s-msg">{message}</p>
+            <div className="lf-s-actions">
+              <button type="button" className="glass cap tinted lf-s-big" disabled={busy} onClick={rescan}>{tx('إعادة المسح', 'Scan again')}</button>
+              <button type="button" className="glass cap lf-s-quiet" onClick={() => void run(() => NativeLocal.openSettings({ which: 'app' }))}>{tx('الإعدادات', 'Settings')}</button>
+            </div>
+          </> : <>
+            <p className="lf-s-msg">{!state.camera ? tx('يحتاج المسح إلى الكاميرا. سيظهر إذن Android الرسمي.', 'Scanning needs the camera. Android’s own dialog will appear.') : state.phase === 'connecting' ? (state.method === 'hotspot' ? tx('وافق على نافذة Android للاتصال بشبكة المستقبل…', 'Accept the Android prompt to join the receiver’s network…') : tx('جارٍ الاتصال والتحقق…', 'Connecting and verifying…')) : state.phase === 'preparing-files' ? tx('تم التحقق. تجهيز الملفات…', 'Verified. Preparing files…') : tx('وجّه الكاميرا إلى رمز الاقتران على جهاز المستقبل.', 'Point the camera at the pairing code on the receiver.')}</p>
+            <div className="lf-s-actions">
+              {!scanning && !state.authenticated && <button type="button" className="glass cap tinted lf-s-big" disabled={!native || busy} onClick={() => void openScanner()}>
+                <DesignIcon name="cam" style={{ width: 19, height: 19 }} />{!state.camera ? tx('السماح بالكاميرا', 'Allow the camera') : tx('فتح الكاميرا', 'Open camera')}
+              </button>}
+              {scanning && <button type="button" className="glass cap lf-s-quiet" onClick={closeCamera}>{tx('إيقاف الكاميرا', 'Stop the camera')}</button>}
+            </div>
+          </>}
         </div>
       </div>
-      <div className="lf-sheet">
-        <h2>{tx('ضع رمز QR داخل الإطار', 'Place the QR code inside the frame')}</h2>
-        <p role="status">{state.phase === 'connecting' ? (state.method === 'hotspot' ? tx('وافق على نافذة Android للاتصال بشبكة المستقبل…', 'Accept the Android prompt to join the receiver’s network…') : tx('جارٍ الاتصال والتحقق…', 'Connecting and verifying…')) : state.phase === 'preparing-files' ? tx('تم التحقق. تجهيز الملفات…', 'Verified. Preparing files…') : scanning ? tx('ابحث عن رمز المستقبل. تُقرأ الرموز محليًا فقط.', 'Look for the receiver’s code. Codes are decoded locally only.') : tx('سيطلب Android إذن الكاميرا إن لم يكن ممنوحًا.', 'Android asks for camera permission if it is not granted.')}</p>
-        <div className="lf-row">
-          <button type="button" className="glass cap tinted lf-big" disabled={!native || busy || scanning} hidden={scanning} onClick={() => void openScanner()}><DesignIcon name="qr" style={{ width: 18, height: 18 }} />{tx('فتح الكاميرا', 'Open camera')}</button>
-          {scanning && <button type="button" className="glass cap lf-big" onClick={closeCamera}>{tx('إغلاق', 'Close')}</button>}
-        </div>
-      </div>
-    </>}
+    )}
 
     {current === 'receive' && <>
       <div className="lf-qr-wrap" ref={surface}>

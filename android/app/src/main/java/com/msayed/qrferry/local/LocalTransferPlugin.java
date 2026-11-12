@@ -51,7 +51,7 @@ public class LocalTransferPlugin extends Plugin {
   if(engine.files.broad())return true;
   return getPermissionState("media")==PermissionState.GRANTED;
  }
- private void resolve(PluginCall call){try{JSObject s=new JSObject(engine.snapshot().toString());s.put("native",true);s.put("sdk",Build.VERSION.SDK_INT);s.put("allFiles",engine.files.broad());s.put("storageReady",storageReady());s.put("media",mediaReady());s.put("storageAsked",getContext().getSharedPreferences("local-files",0).getBoolean("asked",false));s.put("camera",getPermissionState("camera")==PermissionState.GRANTED);s.put("nearby",getPermissionState(Build.VERSION.SDK_INT>=33?"nearby":"location")==PermissionState.GRANTED);s.put("wifi",((android.net.wifi.WifiManager)getContext().getApplicationContext().getSystemService(android.content.Context.WIFI_SERVICE)).isWifiEnabled());s.put("destination",!engine.files.tree().isEmpty()?"Selected folder/QRFerry":engine.files.broad()||engine.files.legacyWritable()?"QRFerry":Build.VERSION.SDK_INT>=29?"Downloads/QRFerry":"Choose destination");call.resolve(s);}catch(Exception e){call.reject("STATUS_FAILED",e);}}
+ private void resolve(PluginCall call){try{JSObject s=new JSObject(engine.snapshot().toString());s.put("native",true);s.put("sdk",Build.VERSION.SDK_INT);s.put("allFiles",engine.files.broad());s.put("storageReady",storageReady());s.put("media",mediaReady());s.put("storageAsked",getContext().getSharedPreferences("local-files",0).getBoolean("asked",false));s.put("camera",getPermissionState("camera")==PermissionState.GRANTED);s.put("nearby",getPermissionState(Build.VERSION.SDK_INT>=33?"nearby":"location")==PermissionState.GRANTED);s.put("locationOn",((android.location.LocationManager)getContext().getApplicationContext().getSystemService(Context.LOCATION_SERVICE)).isLocationEnabled());s.put("wifi",((android.net.wifi.WifiManager)getContext().getApplicationContext().getSystemService(android.content.Context.WIFI_SERVICE)).isWifiEnabled());s.put("destination",!engine.files.tree().isEmpty()?"Selected folder/QRFerry":engine.files.broad()||engine.files.legacyWritable()?"QRFerry":Build.VERSION.SDK_INT>=29?"Downloads/QRFerry":"Choose destination");call.resolve(s);}catch(Exception e){call.reject("STATUS_FAILED",e);}}
  @PluginMethod public void getState(PluginCall call){resolve(call);}
  /** The entire category in one response; no paging step exists in the UI. */
  @PluginMethod public void listFiles(PluginCall call){worker.execute(()->{try{call.resolve(new JSObject().put("files",engine.files.list(call.getString("category","files"))));}catch(Exception e){call.reject("FILE_ACCESS_REQUIRED",e);}});}
@@ -89,6 +89,7 @@ public class LocalTransferPlugin extends Plugin {
   String which=call.getString("which","app");
   Intent intent;
   if("wifi".equals(which))intent=new Intent(Settings.ACTION_WIFI_SETTINGS);
+  else if("location".equals(which))intent=new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
   else if("storage".equals(which))intent=Build.VERSION.SDK_INT>=30?new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:"+getContext().getPackageName())):new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getContext().getPackageName()));
   else intent=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getContext().getPackageName()));
   try{intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);getContext().startActivity(intent);resolve(call);}catch(Exception e){call.reject("SETTINGS_UNAVAILABLE",e);}
@@ -109,8 +110,26 @@ public class LocalTransferPlugin extends Plugin {
   if(getPermissionState("camera")==PermissionState.GRANTED)openScanner(call);
   else requestPermissionForAlias("camera",call,"cameraGranted");
  }
+ /** Called by the scan page once the user taps connect. */
+ @PluginMethod public void join(PluginCall call){
+  if(engine.files.sources().isEmpty()){call.reject("SELECT_FILES_FIRST");return;}
+  String raw=call.getString("raw");if(raw==null||raw.isEmpty()){call.reject("INVALID_OR_EXPIRED_QR");return;}
+  try{foreground();engine.join(raw);resolve(call);}
+  catch(IllegalArgumentException|org.json.JSONException e){call.reject("INVALID_OR_EXPIRED_QR",e);}
+  catch(Exception e){call.reject("JOIN_FAILED",e);}
+ }
  @PermissionCallback private void cameraGranted(PluginCall call){if(getPermissionState("camera")!=PermissionState.GRANTED){call.reject("CAMERA_PERMISSION_REQUIRED");return;}openScanner(call);}
- private void openScanner(PluginCall call){main.post(()->{try{hideOverlay();overlay=makeOverlay(call);overlayQr=false;scanner=new LocalScanner(getActivity());final FrameLayout host=overlay;scanner.start(host,new LocalScanner.Result(){public void scanned(String raw){hideOverlay();try{foreground();engine.join(raw);}catch(Exception e){engine.fail("INVALID_OR_EXPIRED_QR");}}public void failed(String code){hideOverlay();engine.fail(code);}});host.addView(new LocalScanFrame(getActivity()),new FrameLayout.LayoutParams(-1,-1));call.resolve(new JSObject().put("scanning",true));}catch(Exception e){hideOverlay();call.reject("CAMERA_UNAVAILABLE",e);}});}
+ private void openScanner(PluginCall call){main.post(()->{try{hideOverlay();overlay=makeOverlay(call);overlayQr=false;scanner=new LocalScanner(getActivity());final FrameLayout host=overlay;
+  // The scan square is rounded in the page's own geometry, so the native
+  // preview is clipped to it instead of covering the whole screen.
+  android.graphics.drawable.GradientDrawable clip=new android.graphics.drawable.GradientDrawable();
+  float radius=28*getContext().getResources().getDisplayMetrics().density;clip.setCornerRadius(radius);
+  host.setBackground(clip);host.setClipToOutline(true);scanner.start(host,new LocalScanner.Result(){
+  // The code is handed to the page, which shows the device and connects on the
+  // user's tap. Nothing is joined behind their back any more.
+  public void scanned(String raw){hideOverlay();try{notifyListeners("scan",new JSObject().put("raw",raw).put("device",LocalPairing.decode(raw).device));}catch(Exception ignored){}}
+  public void failed(String code){hideOverlay();engine.fail(code);}
+ });call.resolve(new JSObject().put("scanning",true));}catch(Exception e){hideOverlay();call.reject("CAMERA_UNAVAILABLE",e);}});}
  private FrameLayout.LayoutParams overlayBounds(PluginCall call,boolean opening){
   double x=call.getDouble("x",0.0),y=call.getDouble("y",0.0),w=call.getDouble("width",0.0),h=call.getDouble("height",0.0),viewport=call.getDouble("viewport",0.0);
   if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(w)||!Double.isFinite(h)||!Double.isFinite(viewport)||w<80||h<80||viewport<200||w>viewport+1||x+w>viewport+1||(opening&&(x<0||y<0)))throw new IllegalArgumentException("INVALID_VIEWPORT");
