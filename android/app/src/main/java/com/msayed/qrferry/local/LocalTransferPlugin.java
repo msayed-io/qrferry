@@ -3,6 +3,7 @@ package com.msayed.qrferry.local;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
+import android.view.Gravity;
 import android.content.pm.PackageManager;
 import android.graphics.*;
 import android.net.Uri;
@@ -118,10 +119,17 @@ public class LocalTransferPlugin extends Plugin {
   // addContentView uses content-parent coordinates, not window coordinates.
   // SystemChrome already applies system-bar/IME insets to the decor parent.
   FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(Math.round((float)(w*scale)),Math.round((float)(h*scale)));
+  // Absolute LEFT, never START: on an Arabic (RTL) device the default START
+  // gravity anchors the overlay to the right edge, which put the pairing code off
+  // its plate and half off the screen.
+  params.gravity=Gravity.TOP|Gravity.LEFT;
   params.leftMargin=webLocation[0]-parentLocation[0]+Math.round((float)(x*scale));params.topMargin=webLocation[1]-parentLocation[1]+Math.round((float)(y*scale));return params;
  }
  private FrameLayout makeOverlay(PluginCall call){
-  FrameLayout host=new FrameLayout(getActivity());FrameLayout.LayoutParams params=overlayBounds(call,true);getActivity().addContentView(host,params);
+  FrameLayout host=new FrameLayout(getActivity());
+  // Every child here is positioned in absolute pixels, so the host must not be
+  // mirrored by the device language.
+  host.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);FrameLayout.LayoutParams params=overlayBounds(call,true);getActivity().addContentView(host,params);
   float scale=getBridge().getWebView().getWidth()/call.getDouble("viewport",1.0).floatValue();host.setClipToOutline(true);host.setOutlineProvider(new ViewOutlineProvider(){public void getOutline(View v,Outline o){o.setRoundRect(0,0,v.getWidth(),v.getHeight(),16*scale);}});return host;
  }
  @PluginMethod public void showPairingCode(PluginCall call){worker.execute(()->{try{String raw=engine.pairingCode();Map<EncodeHintType,Object>hints=new EnumMap<>(EncodeHintType.class);hints.put(EncodeHintType.MARGIN,2);hints.put(EncodeHintType.ERROR_CORRECTION,com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M);BitMatrix matrix=new MultiFormatWriter().encode(raw,BarcodeFormat.QR_CODE,768,768,hints);Bitmap bitmap=Bitmap.createBitmap(768,768,Bitmap.Config.ARGB_8888);int[]pixels=new int[768*768];for(int y=0;y<768;y++)for(int x=0;x<768;x++)pixels[y*768+x]=matrix.get(x,y)?Color.BLACK:Color.WHITE;bitmap.setPixels(pixels,0,768,0,0,768,768);main.post(()->{try{if(!engine.snapshot().optBoolean("qrReady"))throw new IllegalStateException("QR_NOT_READY");hideOverlay();overlay=makeOverlay(call);overlayQr=true;ImageView image=new ImageView(getActivity());image.setBackgroundColor(Color.WHITE);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setImageBitmap(bitmap);overlay.addView(image,new FrameLayout.LayoutParams(-1,-1));call.resolve();}catch(Exception e){call.reject("QR_DISPLAY_FAILED",e);}});}catch(Exception e){call.reject("QR_NOT_READY",e);}});}

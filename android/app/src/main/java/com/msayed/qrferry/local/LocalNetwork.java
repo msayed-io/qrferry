@@ -15,7 +15,7 @@ public final class LocalNetwork implements AutoCloseable {
  public interface Sender {void ready(Network network);void failed(String code);}
  private final Context context;private final Handler main=new Handler(Looper.getMainLooper());
  private final WifiManager wifi;private final ConnectivityManager connectivity;private final WifiP2pManager p2p;private WifiP2pManager.Channel channel;
- private WifiManager.LocalOnlyHotspotReservation hotspot;private ConnectivityManager.NetworkCallback callback;
+ private WifiManager.LocalOnlyHotspotReservation hotspot;private String security="wpa2";private ConnectivityManager.NetworkCallback callback;
  private boolean ownedGroup;private final java.util.concurrent.atomic.AtomicInteger generation=new java.util.concurrent.atomic.AtomicInteger();private int legacyId=-1;private WifiManager.WifiLock lock;
  public LocalNetwork(Context c){context=c.getApplicationContext();wifi=(WifiManager)context.getSystemService(Context.WIFI_SERVICE);connectivity=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);p2p=(WifiP2pManager)context.getSystemService(Context.WIFI_P2P_SERVICE);}
  private boolean live(int g){return generation.get()==g;}
@@ -25,7 +25,11 @@ public final class LocalNetwork implements AutoCloseable {
  private List<String> plan(String method){
   if(!"auto".equals(method))return java.util.Collections.singletonList(method);
   List<String> plan=new ArrayList<String>();
-  if(p2p!=null&&context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT))plan.add("direct");
+  // A Wi-Fi Direct group cannot be joined from the QR: joining needs the group
+  // owner's P2P device address and WifiP2pManager.connect, while the sender only
+  // has the SSID and passphrase. A local-only hotspot is joinable exactly that
+  // way, so it is the automatic first choice and Wi-Fi Direct is never selected
+  // automatically (the method stays available for an explicit request).
   if(Build.VERSION.SDK_INT>=26)plan.add("hotspot");
   plan.add("lan");return plan;
  }
@@ -63,11 +67,14 @@ public final class LocalNetwork implements AutoCloseable {
    p2p.requestConnectionInfo(channel,info->{if(!live(g))return;if(info.groupOwnerAddress==null){main.postDelayed(()->group(g,receiver,attempt+1),250);return;}receiver.ready(info.groupOwnerAddress.getHostAddress(),group.getNetworkName(),group.getPassphrase(),"direct");});
   });
  }
+ public String security(){return security;}
  private void hotspot(int g,Receiver receiver){
   if(!live(g))return;if(Build.VERSION.SDK_INT<26){receiver.failed("DIRECT_UNAVAILABLE_USE_EXISTING_WIFI");return;}
   try{wifi.startLocalOnlyHotspot(new WifiManager.LocalOnlyHotspotCallback(){
-   @Override public void onStarted(WifiManager.LocalOnlyHotspotReservation r){if(!live(g)){r.close();return;}hotspot=r;String ssid,password;
-    if(Build.VERSION.SDK_INT>=30){ssid=r.getSoftApConfiguration().getSsid();password=r.getSoftApConfiguration().getPassphrase();}else{WifiConfiguration config=r.getWifiConfiguration();ssid=config.SSID;password=config.preSharedKey;}
+   @Override public void onStarted(WifiManager.LocalOnlyHotspotReservation r){if(!live(g)){r.close();return;}hotspot=r;String ssid,password;security="wpa2";
+    if(Build.VERSION.SDK_INT>=30){ssid=r.getSoftApConfiguration().getSsid();password=r.getSoftApConfiguration().getPassphrase();
+     // The hotspot decides its own security; the sender has to know it to join.
+     if(r.getSoftApConfiguration().getSecurityType()==SoftApConfiguration.SECURITY_TYPE_SAE)security="sae";}else{WifiConfiguration config=r.getWifiConfiguration();ssid=config.SSID;password=config.preSharedKey;}
     String host=hotspotAddress();if(host==null||password==null){r.close();hotspot=null;receiver.failed("HOTSPOT_ADDRESS_UNAVAILABLE");return;}receiver.ready(host,unquote(ssid),unquote(password),"hotspot");
    }
    @Override public void onStopped(){if(live(g))receiver.failed("HOTSPOT_STOPPED");}
@@ -78,7 +85,9 @@ public final class LocalNetwork implements AutoCloseable {
   if(!wifi.isWifiEnabled()){sender.failed("WIFI_OFF");return;}hold();
   if(offer.method.equals("lan")){for(Network n:connectivity.getAllNetworks()){NetworkCapabilities caps=connectivity.getNetworkCapabilities(n);if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){sender.ready(n);return;}}sender.failed("JOIN_WIFI_FIRST");return;}
   if(Build.VERSION.SDK_INT>=29){
-   WifiNetworkSpecifier spec=new WifiNetworkSpecifier.Builder().setSsid(offer.ssid).setWpa2Passphrase(offer.password).build();
+   WifiNetworkSpecifier.Builder builder=new WifiNetworkSpecifier.Builder().setSsid(offer.ssid);
+   if("sae".equals(offer.security))builder.setWpa3Passphrase(offer.password);else builder.setWpa2Passphrase(offer.password);
+   WifiNetworkSpecifier spec=builder.build();
    NetworkRequest request=new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).setNetworkSpecifier(spec).build();
    callback=new ConnectivityManager.NetworkCallback(){public void onAvailable(Network n){if(live(g))sender.ready(n);}public void onUnavailable(){if(live(g))sender.failed("NETWORK_REQUEST_DECLINED");}public void onLost(Network n){if(live(g))sender.failed("NETWORK_LOST");}};
    connectivity.requestNetwork(request,callback,main,45000);

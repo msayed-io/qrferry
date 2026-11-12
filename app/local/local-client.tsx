@@ -343,7 +343,7 @@ export function LocalClient() {
       </div>
       <div className="lf-sheet">
         <h2>{tx('ضع رمز QR داخل الإطار', 'Place the QR code inside the frame')}</h2>
-        <p role="status">{state.phase === 'connecting' ? tx('جارٍ الاتصال والتحقق…', 'Connecting and verifying…') : state.phase === 'preparing-files' ? tx('تم التحقق. تجهيز الملفات…', 'Verified. Preparing files…') : scanning ? tx('ابحث عن رمز المستقبل. تُقرأ الرموز محليًا فقط.', 'Look for the receiver’s code. Codes are decoded locally only.') : tx('سيطلب Android إذن الكاميرا إن لم يكن ممنوحًا.', 'Android asks for camera permission if it is not granted.')}</p>
+        <p role="status">{state.phase === 'connecting' ? (state.method === 'hotspot' ? tx('وافق على نافذة Android للاتصال بشبكة المستقبل…', 'Accept the Android prompt to join the receiver’s network…') : tx('جارٍ الاتصال والتحقق…', 'Connecting and verifying…')) : state.phase === 'preparing-files' ? tx('تم التحقق. تجهيز الملفات…', 'Verified. Preparing files…') : scanning ? tx('ابحث عن رمز المستقبل. تُقرأ الرموز محليًا فقط.', 'Look for the receiver’s code. Codes are decoded locally only.') : tx('سيطلب Android إذن الكاميرا إن لم يكن ممنوحًا.', 'Android asks for camera permission if it is not granted.')}</p>
         <div className="lf-row">
           <button type="button" className="glass cap tinted lf-big" disabled={!native || busy || scanning} hidden={scanning} onClick={() => void openScanner()}><DesignIcon name="qr" style={{ width: 18, height: 18 }} />{tx('فتح الكاميرا', 'Open camera')}</button>
           {scanning && <button type="button" className="glass cap lf-big" onClick={closeCamera}>{tx('إغلاق', 'Close')}</button>}
@@ -360,13 +360,12 @@ export function LocalClient() {
           <DesignIcon name="qr" style={{ width: 44, height: 44 }} />
         </div>
       </div>
-      {/* The plate already narrates the preparation, so the status line only
-          speaks once there is something the plate cannot say. */}
-      {(state.qrReady || state.authenticated) && <p className="lf-status" role="status">{state.authenticated ? tx('تم التحقق من المرسل؛ سيبدأ النقل.', 'Sender verified; the transfer will start.') : <>{tx('يعمل الآن:', 'Active path:')} <b>{methodLabel}</b></>}</p>}
       <div className="lf-bar"><div className="glass lf-bx lf-bx-compact">
         {!(state.qrReady || state.authenticated || state.phase === 'preparing')
           ? <button type="button" className="glass cap tinted lf-act" disabled={!native || busy} onClick={() => void run(() => NativeLocal.startReceive({ method: 'auto' }))}><DesignIcon name="wifi" style={{ width: 18, height: 18 }} />{tx('بدء الاتصال', 'Start link')}</button>
-          : <span className="lf-live"><i />{qrShown ? tx('الرمز جاهز', 'Code ready') : tx('جارٍ عرض الرمز…', 'Rendering the code…')}</span>}
+          : <span className="lf-live"><i />{state.authenticated
+              ? tx('تم التحقق من المرسل', 'Sender verified')
+              : qrShown ? `${tx('الرمز جاهز', 'Code ready')} · ${methodLabel}` : tx('جارٍ عرض الرمز…', 'Rendering the code…')}</span>}
         <button type="button" className="glass cap lf-act lf-act-quiet" onClick={() => void end()}>{tx('إلغاء', 'Cancel')}</button>
       </div></div>
     </>}

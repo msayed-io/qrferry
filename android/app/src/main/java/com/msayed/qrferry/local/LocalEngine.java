@@ -72,6 +72,7 @@ public final class LocalEngine implements AutoCloseable {
   try{listening=(SSLServerSocket)fresh.server.getServerSocketFactory().createServerSocket(0,4);}catch(Exception e){fresh.close();throw e;}
   listening.setEnabledProtocols(protocols(listening.getSupportedProtocols()));
   LocalPairing offer=new LocalPairing(UUID.randomUUID().toString(),host,listening.getLocalPort(),fresh.fingerprint,LocalPairing.token(),ssid,password,chosen,System.currentTimeMillis()+5*60*1000);
+  offer.security=wifi.security();
   synchronized(this){if(epoch.get()!=g){listening.close();fresh.close();return;}identity=fresh;server=listening;pairing=offer;method=chosen;state("waiting");}
   while(epoch.get()==g&&!listening.isClosed()){
    SSLSocket candidate=null;

@@ -153,6 +153,18 @@ public class LocalUiTest {
     assertEquals("Native preview Y must not duplicate the system inset",web[1]+bounds.optDouble("y")*scale,nativeView[1],2.0);
     assertEquals(bounds.optDouble("width")*scale,p.getWidth(),2.0);assertEquals(bounds.optDouble("height")*scale,p.getHeight(),2.0);
    });
+   // Arabic devices are RTL, and the native overlay used to be anchored with the
+   // default START gravity: it landed on the right edge, off its plate. The same
+   // rects must stay aligned when the window is mirrored.
+   scenario.onActivity(activity->activity.getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL));
+   assertEquals("true",js(view,"(()=>{window.dispatchEvent(new Event('resize'));return true})()"));
+   Thread.sleep(600);
+   scenario.onActivity(activity->{
+    PreviewView p=preview(activity.getWindow().getDecorView());assertNotNull("Preview vanished under RTL",p);
+    int[] web=new int[2],nativeView=new int[2];view.getLocationOnScreen(web);p.getLocationOnScreen(nativeView);double scale=view.getWidth()/bounds.optDouble("viewport");
+    assertEquals("RTL must not move the native preview",web[0]+bounds.optDouble("x")*scale,nativeView[0],2.0);
+    assertEquals("RTL must not move the native preview",web[1]+bounds.optDouble("y")*scale,nativeView[1],2.0);
+   });
    ProcessCameraProvider provider=ProcessCameraProvider.getInstance(context).get(10,TimeUnit.SECONDS);AtomicReference<List<CameraInfo>>cameras=new AtomicReference<>();InstrumentationRegistry.getInstrumentation().runOnMainSync(()->cameras.set(provider.getAvailableCameraInfos()));
    scenario.moveToState(Lifecycle.State.CREATED);
    until("Native camera view survived activity pause",()->{AtomicBoolean removed=new AtomicBoolean();scenario.onActivity(activity->removed.set(preview(activity.getWindow().getDecorView())==null));return removed.get();},5000);

@@ -253,6 +253,16 @@ public class LocalNativeTest {
   assertEquals(1,files.addUris(Collections.singletonList(UnknownLengthProvider.URI),0,files.fileWorkGeneration()).length());assertEquals(1,files.sources().size());
  }
 
+ /** The automatic plan must only offer a transport the QR can actually carry:
+  *  a Wi-Fi Direct group needs the owner's P2P address and cannot be joined from
+  *  an SSID + passphrase, so it is never chosen automatically. */
+ @Test public void automaticTransportPlanNeverOffersWifiDirect()throws Exception{
+  LocalNetwork network=new LocalNetwork(InstrumentationRegistry.getInstrumentation().getTargetContext());
+  java.lang.reflect.Method plan=LocalNetwork.class.getDeclaredMethod("plan",String.class);plan.setAccessible(true);
+  @SuppressWarnings("unchecked") java.util.List<String> steps=(java.util.List<String>)plan.invoke(network,"auto");
+  assertFalse("Wi-Fi Direct cannot be joined from a QR",steps.contains("direct"));
+  assertTrue("a joinable transport must be offered",steps.contains("hotspot")||steps.contains("lan"));
+ }
  @Test public void networkCancellationInvalidatesStartsBeforeTheMainQueueRuns()throws Exception{
   LocalNetwork network=new LocalNetwork(InstrumentationRegistry.getInstrumentation().getTargetContext());java.util.concurrent.atomic.AtomicInteger callbacks=new java.util.concurrent.atomic.AtomicInteger();
   LocalNetwork.Receiver receiver=new LocalNetwork.Receiver(){public void ready(String host,String ssid,String password,String method){callbacks.incrementAndGet();}public void failed(String code){callbacks.incrementAndGet();}};
