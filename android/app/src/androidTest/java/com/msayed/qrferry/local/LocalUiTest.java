@@ -281,6 +281,10 @@ public class LocalUiTest {
    for(int i=0;i<cards.length();i++){JSONObject card=cards.optJSONObject(i);
     assertEquals("Every card keeps the same inset",16.0,card.optDouble("l"),1.0);
     assertEquals("Every card keeps the same width",drift.optDouble("win")-32,card.optDouble("w"),1.0);}
+   // The name row must fit inside its card at this density: the save capsule used
+   // to hang over the card's edge on a 320dp screen.
+   assertEquals("The name row must stay inside its card","true",
+    js(view,"(()=>{const c=document.querySelector('.lf-p-card'),s=c.querySelector('.lf-p-save'),i=c.querySelector('.lf-p-input');if(!s||!i)return false;const cr=c.getBoundingClientRect(),sr=s.getBoundingClientRect(),ir=i.getBoundingClientRect();return sr.right<=cr.right+0.5&&sr.left>=cr.left-0.5&&ir.left>=cr.left-0.5&&ir.right<=cr.right+0.5})()"));
    // The confirmation line is reserved, so saving never shifts the cards.
    assertEquals("true",js(view,"(()=>{const n=document.querySelector('.lf-p-note'),c=n.closest('.lf-p-card');const a=c.getBoundingClientRect().height;n.textContent='تم حفظ الاسم.';const b=c.getBoundingClientRect().height;n.textContent='\u00A0';return Math.abs(a-b)<0.5})()"));
    shot("profile");

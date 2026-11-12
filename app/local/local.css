@@ -312,9 +312,12 @@ html[data-native][data-camera=on],html[data-native][data-camera=on] body,html[da
 .lf-p-hero{display:grid;justify-items:center;gap:14px;padding:10px 0 4px}
 .lf-p-hero .lf-av{box-shadow:0 14px 34px rgba(0,0,0,.34)}
 .lf-p-camera{height:44px;border-radius:999px;padding:0 18px;display:inline-flex;align-items:center;gap:8px;font-size:14px}
-.lf-p-card{min-width:0;box-sizing:border-box;border-radius:26px;padding:16px;display:grid;gap:10px;background:var(--card)}
+.lf-p-card{min-width:0;box-sizing:border-box;border-radius:26px;padding:16px;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;background:var(--card)}
 .lf-p-label{color:var(--label2);font-size:13px;font-weight:600;margin:0}
-.lf-p-field{display:flex;align-items:center;gap:8px}
+.lf-p-field{display:flex;align-items:center;gap:8px;min-width:0}
+/* A flex row inside a grid card: the input may shrink, the button may not, and
+   neither may push the other outside the card on a narrow screen. */
+.lf-p-field .lf-p-input{width:100%}
 .lf-p-input{flex:1;min-width:0;height:52px;border-radius:999px;border:0;padding:0 20px;font:inherit;font-size:16px;
   background:var(--fill);color:var(--label);box-shadow:inset 0 0 0 1px var(--sep)}
 .lf-p-input:focus{outline:none;box-shadow:inset 0 0 0 1.5px var(--tint)}
