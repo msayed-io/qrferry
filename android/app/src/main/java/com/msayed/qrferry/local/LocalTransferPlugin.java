@@ -172,7 +172,9 @@ public class LocalTransferPlugin extends Plugin {
   FrameLayout layer=new FrameLayout(getActivity());
   layer.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);
   if(webBackground==null)webBackground=webColor(web);
-  parent.addView(layer,Math.max(0,parent.indexOfChild(web)),null);
+  // The two-argument form lets the parent build params of its own type; passing
+  // null explicitly reaches generateLayoutParams(null) and throws.
+  parent.addView(layer,Math.max(0,parent.indexOfChild(web)));
   positionLayer(layer,call);
   FrameLayout host=new FrameLayout(getActivity());
   host.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);
