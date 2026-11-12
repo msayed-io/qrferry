@@ -12,6 +12,9 @@ import java.util.*;
 
 /** Owns only the group/hotspot/network request created by this session. */
 public final class LocalNetwork implements AutoCloseable {
+ /** One stable tag: the transfer path is impossible to debug from a phone report
+  *  without it. `adb logcat -s QRFerryLocal` is all a user has to run. */
+ private static void log(String message){Log.i("QRFerryLocal",message);}
  public interface Receiver {void ready(String host,String ssid,String password,String method);void failed(String code);}
  public interface Sender {void ready(Network network);void failed(String code);}
  private final Context context;private final Handler main=new Handler(Looper.getMainLooper());

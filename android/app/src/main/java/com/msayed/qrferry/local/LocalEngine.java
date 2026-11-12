@@ -2,6 +2,7 @@ package com.msayed.qrferry.local;
 
 import android.content.Context;
 import android.net.Network;
+import android.util.Log;
 import org.json.*;
 import java.io.*;
 import java.net.*;
