@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.*;
 import android.media.ExifInterface;
-import android.net.Uri;
 import android.util.Base64;
 import java.io.*;
 import java.util.UUID;
@@ -22,11 +21,12 @@ public final class LocalProfile {
   if(id.isEmpty()){
    id=UUID.randomUUID().toString();
    String name=defaultName();
-   SharedPreferences.Editor editor=prefs.edit()
+   // commit(), not apply(): the identity has to exist before any screen draws.
+   prefs.edit()
     .putString("userId",id).putString("displayName",name)
     .putString("avatarType","default").putInt("avatarIndex",(int)(Math.random()*10))
-    .putInt("avatarVersion",0).putLong("createdAt",System.currentTimeMillis());
-   editor.apply();
+    .putInt("avatarVersion",0).putLong("createdAt",System.currentTimeMillis())
+    .commit();
   }
   return snapshot();
  }
@@ -34,7 +34,7 @@ public final class LocalProfile {
  synchronized org.json.JSONObject snapshot(){
   try{
    String name=prefs.getString("displayName","");
-   if(name.isEmpty()){name=defaultName();prefs.edit().putString("displayName",name).apply();}
+   if(name.isEmpty()){name=defaultName();prefs.edit().putString("displayName",name).commit();}
    String type=prefs.getString("avatarType","default");
    int version=prefs.getInt("avatarVersion",0);
    return new org.json.JSONObject()
@@ -45,6 +45,7 @@ public final class LocalProfile {
     .put("avatarVersion",version)
     .put("hasCustomAvatar","custom".equals(type)&&avatarFile(version).isFile())
     .put("avatar",avatarDataUrl(AVATAR_LOCAL))
+    .put("avatarUrl",avatarUrl(version))
     .put("createdAt",prefs.getLong("createdAt",0))
     .put("updatedAt",prefs.getLong("updatedAt",0));
   }catch(org.json.JSONException e){return new org.json.JSONObject();}
@@ -61,7 +62,7 @@ public final class LocalProfile {
  synchronized org.json.JSONObject setName(String raw){
   String name=raw==null?"":raw.trim();
   if(name.isEmpty())name=defaultName();
-  prefs.edit().putString("displayName",name).putLong("updatedAt",System.currentTimeMillis()).apply();
+  prefs.edit().putString("displayName",name).putLong("updatedAt",System.currentTimeMillis()).commit();
   return snapshot();
  }
 
@@ -71,12 +72,12 @@ public final class LocalProfile {
  synchronized org.json.JSONObject setDefaultAvatar(int index){
   int safe=Math.max(0,Math.min(9,index));
   prefs.edit().putString("avatarType","default").putInt("avatarIndex",safe)
-   .putLong("updatedAt",System.currentTimeMillis()).apply();
+   .putLong("updatedAt",System.currentTimeMillis()).commit();
   return snapshot();
  }
 
  /** Writes the new picture atomically, then drops the superseded file. */
- synchronized org.json.JSONObject setCustomAvatar(Uri source)throws IOException{
+ synchronized org.json.JSONObject setCustomAvatar(byte[] source)throws IOException{
   Bitmap square=decodeSquare(source,AVATAR_LOCAL);
   if(square==null)throw new IOException("AVATAR_DECODE_FAILED");
   int version=prefs.getInt("avatarVersion",0)+1;
@@ -90,8 +91,7 @@ public final class LocalProfile {
   }catch(IOException e){temp.delete();throw e;}
   if(!temp.renameTo(target)){temp.delete();throw new IOException("AVATAR_RENAME_FAILED");}
   prefs.edit().putString("avatarType","custom").putInt("avatarVersion",version)
-   .putLong("updatedAt",System.currentTimeMillis()).apply();
-  for(File file:avatars())if(!file.equals(target))file.delete();
+   .putLong("updatedAt",System.currentTimeMillis()).commit();
   return snapshot();
  }
 
@@ -121,35 +121,35 @@ public final class LocalProfile {
   return "data:image/jpeg;base64,"+Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP);
  }
 
- File avatarFile(int version){return new File(new File(context.getFilesDir(),"profile"),"avatar_v"+version+".jpg");}
+ /** One canonical file, so nothing can pile up; the version invalidates caches. */
+ File avatarFile(int version){return new File(new File(context.getFilesDir(),"profile"),"avatar.jpg");}
  private File[] avatars(){File dir=new File(context.getFilesDir(),"profile");File[] files=dir.listFiles();return files==null?new File[0]:files;}
+ /** Readable by the WebView under Capacitor's own scheme, with a version query. */
+ String avatarUrl(int version){
+  if(!"custom".equals(prefs.getString("avatarType","default")))return "";
+  return "https://localhost/_capacitor_file_"+avatarFile(version).getAbsolutePath()+"?v="+version;
+ }
  private Bitmap read(File file){return file.isFile()?BitmapFactory.decodeFile(file.getAbsolutePath()):null;}
 
  /** Bounded decode: pre-scale while reading so a 100MP photo cannot exhaust the heap. */
- private Bitmap decodeSquare(Uri uri,int target)throws IOException{
+ private Bitmap decodeSquare(byte[] data,int target)throws IOException{
+  if(data==null||data.length==0)return null;
   BitmapFactory.Options probe=new BitmapFactory.Options();probe.inJustDecodeBounds=true;
-  try(InputStream in=context.getContentResolver().openInputStream(uri)){
-   if(in==null)return null;
-   BitmapFactory.decodeStream(in,null,probe);
-  }
+  BitmapFactory.decodeByteArray(data,0,data.length,probe);
   if(probe.outWidth<=0||probe.outHeight<=0)return null;
   int sample=1;while(Math.min(probe.outWidth,probe.outHeight)/(sample*2)>=target)sample*=2;
   BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=sample;
-  Bitmap decoded;
-  try(InputStream in=context.getContentResolver().openInputStream(uri)){
-   if(in==null)return null;
-   decoded=BitmapFactory.decodeStream(in,null,options);
-  }
+  Bitmap decoded=BitmapFactory.decodeByteArray(data,0,data.length,options);
   if(decoded==null)return null;
-  Bitmap rotated=rotate(decoded,uri);
+  Bitmap rotated=rotate(decoded,data);
   if(rotated!=decoded)decoded.recycle();
   return scaleSquare(rotated,target);
  }
 
- private Bitmap rotate(Bitmap bitmap,Uri uri){
+ private Bitmap rotate(Bitmap bitmap,byte[] data){
   int degrees=0;
-  try(InputStream in=context.getContentResolver().openInputStream(uri)){
-   if(in!=null){
+  try(ByteArrayInputStream in=new ByteArrayInputStream(data)){
+   {
     ExifInterface exif=new ExifInterface(in);
     int orientation=exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,ExifInterface.ORIENTATION_NORMAL);
     if(orientation==ExifInterface.ORIENTATION_ROTATE_90)degrees=90;

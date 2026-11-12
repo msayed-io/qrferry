@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ProfilePill, ProfileScreen, RadarConfirm, RadarScreen, useProfile } from './radar-view';
+import { AvatarBubble, PeerCircles, ProfileButton, ProfileScreen, RadarConfirm, useProfile } from './radar-view';
 import { useRadar } from './use-radar';
 import { createPortal } from 'react-dom';
 import { Button, Glass } from 'glisse';
@@ -9,7 +9,6 @@ import { AppLink, usePathname, useRouter } from '../router';
 import { LiquidChoices } from '../liquid-controls';
 import { CircleButton } from '../design-system';
 import { DesignIcon } from '../design-icons';
-import { AppMenu } from '../app-menu';
 import { BackChevron, ProgressiveBlur } from '../progressive-blur';
 import { NativeLocal, displayLabel, emptyLocalState, localSessionVisible, localSupported, transferRatio, type LocalFile, type LocalState, type NativeBounds } from '../../lib/native-local';
 import './local.css';
@@ -274,7 +273,9 @@ export function LocalClient() {
     profile,
     role: current === 'receive' ? 'receive' : 'send',
     onPaired: raw => { void run(() => NativeLocal.join({ raw })); },
-    onError: codeName => setError(codeName),
+    // A radar that cannot start must never block the scanner: the code path works
+    // on its own, so only pairing failures reach the page-level banner.
+    onError: codeName => { if (['QR_NOT_READY', 'CONNECT_TIMEOUT', 'REQUEST_TIMEOUT', 'INVALID_OR_EXPIRED_QR'].includes(codeName)) setError(codeName); },
   });
   // The receiver is only visible while its page is in front of the user.
   useEffect(() => {
@@ -282,8 +283,10 @@ export function LocalClient() {
     void radar.advertise(profile);
     return () => { void radar.stop(); };
   }, [current, profile?.userId, profile?.displayName, profile?.avatarVersion, visible]);
+  // Camera and radar run together: scanning a code and picking a nearby device
+  // are two ways to the same pairing, so both are live on this screen.
   useEffect(() => {
-    if (current !== 'radar' || !profile || !visible) return;
+    if (current !== 'scan' || !profile || !visible) return;
     void radar.discover();
     return () => { void radar.stop(); };
   }, [current, profile?.userId, visible]);
@@ -295,10 +298,11 @@ export function LocalClient() {
   const end = async () => { await run(() => NativeLocal.disconnect()); router.replace('/local'); };
   const back = () => { if (sessionPage || current === 'scan') void end(); else if (current === 'home') router.push('/'); else router.push(current === 'receive' || current === 'setup' ? '/local' : '/local'); };
   const title = current === 'send' ? tx('إرسال', 'Send') : current === 'setup' ? tx('التحضير', 'Prepare') : current === 'scan' ? tx('مسح للاتصال', 'Scan to connect') : current === 'receive' ? tx('استلام', 'Receive') : sessionPage ? tx('متصل', 'Connected') : tx('نقل محلي', 'Local transfer');
+  const nearPeers = radar.state.peers;
   const scanHeadline = found ? tx('تم العثور على جهاز', 'Device found')
     : connecting || state.phase === 'connecting' ? tx('جارٍ الاتصال…', 'Connecting…')
       : code && !scanning ? tx('تعذر إكمال المسح', 'The scan did not complete')
-        : tx('البحث عن مستلمين…', 'Looking for receivers…');
+        : nearPeers.length ? tx('اختر مستلمًا', 'Choose a receiver') : tx('البحث عن مستلمين…', 'Looking for receivers…');
   const methodLabel = state.method === 'direct' ? 'Wi-Fi Direct' : state.method === 'hotspot' ? tx('نقطة محلية', 'Local hotspot') : state.method === 'lan' ? tx('شبكة محلية', 'Local Wi-Fi') : tx('تلقائي', 'Automatic');
   // Every indicator must be green: the link scope, Wi-Fi, and a storage route
   // (all-files, or the MediaStore fallback that every Android 10+ device has).
@@ -306,14 +310,8 @@ export function LocalClient() {
   const setupReady = !!state.nearby && !!state.wifi && (!legacyLocation || state.locationOn !== false) && (!!state.storageReady || (state.sdk ?? 0) >= 29);
   const done = state.files.filter(f => f.status === 'complete').length;
 
-  if (current === 'radar') return <>
-    <RadarScreen ar={ar} tx={tx} radar={radar.state} mode={radar.state.mode} hasFiles={!!state.selected.length}
-      onConnect={peer => void radar.connect(peer)} onStart={() => { if (profile) void radar.discover(); }}
-      onBack={() => router.push('/local/send')} onUseQr={() => router.push('/local/scan')} />
-    {radar.state.request && <RadarConfirm ar={ar} tx={tx} request={radar.state.request} busy={radar.state.busy}
-      onAccept={() => void radar.accept()} onReject={() => void radar.reject()} />}
-  </>;
-  if (current === 'profile') return <ProfileScreen tx={tx} profile={profile} onSaved={setProfile} onBack={() => router.push('/local')} />;
+  if (current === 'profile') return <ProfileScreen ar={ar} tx={tx} profile={profile} onSaved={setProfile}
+    onBack={() => router.push('/local')} onHistory={() => router.push('/history')} onPrivacy={() => router.push('/privacy')} />;
   return <main className={`local-page ${sessionPage ? 'local-session' : ''}`} data-page="local" data-screen={current} data-phase={state.phase}>
     <header className={current === 'home' ? 'app-header lf-home-header' : 'support-toolbar lf-toolbar'}>
       {current === 'home' ? <>
@@ -324,14 +322,11 @@ export function LocalClient() {
           </button>
           <button type="button" className="brand-mode" onClick={back} aria-label={tx('العودة للنقل البصري', 'Return to optical transfer')}><DesignIcon name="chev" /></button>
         </div>
-        <AppMenu onNavigate={href => router.push(href)} />
+        <ProfileButton profile={profile} label={tx('ملفي الشخصي', 'My profile')} onOpen={() => router.push('/local/profile')} />
       </> : <>
         <Button className="support-exit" icon={<BackChevron />} aria-label={tx('رجوع', 'Back')} onClick={back} />
         <Glass className="support-title"><h1>{title}</h1></Glass>
         <div className="lf-toolbar-end">
-          {/* The identity capsule stays reachable on every local screen. */}
-          <ProfilePill profile={profile} label={tx('ملفي', 'Me')} onOpen={() => router.push('/local/profile')} />
-          {current === 'send' && <Button className="lf-tool" icon={<DesignIcon name="wifi" />} aria-label={tx('الاقتران القريب بدون كاميرا', 'Pair without a camera')} onClick={() => router.push('/local/radar')} />}
           {current === 'send' && <Button className="lf-tool" icon={<DesignIcon name="folder" />} aria-label={tx('تصفح ملفات الجهاز', 'Browse device files')} disabled={!native} onClick={() => void pick()} />}
         </div>
       </>}
@@ -450,6 +445,11 @@ export function LocalClient() {
             </div>
           </> : <>
             <p className="lf-s-msg">{!state.camera ? tx('يحتاج المسح إلى الكاميرا. سيظهر إذن Android الرسمي.', 'Scanning needs the camera. Android’s own dialog will appear.') : state.phase === 'connecting' ? (state.method === 'hotspot' ? tx('وافق على نافذة Android للاتصال بشبكة المستقبل…', 'Accept the Android prompt to join the receiver’s network…') : tx('جارٍ الاتصال والتحقق…', 'Connecting and verifying…')) : state.phase === 'preparing-files' ? tx('تم التحقق. تجهيز الملفات…', 'Verified. Preparing files…') : tx('وجّه الكاميرا إلى رمز الاقتران على جهاز المستقبل.', 'Point the camera at the pairing code on the receiver.')}</p>
+            {!!nearPeers.length && <PeerCircles peers={nearPeers} disabled={!state.selected.length || !!radar.state.outgoing || !!radar.state.connected}
+              ar={ar} onPick={endpointId => { const peer = nearPeers.find(entry => entry.endpointId === endpointId); if (peer) void radar.connect(peer); }} />}
+            {radar.state.outgoing && <p className="lf-s-wait" role="status">{radar.state.outgoing.digits
+              ? tx(`قارن الرمز ${radar.state.outgoing.digits} مع جهاز المستقبل`, `Compare code ${radar.state.outgoing.digits} with the receiver`)
+              : tx(`جارٍ الاتصال بـ ${radar.state.outgoing.name}…`, `Connecting to ${radar.state.outgoing.name}…`)}</p>}
             <div className="lf-s-actions">
               {!scanning && !state.authenticated && <button type="button" className="glass cap tinted lf-s-big" disabled={!native || busy} onClick={() => void openScanner()}>
                 <DesignIcon name="cam" style={{ width: 19, height: 19 }} />{!state.camera ? tx('السماح بالكاميرا', 'Allow the camera') : tx('فتح الكاميرا', 'Open camera')}
@@ -461,17 +461,24 @@ export function LocalClient() {
       </div>
     )}
 
-    {current === 'receive' && radar.state.request && <RadarConfirm ar={ar} tx={tx} request={radar.state.request} busy={radar.state.busy}
+    {current === 'receive' && radar.state.request && <RadarConfirm tx={tx} request={radar.state.request} busy={radar.state.busy}
       onAccept={() => void radar.accept()} onReject={() => void radar.reject()} />}
 
     {current === 'receive' && <>
       <div className="lf-qr-wrap" ref={surface}>
+       <div className="lf-qr-stack">
         <div className="local-native-surface lf-qr" ref={qrSurface} aria-label={tx('رمز الاقتران الأصلي', 'Native pairing QR')}>
           {/* While the link is being prepared this plate is a quiet
               placeholder; the live code is drawn by the native layer into
               exactly this box. */}
           <DesignIcon name="qr" style={{ width: 44, height: 44 }} />
         </div>
+        {/* How this device appears on the sender's radar, directly under the code. */}
+        <div className="lf-who">
+          <AvatarBubble index={profile?.defaultAvatarIndex ?? 0} image={profile?.avatar || undefined} size={22} />
+          <b><bdi>{profile?.displayName || '…'}</bdi></b>
+        </div>
+       </div>
       </div>
       <div className="lf-bar"><div className="glass lf-bx lf-bx-compact">
         {!(state.qrReady || state.authenticated || state.phase === 'preparing')

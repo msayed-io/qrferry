@@ -19,6 +19,7 @@ import com.google.zxing.*;
 import com.google.zxing.common.BitMatrix;
 import org.json.*;
 import java.util.*;
+import java.io.*;
 import java.util.concurrent.*;
 
 @CapacitorPlugin(name="QRFerryLocal", permissions={
@@ -175,25 +176,32 @@ public class LocalTransferPlugin extends Plugin {
 
  // ---- radar: profile, advertisement and handshake ----
 
+ private static byte[] readAll(InputStream in)throws IOException{
+  ByteArrayOutputStream out=new ByteArrayOutputStream(Math.max(1024,in.available()));
+  byte[] buffer=new byte[8192];int read;
+  while((read=in.read(buffer))>0)out.write(buffer,0,read);
+  return out.toByteArray();
+ }
  private String bluetoothAlias(){return Build.VERSION.SDK_INT>=31?"bluetooth":"bluetoothLegacy";}
  private boolean bluetoothGranted(){return getPermissionState(bluetoothAlias())==PermissionState.GRANTED;}
  /** The profile is created the first time the radar screen loads, with no dialog
   *  and no visible step. It never touches the network. */
  @PluginMethod public void profileGet(PluginCall call){
-  worker.execute(()->{try{
+  try{
    profile.setNameWord(call.getString("word",""));
-   JSObject data=new JSObject(profile.getOrCreate().toString());
-   // A legacy Android reports location services here, not for the profile.
-   call.resolve(data);
-  }catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+   call.resolve(new JSObject(profile.getOrCreate().toString()));
+  }catch(Exception e){call.reject("PROFILE_FAILED",e);}
  }
  @PluginMethod public void profileSetName(PluginCall call){
   String name=call.getString("name","");
-  worker.execute(()->{try{call.resolve(new JSObject(profile.setName(name).toString()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+  try{
+   // The page gets the committed record back, so its state updates immediately.
+   call.resolve(new JSObject(profile.setName(name).toString()));
+  }catch(Exception e){call.reject("PROFILE_FAILED",e);}
  }
  @PluginMethod public void profileSetDefaultAvatar(PluginCall call){
   int index=call.getInt("index",0);
-  worker.execute(()->{try{call.resolve(new JSObject(profile.setDefaultAvatar(index).toString()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+  try{call.resolve(new JSObject(profile.setDefaultAvatar(index).toString()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}
  }
  /** The official photo picker needs no storage permission at all. */
  @PluginMethod public void profilePickAvatar(PluginCall call){
@@ -211,8 +219,14 @@ public class LocalTransferPlugin extends Plugin {
  @ActivityCallback private void avatarPicked(PluginCall call,ActivityResult result){
   if(call==null)return;
   if(result.getResultCode()!=Activity.RESULT_OK||result.getData()==null||result.getData().getData()==null){call.reject("AVATAR_CANCELLED");return;}
-  Uri source=result.getData().getData();
-  worker.execute(()->{try{call.resolve(new JSObject(profile.setCustomAvatar(source).toString()));}
+  final Uri source=result.getData().getData();
+  final byte[] bytes;
+  try(InputStream in=getContext().getContentResolver().openInputStream(source)){
+   // Read it now: the temporary grant on the picked URI can end with the callback.
+   bytes=in==null?new byte[0]:readAll(in);
+  }catch(Exception e){call.reject("AVATAR_FAILED",e);return;}
+  if(bytes.length==0){call.reject("AVATAR_FAILED");return;}
+  worker.execute(()->{try{call.resolve(new JSObject(profile.setCustomAvatar(bytes).toString()));}
    catch(Exception e){call.reject("AVATAR_FAILED",e);}});
  }
 

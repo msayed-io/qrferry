@@ -9,7 +9,7 @@ import { DesignIcon } from "./design-icons";
 import { BridgeViewContext, type BridgeView } from "./design-system";
 import { BridgePage } from "./route-pages";
 const BridgeClient = BridgePage.View;
-import { AppMenu } from "./app-menu";
+import { ProfileButton, useProfile } from "./local/radar-view";
 import { SupportReturnContext, SUPPORT_ROUTES } from "./support-navigation";
 import { RouteErrorBoundary } from "./global-error";
 import { ProgressiveBlur } from "./progressive-blur";
@@ -26,6 +26,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const localRoute = path === "/local" || path.startsWith("/local/");
   const standalone = SUPPORT_ROUTES.includes(path) || localRoute;
   const [returnPath, setReturnPath] = useState("/");
+  // The profile entry replaced the menu in the header: same round glass, but the
+  // user's own picture, and one tap opens the profile screen.
+  const [headerProfile] = useProfile("User");
   const [connected, setConnected] = useState(false);
   const [view, setView] = useState<BridgeView>("pair");
   const bridgeRoute = path === "/bridge" || path === "/pc";
@@ -67,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="3"/><rect x="17" y="3" width="10" height="10" rx="3"/><rect x="3" y="17" width="10" height="10" rx="3"/><rect x="17" y="17" width="10" height="10" rx="3" fill="var(--tint)" stroke="none"/></svg>
           QRFerry
         </AppLink>{localSupported() && <button type="button" className="brand-mode" onClick={() => router.push("/local")} aria-label={lang === "ar" ? "فتح النقل المحلي بين هواتف Android" : "Open local Android transfer"}><ChevronDown size={18}/></button>}</div>
-        <AppMenu onNavigate={href => { setReturnPath(path); router.push(href); }} />
+        <ProfileButton profile={headerProfile} label={lang === "ar" ? "ملفي الشخصي" : "My profile"} onOpen={() => { setReturnPath(path); router.push("/local/profile"); }} />
       </header>}
       <div id="route-content" hidden={bridgeRoute}>{children}</div>
       {(bridgeMounted || bridgeRoute) && <div id="bridge-content" hidden={!bridgeRoute}><RouteErrorBoundary><Suspense fallback={<div role="status">…</div>}><BridgeClient /></Suspense></RouteErrorBoundary></div>}
