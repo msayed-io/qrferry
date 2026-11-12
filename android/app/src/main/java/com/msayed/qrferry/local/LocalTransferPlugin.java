@@ -178,6 +178,12 @@ public class LocalTransferPlugin extends Plugin {
 
  /** Copies the record field by field: no JSON string is parsed on the way out,
   *  so nothing here can throw on a value the profile already holds. */
+ /** The profile field is created with the plugin; this only protects the calls
+  *  against a plugin instance that was built before the store existed. */
+ private LocalProfile profileStore(){
+  if(profile==null)profile=new LocalProfile(getContext());
+  return profile;
+ }
  private static JSObject toJS(org.json.JSONObject record){
   JSObject out=new JSObject();
   java.util.Iterator<String> keys=record.keys();
@@ -201,20 +207,20 @@ public class LocalTransferPlugin extends Plugin {
   *  and no visible step. It never touches the network. */
  @PluginMethod public void profileGet(PluginCall call){
   try{
-   profile.setNameWord(call.getString("word",""));
-   call.resolve(toJS(profile.getOrCreate()));
-  }catch(Exception e){call.reject("PROFILE_FAILED",e);}
+   profileStore().setNameWord(call.getString("word",""));
+   call.resolve(toJS(profileStore().getOrCreate()));
+  }catch(Exception e){call.reject("PROFILE_FAILED: "+e);}
  }
  @PluginMethod public void profileSetName(PluginCall call){
   String name=call.getString("name","");
   try{
    // The page gets the committed record back, so its state updates immediately.
-   call.resolve(toJS(profile.setName(name)));
-  }catch(Exception e){call.reject("PROFILE_FAILED",e);}
+   call.resolve(toJS(profileStore().setName(name)));
+  }catch(Exception e){call.reject("PROFILE_FAILED: "+e);}
  }
  @PluginMethod public void profileSetDefaultAvatar(PluginCall call){
   int index=call.getInt("index",0);
-  try{call.resolve(toJS(profile.setDefaultAvatar(index)));}catch(Exception e){call.reject("PROFILE_FAILED",e);}
+  try{call.resolve(toJS(profileStore().setDefaultAvatar(index)));}catch(Exception e){call.reject("PROFILE_FAILED: "+e);}
  }
  /** The official photo picker needs no storage permission at all. */
  @PluginMethod public void profilePickAvatar(PluginCall call){
@@ -239,8 +245,8 @@ public class LocalTransferPlugin extends Plugin {
    bytes=in==null?new byte[0]:readAll(in);
   }catch(Exception e){call.reject("AVATAR_FAILED",e);return;}
   if(bytes.length==0){call.reject("AVATAR_FAILED");return;}
-  worker.execute(()->{try{call.resolve(toJS(profile.setCustomAvatar(bytes)));}
-   catch(Exception e){call.reject("AVATAR_FAILED",e);}});
+  worker.execute(()->{try{call.resolve(toJS(profileStore().setCustomAvatar(bytes)));}
+   catch(Exception e){call.reject("AVATAR_FAILED: "+e);}});
  }
 
  private void wireRadar(){
@@ -314,7 +320,7 @@ public class LocalTransferPlugin extends Plugin {
   catch(Exception e){call.reject("QR_NOT_READY",e);}
  }
  @PluginMethod public void radarSharedAvatar(PluginCall call){
-  worker.execute(()->{try{call.resolve(new JSObject().put("avatar",profile.sharedAvatar()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+  worker.execute(()->{try{call.resolve(new JSObject().put("avatar",profileStore().sharedAvatar()));}catch(Exception e){call.reject("PROFILE_FAILED: "+e);}});
  }
 
 }
