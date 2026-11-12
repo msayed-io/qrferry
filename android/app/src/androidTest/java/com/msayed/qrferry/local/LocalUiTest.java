@@ -180,6 +180,31 @@ public class LocalUiTest {
 
  /** Prepare and Receive only, photographed on the device: the two screens that
   *  must not scroll, overlap or hide their capsules behind the top blur. */
+ /** The name is written, survives a reload of the WebView, and comes back from the
+  *  committed store rather than from page state. */
+ @Test public void profileNameIsPersistedAndReadBack()throws Exception{
+  Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();
+  try(ActivityScenario<MainActivity>scenario=ActivityScenario.launch(MainActivity.class)){
+   AtomicReference<WebView>reference=new AtomicReference<>();
+   scenario.onActivity(activity->reference.set(activity.getBridge().getWebView()));WebView view=reference.get();
+   enterLocal(view);
+   String saved="اختبار_"+System.nanoTime()%10000;
+   assertEquals("true",js(view,"(()=>{window.__qrferryProfileTest="+'"'+saved+'"'+";return true})()"));
+   scenario.onActivity(activity->activity.getBridge().getWebView().evaluateJavascript(
+    "window.Capacitor.Plugins.QRFerryLocal.profileSetName({name:window.__qrferryProfileTest}).then(p=>{window.__qrferrySaved=p.displayName})",null));
+   until("profileSetName never answered",()->"true".equals(js(view,"(()=>{return window.__qrferrySaved!==undefined})()")),15000);
+   assertEquals("The bridge must return the committed name",saved,js(view,"window.__qrferrySaved"));
+   // Reload the page: the identity must come from SharedPreferences, not from state.
+   scenario.onActivity(activity->activity.getBridge().getWebView().evaluateJavascript("location.reload()",null));
+   Thread.sleep(1500);
+   enterLocal(view);
+   scenario.onActivity(activity->activity.getBridge().getWebView().evaluateJavascript(
+    "window.Capacitor.Plugins.QRFerryLocal.profileGet({word:'User'}).then(p=>{window.__qrferryRead=p.displayName})",null));
+   until("profileGet never answered after the reload",()->"true".equals(js(view,"(()=>{return window.__qrferryRead!==undefined})()")),20000);
+   assertEquals("The name must survive a reload",saved,js(view,"window.__qrferryRead"));
+  }
+ }
  @Test public void prepareAndReceiveScreensKeepTheAppChrome()throws Exception{
   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
   LocalEngine engine=LocalTransferService.engine(context);engine.disconnect();
@@ -200,6 +225,10 @@ public class LocalUiTest {
    assertEquals("true",js(view,"(()=>{const b=document.querySelector('.lf-bar .lf-big');if(!b||b.disabled)return false;b.click();return true})()"));
    until("Receive did not open",()->"true".equals(js(view,"document.querySelector('.local-page')?.dataset.screen==='receive'")),15000);
    until("Receive code surface missing",()->"true".equals(js(view,"Boolean(document.querySelector('.lf-qr'))")),15000);
+   // The identity is created before the first draw and must reach this page: the
+   // row under the code shows the generated name, not a placeholder.
+   until("The profile name never reached the receive page",()->"true".equals(js(view,"(()=>{const b=document.querySelector('.lf-who b');if(!b)return false;const t=(b.textContent||'').trim();return t.length>2&&t!=='…'})()")),20000);
+   assertEquals("The generated name must be the documented shape",true,js(view,"/^.+_\\d{4}$/.test((document.querySelector('.lf-who b').textContent||'').trim())").equals("true"));
    shot("receive");
    // The code plate is a fixed small square, and when the native code does appear
    // it must be exactly that square: it used to be sized to the page-filling
