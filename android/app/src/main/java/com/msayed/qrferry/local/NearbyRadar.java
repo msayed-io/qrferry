@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
  * transfer itself stays on the TLS session the QR path already uses, so a radar
  * pairing and a scanned pairing end in exactly the same state.
  */
-public final class NearbyRadar implements ConnectionLifecycleCallback {
+public final class NearbyRadar extends ConnectionLifecycleCallback {
  public interface Events {
   void radarStatus(String state,String code);
   void radarPeer(String endpointId,String payload,boolean lost);
