@@ -176,6 +176,19 @@ public class LocalTransferPlugin extends Plugin {
 
  // ---- radar: profile, advertisement and handshake ----
 
+ /** Copies the record field by field: no JSON string is parsed on the way out,
+  *  so nothing here can throw on a value the profile already holds. */
+ private static JSObject toJS(org.json.JSONObject record){
+  JSObject out=new JSObject();
+  java.util.Iterator<String> keys=record.keys();
+  while(keys.hasNext()){
+   String key=keys.next();
+   Object value=record.opt(key);
+   if(value instanceof org.json.JSONObject||value instanceof org.json.JSONArray)out.put(key,String.valueOf(value));
+   else out.put(key,value);
+  }
+  return out;
+ }
  private static byte[] readAll(InputStream in)throws IOException{
   ByteArrayOutputStream out=new ByteArrayOutputStream(Math.max(1024,in.available()));
   byte[] buffer=new byte[8192];int read;
@@ -189,19 +202,19 @@ public class LocalTransferPlugin extends Plugin {
  @PluginMethod public void profileGet(PluginCall call){
   try{
    profile.setNameWord(call.getString("word",""));
-   call.resolve(new JSObject(profile.getOrCreate().toString()));
+   call.resolve(toJS(profile.getOrCreate()));
   }catch(Exception e){call.reject("PROFILE_FAILED",e);}
  }
  @PluginMethod public void profileSetName(PluginCall call){
   String name=call.getString("name","");
   try{
    // The page gets the committed record back, so its state updates immediately.
-   call.resolve(new JSObject(profile.setName(name).toString()));
+   call.resolve(toJS(profile.setName(name)));
   }catch(Exception e){call.reject("PROFILE_FAILED",e);}
  }
  @PluginMethod public void profileSetDefaultAvatar(PluginCall call){
   int index=call.getInt("index",0);
-  try{call.resolve(new JSObject(profile.setDefaultAvatar(index).toString()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}
+  try{call.resolve(toJS(profile.setDefaultAvatar(index)));}catch(Exception e){call.reject("PROFILE_FAILED",e);}
  }
  /** The official photo picker needs no storage permission at all. */
  @PluginMethod public void profilePickAvatar(PluginCall call){
@@ -226,7 +239,7 @@ public class LocalTransferPlugin extends Plugin {
    bytes=in==null?new byte[0]:readAll(in);
   }catch(Exception e){call.reject("AVATAR_FAILED",e);return;}
   if(bytes.length==0){call.reject("AVATAR_FAILED");return;}
-  worker.execute(()->{try{call.resolve(new JSObject(profile.setCustomAvatar(bytes).toString()));}
+  worker.execute(()->{try{call.resolve(toJS(profile.setCustomAvatar(bytes)));}
    catch(Exception e){call.reject("AVATAR_FAILED",e);}});
  }
 
