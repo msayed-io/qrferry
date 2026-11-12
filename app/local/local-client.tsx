@@ -379,7 +379,7 @@ export function LocalClient() {
 
         <div className="lf-s-sheet">
           <i className="lf-s-grab" aria-hidden="true" />
-          <div className={`lf-s-radar${!found && !connecting && (!code || scanning) ? '' : ' is-off'}`} aria-hidden="true">
+          <div className={`lf-s-radar${scanning && !found && !connecting && !code ? '' : ' is-off'}`} aria-hidden="true">
             <div className="lf-s-sweep" />
             <em /><em /><em />
             <i className="lf-s-bl" style={{ left: 'calc(50% - 118px)', bottom: 128, animationDelay: '1s' }} />
