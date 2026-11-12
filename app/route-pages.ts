@@ -29,6 +29,7 @@ export const TvPage = page(() => import('./tv/tv-client').then(m => ({ default: 
 export const LocalPage = page(() => import('./local/local-client').then(m => ({ default: m.LocalClient })));
 const pages: Record<string, ReturnType<typeof page>> = {
   '/local': LocalPage, '/local/send': LocalPage, '/local/receive': LocalPage, '/local/scan': LocalPage, '/local/setup': LocalPage, '/local/session': LocalPage,
+  '/local/radar': LocalPage, '/local/profile': LocalPage,
   '/': SendPage, '/scan': ScanPage, '/bridge': BridgePage, '/pc': BridgePage,
   '/history': HistoryPage, '/privacy': PrivacyPage, '/tv': TvPage,
 };

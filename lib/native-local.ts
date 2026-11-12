@@ -9,6 +9,11 @@ export interface LocalState {
  qrReady: boolean; expires: number; bytes: number; native?: boolean; sdk?: number; allFiles?: boolean; storageReady?: boolean; media?: boolean; storageAsked?: boolean; destination?: string;
  camera?: boolean; nearby?: boolean; wifi?: boolean; locationOn?: boolean;
 }
+export type RadarEvent = {
+ type: 'status'|'peer'|'peer-lost'|'request'|'connecting'|'connected'|'message'|'closed';
+ endpointId: string; value: string; digits?: string; message?: string;
+};
+export type UserProfile = import('./nearby').Profile;
 export interface NativeBounds { x: number; y: number; width: number; height: number; viewport: number }
 interface LocalPlugin {
  getState(): Promise<LocalState>;
@@ -16,6 +21,20 @@ interface LocalPlugin {
  addListener(event:'lifecycle',listener:(state:{active:boolean})=>void):Promise<PluginListenerHandle>;
  /** A decoded pairing code; the page shows the device and connects on tap. */
  addListener(event:'scan',listener:(payload:{raw:string;device?:string})=>void):Promise<PluginListenerHandle>;
+ /** Radar lifecycle: discovery, confirmation, handshake and short messages. */
+ addListener(event:'radar',listener:(event:RadarEvent)=>void):Promise<PluginListenerHandle>;
+ profileGet(options:{word:string}):Promise<UserProfile>;
+ profileSetName(options:{name:string}):Promise<UserProfile>;
+ profileSetDefaultAvatar(options:{index:number}):Promise<UserProfile>;
+ profilePickAvatar():Promise<UserProfile>;
+ radarStart(options:{mode:'advertise'|'discover';payload:string;serviceId:string}):Promise<{started:boolean}>;
+ radarStop():Promise<{stopped:boolean}>;
+ radarConnect(options:{endpointId:string;payload:string}):Promise<{requested:boolean}>;
+ radarAccept(options:{endpointId:string}):Promise<{accepted:boolean}>;
+ radarReject(options:{endpointId:string}):Promise<{rejected:boolean}>;
+ radarSend(options:{endpointId:string;message:string}):Promise<{sent:boolean}>;
+ radarPairingCode():Promise<{code:string}>;
+ radarSharedAvatar():Promise<{avatar:string}>;
  join(options:{raw:string}):Promise<LocalState>;
  listFiles(options:{category:string}):Promise<{files:LocalFile[]}>;
  clearSelection():Promise<LocalState>;

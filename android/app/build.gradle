@@ -48,6 +48,8 @@ dependencies {
     implementation 'androidx.camera:camera-view:1.6.2'
     implementation 'androidx.documentfile:documentfile:1.1.0'
     implementation 'com.google.zxing:core:3.5.4'
+    // Radar pairing: discovery and handshake only, documented public API.
+    implementation 'com.google.android.gms:play-services-nearby:19.5.1'
 
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"

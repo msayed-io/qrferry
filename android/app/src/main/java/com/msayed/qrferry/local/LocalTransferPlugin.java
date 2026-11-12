@@ -27,11 +27,16 @@ import java.util.concurrent.*;
  @Permission(alias="location",strings={Manifest.permission.ACCESS_FINE_LOCATION}),
  @Permission(alias="read",strings={Manifest.permission.READ_EXTERNAL_STORAGE}),
  @Permission(alias="legacyStorage",strings={Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.WRITE_EXTERNAL_STORAGE}),
- @Permission(alias="media",strings={Manifest.permission.READ_MEDIA_IMAGES,Manifest.permission.READ_MEDIA_VIDEO,Manifest.permission.READ_MEDIA_AUDIO})
+ @Permission(alias="media",strings={Manifest.permission.READ_MEDIA_IMAGES,Manifest.permission.READ_MEDIA_VIDEO,Manifest.permission.READ_MEDIA_AUDIO}),
+ // Nearby Connections: Android 12+ uses the granular Bluetooth scopes, older
+ // releases use the legacy pair plus location (the documented table).
+ @Permission(alias="bluetooth",strings={Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN}),
+ @Permission(alias="bluetoothLegacy",strings={Manifest.permission.BLUETOOTH,Manifest.permission.BLUETOOTH_ADMIN,Manifest.permission.ACCESS_FINE_LOCATION})
 })
 public class LocalTransferPlugin extends Plugin {
  private LocalEngine engine;private LocalEngine.Listener listener;private final ExecutorService worker=Executors.newSingleThreadExecutor();
  private final Map<PluginCall,Integer> pickerGenerations=new ConcurrentHashMap<>();
+ private LocalProfile profile;private NearbyRadar radar;private boolean radarWired;
  private LocalScanner scanner;private FrameLayout overlay;private boolean overlayQr;private final Handler main=new Handler(Looper.getMainLooper());
  @Override public void load(){engine=LocalTransferService.engine(getContext());listener=s->{try{JSObject data=new JSObject(s.toString());notifyListeners("state",data);}catch(Exception ignored){}if(!s.optBoolean("qrReady")&&overlayQr)main.post(this::hideOverlay);};engine.subscribe(listener);worker.execute(()->{try{ // The receiving tree exists from the first run that already holds the scope.
    if(storageReady()&&engine.files.tree().isEmpty())engine.files.ensureFolders();}catch(Exception ignored){}});}
@@ -167,4 +172,122 @@ public class LocalTransferPlugin extends Plugin {
   // survive it. The recovery journal keeps anything unfinished resumable.
   try{getContext().stopService(new Intent(getContext(),LocalTransferService.class));}catch(Exception ignored){}
  }
+
+ // ---- radar: profile, advertisement and handshake ----
+
+ private String bluetoothAlias(){return Build.VERSION.SDK_INT>=31?"bluetooth":"bluetoothLegacy";}
+ private boolean bluetoothGranted(){return getPermissionState(bluetoothAlias())==PermissionState.GRANTED;}
+ /** The profile is created the first time the radar screen loads, with no dialog
+  *  and no visible step. It never touches the network. */
+ @PluginMethod public void profileGet(PluginCall call){
+  worker.execute(()->{try{
+   profile.setNameWord(call.getString("word",""));
+   JSObject data=new JSObject(profile.getOrCreate().toString());
+   // A legacy Android reports location services here, not for the profile.
+   call.resolve(data);
+  }catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+ }
+ @PluginMethod public void profileSetName(PluginCall call){
+  String name=call.getString("name","");
+  worker.execute(()->{try{call.resolve(new JSObject(profile.setName(name).toString()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+ }
+ @PluginMethod public void profileSetDefaultAvatar(PluginCall call){
+  int index=call.getInt("index",0);
+  worker.execute(()->{try{call.resolve(new JSObject(profile.setDefaultAvatar(index).toString()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+ }
+ /** The official photo picker needs no storage permission at all. */
+ @PluginMethod public void profilePickAvatar(PluginCall call){
+  Intent intent;
+  if(Build.VERSION.SDK_INT>=33)intent=new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+  else{intent=new Intent(Intent.ACTION_GET_CONTENT);intent.addCategory(Intent.CATEGORY_OPENABLE);}
+  intent.setType("image/*");
+  if(Build.VERSION.SDK_INT>=33)intent.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX,1);
+  try{startActivityForResult(call,intent,"avatarPicked");}
+  catch(Exception unsupported){
+   Intent fallback=new Intent(Intent.ACTION_GET_CONTENT);fallback.addCategory(Intent.CATEGORY_OPENABLE);fallback.setType("image/*");
+   try{startActivityForResult(call,fallback,"avatarPicked");}catch(Exception e){call.reject("PICKER_UNAVAILABLE",e);}
+  }
+ }
+ @ActivityCallback private void avatarPicked(PluginCall call,ActivityResult result){
+  if(call==null)return;
+  if(result.getResultCode()!=Activity.RESULT_OK||result.getData()==null||result.getData().getData()==null){call.reject("AVATAR_CANCELLED");return;}
+  Uri source=result.getData().getData();
+  worker.execute(()->{try{call.resolve(new JSObject(profile.setCustomAvatar(source).toString()));}
+   catch(Exception e){call.reject("AVATAR_FAILED",e);}});
+ }
+
+ private void wireRadar(){
+  if(radar==null)radar=new NearbyRadar(getContext());
+  if(radarWired)return;
+  radarWired=true;
+  radar.attach(new NearbyRadar.Events(){
+   public void radarStatus(String state,String code){notify("status",state,code,null,null);}
+   public void radarPeer(String endpointId,String payload,boolean lost){notify(lost?"peer-lost":"peer",endpointId,payload,null,null);}
+   public void radarRequest(String endpointId,String payload,String digits){notify("request",endpointId,payload,digits,null);}
+   public void radarConnecting(String endpointId,String digits){notify("connecting",endpointId,digits,null,null);}
+   public void radarConnected(String endpointId,String payload){notify("connected",endpointId,payload,null,null);}
+   public void radarMessage(String endpointId,String message){notify("message",endpointId,message,null,null);}
+   public void radarClosed(String endpointId,String code){notify("closed",endpointId,code,null,null);}
+  });
+ }
+ private void notify(String type,String a,String b,String digits,String message){
+  JSObject event=new JSObject();
+  event.put("type",type).put("endpointId",a==null?"":a).put("value",b==null?"":b);
+  if(digits!=null)event.put("digits",digits);
+  if(message!=null)event.put("message",message);
+  notifyListeners("radar",event);
+ }
+
+ @PluginMethod public void radarStart(PluginCall call){
+  if(!NearbyRadar.available(getContext())){call.reject("PLAY_SERVICES_UNAVAILABLE");return;}
+  if(!bluetoothGranted()){requestPermissionForAlias(bluetoothAlias(),call,"radarPermissionGranted");return;}
+  startRadar(call);
+ }
+ @PermissionCallback private void radarPermissionGranted(PluginCall call){
+  if(!bluetoothGranted()){call.reject("BLUETOOTH_PERMISSION_REQUIRED");return;}
+  startRadar(call);
+ }
+ private void startRadar(PluginCall call){
+  String mode=call.getString("mode","discover"),payload=call.getString("payload",""),serviceId=call.getString("serviceId","");
+  if(payload.isEmpty()||serviceId.isEmpty()){call.reject("INVALID_ADVERTISEMENT");return;}
+  if("advertise".equals(mode)&&!networkPermission(call))return;
+  wireRadar();
+  try{
+   if("advertise".equals(mode))radar.advertise(payload,serviceId);else radar.discover(serviceId);
+   call.resolve(new JSObject().put("started",true));
+  }catch(Exception e){call.reject("RADAR_FAILED",e);}
+ }
+ /** A code was read: the receiver keeps the advertisement running until the
+  *  transfer is confirmed, the sender stops discovering once connected. */
+ @PluginMethod public void radarStop(PluginCall call){try{if(radar!=null)radar.stop();call.resolve(new JSObject().put("stopped",true));}catch(Exception e){call.reject("RADAR_FAILED",e);}}
+ @PluginMethod public void radarConnect(PluginCall call){
+  String endpointId=call.getString("endpointId",""),payload=call.getString("payload","");
+  if(endpointId.isEmpty()||payload.isEmpty()){call.reject("INVALID_ENDPOINT");return;}
+  wireRadar();radar.request(endpointId,payload);call.resolve(new JSObject().put("requested",true));
+ }
+ @PluginMethod public void radarAccept(PluginCall call){
+  String endpointId=call.getString("endpointId","");
+  if(endpointId.isEmpty()){call.reject("INVALID_ENDPOINT");return;}
+  try{radar.accept(endpointId);call.resolve(new JSObject().put("accepted",true));}catch(Exception e){call.reject("RADAR_FAILED",e);}
+ }
+ @PluginMethod public void radarReject(PluginCall call){
+  String endpointId=call.getString("endpointId","");
+  if(endpointId.isEmpty()){call.reject("INVALID_ENDPOINT");return;}
+  try{radar.reject(endpointId);call.resolve(new JSObject().put("rejected",true));}catch(Exception e){call.reject("RADAR_FAILED",e);}
+ }
+ @PluginMethod public void radarSend(PluginCall call){
+  String endpointId=call.getString("endpointId",""),message=call.getString("message","");
+  if(endpointId.isEmpty()){call.reject("INVALID_ENDPOINT");return;}
+  try{radar.send(endpointId,message);call.resolve(new JSObject().put("sent",true));}catch(Exception e){call.reject("RADAR_FAILED",e);}
+ }
+ /** The receiver hands over the same pairing string the QR carries, so the file
+  *  transfer continues on the existing verified TLS session. */
+ @PluginMethod public void radarPairingCode(PluginCall call){
+  try{call.resolve(new JSObject().put("code",engine.pairingCode()));}
+  catch(Exception e){call.reject("QR_NOT_READY",e);}
+ }
+ @PluginMethod public void radarSharedAvatar(PluginCall call){
+  worker.execute(()->{try{call.resolve(new JSObject().put("avatar",profile.sharedAvatar()));}catch(Exception e){call.reject("PROFILE_FAILED",e);}});
+ }
+
 }

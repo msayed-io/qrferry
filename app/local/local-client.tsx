@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ProfilePill, ProfileScreen, RadarConfirm, RadarScreen, useProfile } from './radar-view';
+import { useRadar } from './use-radar';
 import { createPortal } from 'react-dom';
 import { Button, Glass } from 'glisse';
 import { useI18n } from '../lang-provider';
@@ -93,6 +95,8 @@ export function LocalClient() {
   const [listLoading, setListLoading] = useState(false);
   const [draft, setDraft] = useState(''), [scanning, setScanning] = useState(false), [qrShown, setQrShown] = useState(false), [foreground, setForeground] = useState(true);
   const [found, setFound] = useState<{ raw: string; device?: string } | null>(null), [connecting, setConnecting] = useState(false);
+  const [profile, setProfile] = useProfile(tx('مستخدم', 'User'));
+  const [visible, setVisible] = useState(true);
   const surface = useRef<HTMLDivElement>(null), qrSurface = useRef<HTMLDivElement>(null), request = useRef(0), autoCamera = useRef(false);
   // One automatic attempt per screen entry. Every prompt behind these refs is an
   // official Android dialog/screen; the rows stay as an explicit retry.
@@ -266,6 +270,28 @@ export function LocalClient() {
     return () => cancelAnimationFrame(frame);
   }, [current, native, openScanner, state.selected.length]);
   useEffect(() => { if (current !== 'scan') autoCamera.current = false; }, [current]);
+  const radar = useRadar({
+    profile,
+    role: current === 'receive' ? 'receive' : 'send',
+    onPaired: raw => { void run(() => NativeLocal.join({ raw })); },
+    onError: codeName => setError(codeName),
+  });
+  // The receiver is only visible while its page is in front of the user.
+  useEffect(() => {
+    if (current !== 'receive' || !profile || !visible) return;
+    void radar.advertise(profile);
+    return () => { void radar.stop(); };
+  }, [current, profile?.userId, profile?.displayName, profile?.avatarVersion, visible]);
+  useEffect(() => {
+    if (current !== 'radar' || !profile || !visible) return;
+    void radar.discover();
+    return () => { void radar.stop(); };
+  }, [current, profile?.userId, visible]);
+  useEffect(() => {
+    const onVisibility = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
   const end = async () => { await run(() => NativeLocal.disconnect()); router.replace('/local'); };
   const back = () => { if (sessionPage || current === 'scan') void end(); else if (current === 'home') router.push('/'); else router.push(current === 'receive' || current === 'setup' ? '/local' : '/local'); };
   const title = current === 'send' ? tx('إرسال', 'Send') : current === 'setup' ? tx('التحضير', 'Prepare') : current === 'scan' ? tx('مسح للاتصال', 'Scan to connect') : current === 'receive' ? tx('استلام', 'Receive') : sessionPage ? tx('متصل', 'Connected') : tx('نقل محلي', 'Local transfer');
@@ -280,6 +306,14 @@ export function LocalClient() {
   const setupReady = !!state.nearby && !!state.wifi && (!legacyLocation || state.locationOn !== false) && (!!state.storageReady || (state.sdk ?? 0) >= 29);
   const done = state.files.filter(f => f.status === 'complete').length;
 
+  if (current === 'radar') return <>
+    <RadarScreen ar={ar} tx={tx} radar={radar.state} mode={radar.state.mode} hasFiles={!!state.selected.length}
+      onConnect={peer => void radar.connect(peer)} onStart={() => { if (profile) void radar.discover(); }}
+      onBack={() => router.push('/local/send')} onUseQr={() => router.push('/local/scan')} />
+    {radar.state.request && <RadarConfirm ar={ar} tx={tx} request={radar.state.request} busy={radar.state.busy}
+      onAccept={() => void radar.accept()} onReject={() => void radar.reject()} />}
+  </>;
+  if (current === 'profile') return <ProfileScreen tx={tx} profile={profile} onSaved={setProfile} onBack={() => router.push('/local')} />;
   return <main className={`local-page ${sessionPage ? 'local-session' : ''}`} data-page="local" data-screen={current} data-phase={state.phase}>
     <header className={current === 'home' ? 'app-header lf-home-header' : 'support-toolbar lf-toolbar'}>
       {current === 'home' ? <>
@@ -295,6 +329,9 @@ export function LocalClient() {
         <Button className="support-exit" icon={<BackChevron />} aria-label={tx('رجوع', 'Back')} onClick={back} />
         <Glass className="support-title"><h1>{title}</h1></Glass>
         <div className="lf-toolbar-end">
+          {/* The identity capsule stays reachable on every local screen. */}
+          <ProfilePill profile={profile} label={tx('ملفي', 'Me')} onOpen={() => router.push('/local/profile')} />
+          {current === 'send' && <Button className="lf-tool" icon={<DesignIcon name="wifi" />} aria-label={tx('الاقتران القريب بدون كاميرا', 'Pair without a camera')} onClick={() => router.push('/local/radar')} />}
           {current === 'send' && <Button className="lf-tool" icon={<DesignIcon name="folder" />} aria-label={tx('تصفح ملفات الجهاز', 'Browse device files')} disabled={!native} onClick={() => void pick()} />}
         </div>
       </>}
@@ -423,6 +460,9 @@ export function LocalClient() {
         </div>
       </div>
     )}
+
+    {current === 'receive' && radar.state.request && <RadarConfirm ar={ar} tx={tx} request={radar.state.request} busy={radar.state.busy}
+      onAccept={() => void radar.accept()} onReject={() => void radar.reject()} />}
 
     {current === 'receive' && <>
       <div className="lf-qr-wrap" ref={surface}>
