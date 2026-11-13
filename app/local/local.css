@@ -196,12 +196,12 @@ html[data-native][data-camera=on],html[data-native][data-camera=on] body,html[da
 @keyframes lfScanSweep{from{top:12%}to{top:86%}}
 .lf-s-hint{flex:none;font-size:14px;gap:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;justify-content:center}
 
-.lf-s-sheet{position:relative;max-width:100%;overflow:hidden;min-height:300px;background:var(--card);border-radius:32px 32px 0 0;padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 26px)}
-/* Glass over the live camera: the sheet keeps its own contrast without ever
-   turning into an opaque slab. */
-@supports (backdrop-filter:blur(2px)){
-  .lf-s-sheet{background:color-mix(in srgb,var(--card) 84%,transparent);-webkit-backdrop-filter:blur(26px) saturate(1.25);backdrop-filter:blur(26px) saturate(1.25)}
-}
+/* The sheet is a solid card of its own, not glass: it must read as a surface
+   lifted over the live camera, with its rounded top corners intact. */
+.lf-s-sheet{position:relative;max-width:100%;overflow:hidden;min-height:300px;background:var(--card);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  border-radius:32px 32px 0 0;border-top-left-radius:32px;border-top-right-radius:32px;
+  padding:12px 20px calc(env(safe-area-inset-bottom,0px) + 26px)}
 .lf-s-grab{display:block;width:36px;height:5px;border-radius:3px;background:var(--sep);margin:0 auto 20px}
 .lf-s-h{font-size:20px;font-weight:700;text-align:center;position:relative;z-index:2}
 .lf-s-msg{position:relative;z-index:2;color:var(--label2);font-size:14px;line-height:1.6;text-align:center;margin:8px auto 0;max-width:300px}

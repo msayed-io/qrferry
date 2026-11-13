@@ -173,6 +173,14 @@ public class LocalUiTest {
    // Nothing of the page may paint an opaque backdrop over the camera.
    assertEquals("The document must be transparent while the camera is up","true",
     js(view,"(()=>{if(document.documentElement.dataset.camera!=='on')return false;const clear=c=>c==='rgba(0, 0, 0, 0)'||c==='transparent';return clear(getComputedStyle(document.body).backgroundColor)&&clear(getComputedStyle(document.querySelector('.lf-s')).backgroundColor)})()"));
+   // The sheet is a solid card, not glass: same colour as the app card, no blur,
+   // and its own rounded top corners over the live image.
+   assertEquals("The sheet must be the solid card again","true",
+    js(view,"(()=>{const sheet=document.querySelector('.lf-s-sheet');if(!sheet)return false;const style=getComputedStyle(sheet);"
+     +"const probe=document.createElement('div');probe.style.background='var(--card)';document.body.appendChild(probe);"
+     +"const card=getComputedStyle(probe).backgroundColor;probe.remove();"
+     +"const rounded=style.borderTopLeftRadius==='32px'&&style.borderTopRightRadius==='32px';"
+     +"return style.backgroundColor===card&&(style.backdropFilter==='none'||style.backdropFilter==='')&&rounded})()"));
    // And the scanner must not stack a second header under its own.
    assertEquals("The scanner must carry a single toolbar","true",js(view,"document.querySelectorAll('.support-toolbar, .app-header').length<=1"));
    // Exit stops the camera and returns to Send.
