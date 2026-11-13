@@ -39,8 +39,11 @@ const errorText: Record<string, [string, string]> = {
   HOTSPOT_ADDRESS_UNAVAILABLE: ['تعذر تحديد عنوان نقطة الاتصال بأمان. استخدم شبكة Wi-Fi موجودة.', 'The hotspot address could not be determined safely. Use an existing Wi-Fi network.'],
   HOTSPOT_STOPPED: ['أوقفت نقطة الاتصال. أعد المحاولة.', 'The local hotspot stopped. Try again.'],
   NETWORK_UNAVAILABLE: ['تعذر إنشاء أي اتصال محلي على هذا الجهاز. جرّب Wi-Fi مشتركًا.', 'No local link could be created on this device. Try a shared Wi-Fi network.'],
+  // Timeouts must name the cause: a silent spinner reads as a frozen app.
+  CONNECT_TIMEOUT: ['تعذّر الوصول للجهاز المستلم. تأكد من أن الجهازين حقيقيان وفي نطاق قريب وأن شاشة الاستلام ما زالت مفتوحة.', 'The receiver could not be reached. Make sure both devices are real, close together, and that the receiving screen is still open.'],
+  NETWORK_TIMEOUT: ['تعذّر الوصول للجهاز المستلم في الوقت المحدد. تأكد من أن الجهازين حقيقيان وفي نطاق قريب.', 'The receiver did not answer in time. Make sure both devices are real and close together.'],
   NETWORK_LOST: ['انقطع الاتصال بالشبكة المحلية.', 'The local network connection dropped.'],
-  NETWORK_REQUEST_DECLINED: ['لم يكتمل طلب الاتصال من النظام. أعد المحاولة.', 'The system connection request did not complete. Retry.'],
+  NETWORK_REQUEST_DECLINED: ['لم يستجب جهاز المستقبل لطلب الاتصال أو انتهت المهلة. تأكد من أن الجهازين حقيقيان وفي نطاق قريب.', 'The receiver did not answer the connection request, or it timed out. Make sure both devices are real and close together.'],
   WIFI_JOIN_FAILED: ['تعذر الانضمام لشبكة المستقبل تلقائيًا. أعد المحاولة من صفحة الاستقبال.', 'Could not join the receiver’s network automatically. Retry from the receive side.'],
   WIFI_JOIN_TIMEOUT: ['انتهت مهلة الانضمام لشبكة المستقبل.', 'Joining the receiver’s network timed out.'],
   WIFI_CHANNEL_LOST: ['فقد النظام قناة الاتصال المحلي. أعد المحاولة.', 'Android lost the local network channel. Retry.'],
@@ -93,7 +96,7 @@ export function LocalClient() {
   const [catalogue, setCatalogue] = useState<LocalFile[]>([]), [sheetOpen, setSheetOpen] = useState(false);
   const [listLoading, setListLoading] = useState(false);
   const [draft, setDraft] = useState(''), [scanning, setScanning] = useState(false), [qrShown, setQrShown] = useState(false), [foreground, setForeground] = useState(true);
-  const [found, setFound] = useState<{ raw: string; device?: string } | null>(null), [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [profile, setProfile] = useProfile(tx('مستخدم', 'User'));
   const [visible, setVisible] = useState(true);
   const surface = useRef<HTMLDivElement>(null), qrSurface = useRef<HTMLDivElement>(null), request = useRef(0), autoCamera = useRef(false);
@@ -247,31 +250,34 @@ export function LocalClient() {
     root.dataset.camera = 'on';
     return () => { delete root.dataset.camera; };
   }, [current]);
-  const closeScanner = () => { setScanning(false); setFound(null); void NativeLocal.hideNativeView().catch(() => {}); router.push('/local/send'); };
+  const closeScanner = () => { setScanning(false); setConnecting(false); void NativeLocal.hideNativeView().catch(() => {}); router.push('/local/send'); };
   const openScanner = useCallback(async () => {
     if (!surface.current) return;
     const result = await run(() => NativeLocal.startScan(bounds(surface.current!)));
     setScanning(!!(result as { scanning?: boolean } | undefined)?.scanning);
   }, [run]);
-  // The native layer reads the code; the page shows the device and connects on tap.
+  /** A decoded code is the consent: opening the scanner was the tap, so the link
+   *  is opened the moment the code exists. Nothing asks for a second press; a
+   *  failure lands in `state.error` and the sheet offers a new scan. */
+  const connect = useCallback(async (raw: string) => {
+    setConnecting(true);
+    try { await run(() => NativeLocal.join({ raw })); }
+    finally { setConnecting(false); }
+  }, [run]);
+  // The native layer reads the code; the page connects the instant it is decoded.
   useEffect(() => {
     if (!native) return;
     let handle: { remove: () => Promise<void> } | undefined;
+    let live = true;
     void NativeLocal.addListener('scan', payload => {
+      if (!live) return;
       setScanning(false);
-      setConnecting(false);
-      setFound({ raw: payload.raw, device: payload.device });
+      void connect(payload.raw);
     }).then(h => { handle = h; });
-    return () => { void handle?.remove(); };
-  }, [native]);
-  useEffect(() => { if (current !== 'scan') { setFound(null); setConnecting(false); } }, [current]);
-  const connectFound = async () => {
-    if (!found) return;
-    setConnecting(true);
-    await run(() => NativeLocal.join({ raw: found.raw }));
-    setConnecting(false);
-  };
-  const rescan = async () => { setFound(null); await openScanner(); };
+    return () => { live = false; void handle?.remove(); };
+  }, [native, connect]);
+  useEffect(() => { if (current !== 'scan') setConnecting(false); }, [current]);
+  const rescan = async () => { setConnecting(false); await openScanner(); };
   useEffect(() => {
     if (!native || current !== 'scan' || autoCamera.current || !state.selected.length) return;
     autoCamera.current = true;
@@ -309,10 +315,9 @@ export function LocalClient() {
   const back = () => { if (sessionPage || current === 'scan') void end(); else if (current === 'home') router.push('/'); else router.push(current === 'receive' || current === 'setup' ? '/local' : '/local'); };
   const title = current === 'send' ? tx('إرسال', 'Send') : current === 'setup' ? tx('التحضير', 'Prepare') : current === 'scan' ? tx('مسح للاتصال', 'Scan to connect') : current === 'receive' ? tx('استلام', 'Receive') : sessionPage ? tx('متصل', 'Connected') : tx('نقل محلي', 'Local transfer');
   const nearPeers = radar.state.peers;
-  const scanHeadline = found ? tx('تم العثور على جهاز', 'Device found')
-    : connecting || state.phase === 'connecting' ? tx('جارٍ الاتصال…', 'Connecting…')
-      : code && !scanning ? tx('تعذر إكمال المسح', 'The scan did not complete')
-        : nearPeers.length ? tx('اختر مستلمًا', 'Choose a receiver') : tx('البحث عن مستلمين…', 'Looking for receivers…');
+  const scanHeadline = connecting || state.phase === 'connecting' ? tx('جارٍ الاتصال بالمستلم…', 'Connecting to the receiver…')
+    : code && !scanning ? tx('تعذر إكمال الاتصال', 'The connection did not complete')
+      : nearPeers.length ? tx('اختر مستلمًا', 'Choose a receiver') : tx('البحث عن مستلمين…', 'Looking for receivers…');
   const methodLabel = state.method === 'direct' ? 'Wi-Fi Direct' : state.method === 'hotspot' ? tx('نقطة محلية', 'Local hotspot') : state.method === 'lan' ? tx('شبكة محلية', 'Local Wi-Fi') : tx('تلقائي', 'Automatic');
   // Every indicator must be green: the link scope, Wi-Fi, and a storage route
   // (all-files, or the MediaStore fallback that every Android 10+ device has).
@@ -429,7 +434,7 @@ export function LocalClient() {
 
         <div className="lf-s-sheet">
           <i className="lf-s-grab" aria-hidden="true" />
-          <div className={`lf-s-radar${scanning && !found && !connecting && !code ? '' : ' is-off'}`} aria-hidden="true">
+          <div className={`lf-s-radar${scanning && !connecting && !code ? '' : ' is-off'}`} aria-hidden="true">
             <div className="lf-s-sweep" />
             <em /><em /><em />
             <i className="lf-s-bl" style={{ left: 'calc(50% - 118px)', bottom: 128, animationDelay: '1s' }} />
@@ -440,21 +445,7 @@ export function LocalClient() {
 
           <h2 className="lf-s-h" role="status">{scanHeadline}</h2>
 
-          {found ? <>
-            <div className="lf-s-found">
-              <span className="lf-s-dev">{(found.device || 'QR').slice(0, 2).toUpperCase()}</span>
-              <div className="lf-s-gr">
-                <b>{found.device || tx('جهاز المستقبل', 'Receiver')}</b>
-                <small>{tx('قريب · جاهز للاستلام', 'Nearby · ready to receive')}</small>
-              </div>
-            </div>
-            <div className="lf-s-actions">
-              <button type="button" className="glass cap tinted lf-s-big" disabled={busy} onClick={() => void connectFound()}>
-                <DesignIcon name="wifi" style={{ width: 19, height: 19 }} />{tx('اتصال', 'Connect')}
-              </button>
-              <button type="button" className="glass cap lf-s-quiet" disabled={busy} onClick={rescan}>{tx('مسح آخر', 'Scan again')}</button>
-            </div>
-          </> : code && !scanning && !connecting ? <>
+          {code && !scanning && !connecting ? <>
             <p className="lf-s-msg">{message}</p>
             <div className="lf-s-actions">
               <button type="button" className="glass cap tinted lf-s-big" disabled={busy} onClick={rescan}>{tx('إعادة المسح', 'Scan again')}</button>

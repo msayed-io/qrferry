@@ -109,7 +109,9 @@ public final class LocalNetwork implements AutoCloseable {
     public void onAvailable(Network n){if(live(g)){log("network available");sender.ready(n);}}
     public void onUnavailable(){if(live(g)){log("network unavailable (declined or not joinable)");sender.failed("NETWORK_REQUEST_DECLINED");}}
     public void onLost(Network n){if(live(g)){log("network lost");sender.failed("NETWORK_LOST");}}};
-   connectivity.requestNetwork(request,callback,main,45000);
+   // A local link is either there in seconds or it is not: the request must not
+   // leave the sender waiting three quarters of a minute on a dead address.
+   connectivity.requestNetwork(request,callback,main,12000);
   }else{
    WifiConfiguration config=new WifiConfiguration();config.SSID=quote(offer.ssid);config.preSharedKey=quote(offer.password);config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);legacyId=wifi.addNetwork(config);
    if(legacyId<0||!wifi.enableNetwork(legacyId,true)){sender.failed("WIFI_JOIN_FAILED");return;}wifi.reconnect();legacyWait(g,offer,sender,0);

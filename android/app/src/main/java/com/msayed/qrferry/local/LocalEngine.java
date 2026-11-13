@@ -24,6 +24,8 @@ public final class LocalEngine implements AutoCloseable {
  private final AtomicInteger pumpOwner=new AtomicInteger(-1),clientOwner=new AtomicInteger(-1);private final ConcurrentHashMap<Integer,Socket>pendingConnections=new ConcurrentHashMap<>();private final AtomicInteger connectionVersion=new AtomicInteger();private volatile int retries;private volatile boolean peerPaused;private final Set<String> sent=ConcurrentHashMap.newKeySet();
  private final AtomicInteger epoch=new AtomicInteger();private volatile String phase="idle",error="",role="",method="",peer="",ticket="";
  private volatile boolean authenticated,started,paused,outgoingRequested;private volatile long revision,bytes,lastProgress;
+ /** The whole join attempt: request, socket, handshake. */
+ private static final int CONNECT_BUDGET_SECONDS=15;
  private volatile LocalPairing pairing;private volatile Network route;private volatile LocalIdentity identity;private volatile SSLServerSocket server;
  private volatile SSLSocket socket;private volatile DataOutputStream output;private volatile String receiverTicket="",receiverPeer="",pendingTicket="",pendingPeer="";
  private final LocalRecovery recovery;private volatile boolean recovered;
@@ -114,6 +116,14 @@ public final class LocalEngine implements AutoCloseable {
   LocalPairing p=LocalPairing.decode(raw);
   Log.i("QRFerryLocal","qr accepted: method="+p.method+" host="+p.host+":"+p.port);if(files.sources().isEmpty())throw new IOException("SELECT_FILES_FIRST");newSession("send");role="send";pairing=p;method=p.method;state("connecting");int g=epoch.get();
   wifi.connect(p,new LocalNetwork.Sender(){public void ready(Network n){synchronized(LocalEngine.this){if(epoch.get()!=g)return;route=n;Log.i("QRFerryLocal","joined, opening socket");connect(g);}}public void failed(String code){Log.i("QRFerryLocal","join failed: "+code);connectionError(g,code);}});
+  // One budget for the whole attempt (network request + socket + handshake): a
+  // failed join must end as a named error, never as an endless spinner.
+  clock.schedule(()->connectTimedOut(g),CONNECT_BUDGET_SECONDS,TimeUnit.SECONDS);
+ }
+ private synchronized void connectTimedOut(int g){
+  if(epoch.get()!=g||authenticated)return;
+  Log.i("QRFerryLocal","connect timed out after "+CONNECT_BUDGET_SECONDS+"s");
+  closeTransport();wifi.close();phase="paused";error="CONNECT_TIMEOUT";changed();
  }
  private synchronized void connect(int g){
   if(io.isShutdown()||epoch.get()!=g||clientOwner.get()==g||pairing==null)return;
@@ -122,9 +132,9 @@ public final class LocalEngine implements AutoCloseable {
    Socket raw=null;SSLSocket candidate=null;boolean retry=false;
    try{
     raw=new Socket();synchronized(this){if(epoch.get()!=g)return;pendingConnections.put(g,raw);}
-    if(network!=null)network.bindSocket(raw);raw.connect(new InetSocketAddress(offer.host,offer.port),15000);
+    if(network!=null)network.bindSocket(raw);raw.connect(new InetSocketAddress(offer.host,offer.port),10000);
     SSLSocket connection=candidate=(SSLSocket)LocalIdentity.client(offer.pin).getSocketFactory().createSocket(raw,offer.host,offer.port,true);
-    connection.setEnabledProtocols(protocols(connection.getSupportedProtocols()));connection.setSoTimeout(15000);connection.startHandshake();
+    connection.setEnabledProtocols(protocols(connection.getSupportedProtocols()));connection.setSoTimeout(10000);connection.startHandshake();
     DataInputStream in=new DataInputStream(connection.getInputStream());DataOutputStream out=new DataOutputStream(connection.getOutputStream());
     LocalProtocol.writeControl(out,new JSONObject().put("type","hello").put("v",1).put("session",offer.session).put("credential",credential).put("peer",myPeer).toString());
     JSONObject welcome=new JSONObject(LocalProtocol.readControl(in));

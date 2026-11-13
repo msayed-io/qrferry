@@ -173,6 +173,10 @@ public class LocalUiTest {
    // Nothing of the page may paint an opaque backdrop over the camera.
    assertEquals("The document must be transparent while the camera is up","true",
     js(view,"(()=>{if(document.documentElement.dataset.camera!=='on')return false;const clear=c=>c==='rgba(0, 0, 0, 0)'||c==='transparent';return clear(getComputedStyle(document.body).backgroundColor)&&clear(getComputedStyle(document.querySelector('.lf-s')).backgroundColor)})()"));
+   // A code goes straight into the session: no "device found" card, no second
+   // connect button between the scan and the link.
+   assertEquals("The scan must not stop on a connect card","true",
+    js(view,"!document.querySelector('.lf-s-found')&&![...document.querySelectorAll('.lf-s button')].some(b=>/^(اتصال|Connect)$/.test((b.textContent||'').trim()))"));
    // The sheet is a solid card, not glass: same colour as the app card, no blur,
    // and its own rounded top corners over the live image.
    assertEquals("The sheet must be the solid card again","true",

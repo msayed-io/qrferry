@@ -102,6 +102,28 @@ public class LocalNativeTest {
   }
  }
 
+ /** A join to an address nobody answers must end in a named error inside the
+  *  budget. Before this it left the page spinning with no message at all. */
+ @Test public void joinToADeadAddressEndsInANamedError()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+  File source=new File(context.getCacheDir(),"dead-address-"+System.nanoTime()+".bin");
+  try(FileOutputStream out=new FileOutputStream(source)){out.write(new byte[]{1,2,3,4});}
+  LocalEngine engine=new LocalEngine(context);engine.disconnect();String id=null;
+  try{
+   id=engine.files.addUris(Collections.singletonList(androidx.core.content.FileProvider.getUriForFile(context,context.getPackageName()+".fileprovider",source)),0).getJSONObject(0).getString("id");
+   LocalPairing dead=new LocalPairing(UUID.randomUUID().toString(),"10.255.255.1",65000,String.join("",Collections.nCopies(64,"a")),LocalPairing.token(),"","","lan",System.currentTimeMillis()+120000);
+   long start=System.currentTimeMillis();engine.join(dead.encode());
+   String error="";
+   for(long deadline=start+25000;System.currentTimeMillis()<deadline;Thread.sleep(250)){
+    error=engine.snapshot().optString("error","");
+    if(error.matches("NETWORK_TIMEOUT|CONNECT_TIMEOUT"))break;
+   }
+   long elapsed=System.currentTimeMillis()-start;
+   assertTrue("A dead address must end in a timeout error, got: "+error,error.matches("NETWORK_TIMEOUT|CONNECT_TIMEOUT"));
+   assertTrue("The error must arrive within the 20s budget, took "+elapsed+"ms",elapsed<=20000);
+   assertEquals("The failure must stop the spinner, not leave the phase connecting","paused",engine.snapshot().optString("phase",""));
+  }finally{engine.disconnect();if(id!=null)engine.files.select(id,false);source.delete();}
+ }
  @Test public void bundledScannerDecodesLocalQrBitmap()throws Exception{
   LocalPairing pairing=new LocalPairing(UUID.randomUUID().toString(),"192.168.49.1",12345,String.join("",Collections.nCopies(64,"a")),LocalPairing.token(),"DIRECT-QF","temporary-password","direct",System.currentTimeMillis()+60000);
   String raw=pairing.encode();com.google.zxing.common.BitMatrix qr=new com.google.zxing.MultiFormatWriter().encode(raw,com.google.zxing.BarcodeFormat.QR_CODE,768,768);
